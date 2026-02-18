@@ -9,7 +9,8 @@
     "packages/channels/*",
     "packages/providers/*",
     "packages/memory/*",
-    "packages/tools/*"
+    "packages/tools/*",
+    "apps/*"
   ],
   "scripts": {
     "dev": "bun --watch run packages/gateway/src/index.ts",

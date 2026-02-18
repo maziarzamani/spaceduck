@@ -77,7 +77,7 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | WhatsApp | ✅ | Baileys (WhatsApp Web protocol), QR pairing, typing indicators |
 | Discord | 🔜 | Discord bot channel |
 | Telegram | 🔜 | Telegram bot channel |
-| Desktop app | 🔜 | Native macOS, Linux, and Windows app (Tauri or Electron) |
+| Desktop app | 🚧 | Tauri v2 shell + Bun gateway sidecar — macOS, Linux, Windows |
 | CLI | 🔜 | Terminal-based chat interface |
 | Multi-user auth | 🔜 | Token-based auth for Web UI, per-user sessions |
 
@@ -155,6 +155,10 @@ flowchart TD
 
 ```
 spaceduck/
+├── apps/
+│   └── desktop/               # Tauri v2 desktop app (macOS, Linux, Windows)
+│       ├── src-tauri/         # Rust shell, sidecar config, capabilities
+│       └── tooling/           # Build scripts (sidecar compilation)
 ├── packages/
 │   ├── core/                  # Zero-dep contracts + logic
 │   │   └── src/
