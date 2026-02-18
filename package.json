@@ -1,0 +1,36 @@
+{
+  "name": "spaceduck",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "packages/core",
+    "packages/gateway",
+    "packages/channels/*",
+    "packages/providers/*",
+    "packages/memory/*",
+    "packages/tools/*"
+  ],
+  "scripts": {
+    "dev": "bun --watch run packages/gateway/src/index.ts",
+    "dev:mock": "bun --watch run packages/gateway/src/dev-mock.ts",
+    "build": "bun build --target=bun --production --outdir=dist --external=playwright-core --external=electron --external=chromium-bidi packages/gateway/src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --recursive",
+    "test:unit": "bun test --recursive packages/core/",
+    "test:integration": "bun test --recursive packages/memory/ packages/channels/",
+    "test:e2e": "bun test packages/gateway/src/__tests__/e2e.test.ts",
+    "test:live": "RUN_LIVE_TESTS=1 bun test packages/gateway/src/__tests__/e2e-live.test.ts",
+    "test:bedrock": "RUN_LIVE_TESTS=1 bun test packages/gateway/src/__tests__/e2e-bedrock.test.ts",
+    "test:coverage": "bun test --recursive --coverage",
+    "bench": "bun run packages/memory/sqlite/src/bench.ts",
+    "test:tools": "bun test packages/tools/",
+    "test:memory": "bun test --recursive packages/memory/"
+  },
+  "devDependencies": {
+    "bun-plugin-tailwind": "latest",
+    "bun-types": "latest",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

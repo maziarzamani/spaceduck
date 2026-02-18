@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose a new feature or improvement
+labels: [enhancement]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a feature request, check the [Roadmap](https://github.com/spaceduck-ai/spaceduck#roadmap) and open [discussions](https://github.com/spaceduck-ai/spaceduck/discussions) — it may already be planned or in progress.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing the feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem it solves
+      description: What limitation or gap does this address? What can you not do today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like it to work? Be as specific as you can.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you considered and why you prefer this one.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Which area does this touch?
+      multiple: true
+      options:
+        - Core (AgentLoop, ContextBuilder, EventBus)
+        - Memory (facts, vector recall)
+        - Provider (chat, embeddings)
+        - Channel (web, WhatsApp, new channel)
+        - Tool (browser, fetch, new tool)
+        - Gateway (server, routing)
+        - CI/CD
+        - Documentation

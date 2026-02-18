@@ -1,0 +1,46 @@
+---
+description: Package structure and dependency rules for spaceduck monorepo
+globs: "packages/**/*.ts"
+alwaysApply: false
+---
+
+# Package conventions
+
+## Dependency rules (strict)
+
+- `@spaceduck/core` has ZERO external dependencies. It defines interfaces only.
+- All other packages depend on `@spaceduck/core` via `workspace:*`.
+- No package may depend on another non-core package (except gateway).
+- `@spaceduck/gateway` is the ONLY package that depends on implementation packages.
+- Gateway is the composition root — it creates and wires all implementations.
+
+## Package structure
+
+Each package follows this layout:
+
+```
+packages/<category>/<name>/
+  package.json
+  src/
+    index.ts              # barrel export — the public API
+    <implementation>.ts   # one file per concern
+    __tests__/            # co-located tests
+      <implementation>.test.ts
+    __fixtures__/         # test helpers (core only)
+```
+
+## Adding a new package
+
+1. Create the directory under the appropriate category (`channels/`, `providers/`, `memory/`)
+2. Add `package.json` with `@spaceduck/<name>`, depend on `@spaceduck/core` via `workspace:*`
+3. Export the public API from `src/index.ts`
+4. Wire it in `@spaceduck/gateway` via constructor injection
+5. Existing workspace globs auto-discover new packages — no root config change needed
+
+## Naming
+
+- Package names: `@spaceduck/<name>` (lowercase, hyphenated)
+- Interfaces: PascalCase (`Provider`, `ConversationStore`, `EventBus`)
+- Implementations: PascalCase with prefix (`BedrockProvider`, `SqliteConversationStore`)
+- Files: kebab-case (`context-builder.ts`, `long-term.ts`)
+- Test files: same name with `.test.ts` suffix

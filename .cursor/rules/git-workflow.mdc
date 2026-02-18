@@ -1,0 +1,63 @@
+---
+description: Git workflow and commit conventions for spaceduck
+globs: "**/*"
+alwaysApply: true
+---
+
+# Git Conventions
+
+## Commit Messages
+
+Use conventional commits. Format: `type(scope): description`
+
+Types:
+- `feat` — new feature or capability
+- `fix` — bug fix
+- `refactor` — code restructuring without behavior change
+- `test` — adding or updating tests
+- `docs` — documentation only
+- `chore` — tooling, deps, CI, config changes
+- `perf` — performance improvement
+
+Scope is the package name without `@spaceduck/` prefix: `core`, `gateway`, `memory-sqlite`, `provider-gemini`, `channel-web`.
+
+Examples:
+- `feat(gateway): add WebSocket support with WsEnvelope protocol`
+- `fix(memory-sqlite): handle foreign key constraint on facts table`
+- `test(core): boost coverage for fact-extractor and error classes`
+- `chore: rename project from moonbot to spaceduck`
+
+## Author
+
+Commits in this repo use `hi@spaceduck.ai` as the author email (set via local git config).
+
+## Commit Practices
+
+- **Run tests before committing.** All 101+ tests must pass. Run `bun test --recursive`.
+- **Small, focused commits.** Each commit should do one logical thing.
+- **Never commit secrets.** The `.env` file is gitignored. Only `.env.example` is tracked.
+- **Never commit binaries or build artifacts.** `dist/`, `node_modules/`, `*.db` are gitignored.
+- **Don't skip hooks.** Never use `--no-verify`.
+
+## Branch Strategy
+
+- `main` — stable, always passes tests
+- Feature branches: `feat/<short-description>` (e.g., `feat/web-ui`)
+- Fix branches: `fix/<short-description>`
+- Keep branches short-lived. Merge via PR with squash.
+
+## When to Commit
+
+Commit after completing a logical unit of work:
+- A milestone (M0, M1, M2, ...) or sub-milestone
+- A new feature, test suite, or bug fix
+- A rename, refactor, or config change
+
+Do NOT commit half-finished work to `main`. Use a feature branch if needed.
+
+## Pull Requests
+
+- Title follows conventional commit format
+- Body has a `## Summary` section with 1-3 bullet points
+- Body has a `## Test plan` section
+- Reference related issues if any

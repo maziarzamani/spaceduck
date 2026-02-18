@@ -1,0 +1,27 @@
+version: 2
+
+updates:
+  # GitHub Actions — keep workflow actions up to date
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # npm — root workspace and all packages
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+      dev-dependencies:
+        dependency-type: "development"
+    ignore:
+      # Bun types track Bun itself — update manually with Bun upgrades
+      - dependency-name: "bun-types"

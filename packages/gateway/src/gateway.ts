@@ -1,0 +1,420 @@
+// Gateway: composition root that wires all dependencies and manages lifecycle
+
+// Bun HTML import — auto-bundles <script>/<link> tags for fullstack dev server
+// @ts-ignore: Bun HTML import
+import homepage from "@spaceduck/channel-web/index.html";
+
+import { Database } from "bun:sqlite";
+import {
+  type SpaceduckConfig,
+  type Logger,
+  type Provider,
+  type ConversationStore,
+  type LongTermMemory,
+  type SessionManager,
+  type Lifecycle,
+  type LifecycleStatus,
+  type EmbeddingProvider,
+  type Channel,
+  type Message,
+  ConsoleLogger,
+  SimpleEventBus,
+  DefaultContextBuilder,
+  AgentLoop,
+  FactExtractor,
+  loadConfig,
+  ToolRegistry,
+} from "@spaceduck/core";
+import type { EventBus } from "@spaceduck/core";
+import {
+  SchemaManager,
+  ensureCustomSQLite,
+  SqliteConversationStore,
+  SqliteLongTermMemory,
+  SqliteSessionManager,
+} from "@spaceduck/memory-sqlite";
+import { RunLock } from "./run-lock";
+import { createWsHandler, type WsConnectionData } from "./ws-handler";
+import { createToolRegistry } from "./tool-registrations";
+import { createEmbeddingProvider } from "./embedding-factory";
+
+export interface GatewayDeps {
+  readonly config: SpaceduckConfig;
+  readonly logger: Logger;
+  readonly eventBus: EventBus;
+  readonly provider: Provider;
+  readonly conversationStore: ConversationStore;
+  readonly longTermMemory: LongTermMemory;
+  readonly sessionManager: SessionManager;
+  readonly agent: AgentLoop;
+  readonly runLock: RunLock;
+  readonly embeddingProvider?: EmbeddingProvider;
+  readonly channels?: Channel[];
+}
+
+export class Gateway implements Lifecycle {
+  private _status: LifecycleStatus = "stopped";
+  private server: ReturnType<typeof Bun.serve> | null = null;
+  private db: Database | null = null;
+
+  readonly deps: GatewayDeps;
+
+  constructor(deps: GatewayDeps, db?: Database) {
+    this.deps = deps;
+    this.db = db ?? null;
+  }
+
+  get status(): LifecycleStatus {
+    return this._status;
+  }
+
+  async start(): Promise<void> {
+    if (this._status === "running" || this._status === "starting") return;
+    this._status = "starting";
+
+    const { config, logger } = this.deps;
+
+    const wsHandler = createWsHandler({
+      logger,
+      agent: this.deps.agent,
+      conversationStore: this.deps.conversationStore,
+      sessionManager: this.deps.sessionManager,
+      runLock: this.deps.runLock,
+    });
+
+    this.server = Bun.serve<WsConnectionData>({
+      port: config.port,
+      // Bun fullstack: HTML imports auto-bundle <script> and <link> tags
+      routes: {
+        "/": homepage,
+      },
+      development: config.logLevel === "debug",
+      fetch: (req, server) => this.handleRequest(req, server),
+      websocket: {
+        message: wsHandler.message,
+        open: wsHandler.open,
+        close: wsHandler.close,
+      },
+    });
+
+    this._status = "running";
+
+    // Start external channels (WhatsApp, etc.)
+    await this.startChannels();
+
+    logger.info("Gateway started", {
+      port: config.port,
+      provider: config.provider.name,
+      model: config.provider.model,
+      memory: config.memory.backend,
+      embedding: this.deps.embeddingProvider?.name ?? "disabled",
+    });
+  }
+
+  async stop(): Promise<void> {
+    if (this._status === "stopped" || this._status === "stopping") return;
+    this._status = "stopping";
+
+    // Stop external channels
+    await this.stopChannels();
+
+    if (this.server) {
+      this.server.stop(true);
+      this.server = null;
+    }
+
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
+
+    this.deps.logger.info("Gateway stopped");
+    this._status = "stopped";
+  }
+
+  private async startChannels(): Promise<void> {
+    const channels = this.deps.channels ?? [];
+    const { logger, agent, conversationStore, sessionManager, runLock } = this.deps;
+
+    for (const channel of channels) {
+      channel.onMessage(async (msg) => {
+        await this.handleChannelMessage(channel, msg);
+      });
+
+      try {
+        await channel.start();
+        logger.info("Channel started", { channel: channel.name });
+      } catch (err) {
+        logger.error("Failed to start channel", {
+          channel: channel.name,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  private async stopChannels(): Promise<void> {
+    const channels = this.deps.channels ?? [];
+    for (const channel of channels) {
+      try {
+        await channel.stop();
+      } catch {
+        // Best-effort
+      }
+    }
+  }
+
+  private async handleChannelMessage(channel: Channel, msg: import("@spaceduck/core").ChannelMessage): Promise<void> {
+    const { agent, conversationStore, sessionManager, runLock, logger } = this.deps;
+    const log = logger.child({ component: channel.name });
+
+    // Resolve session -> conversation
+    const session = await sessionManager.resolve(msg.channelId, msg.senderId);
+    const conversationId = session.conversationId;
+
+    // Ensure conversation exists
+    const existing = await conversationStore.load(conversationId);
+    if (!existing.ok) {
+      await channel.sendError(msg.senderId, "MEMORY_ERROR", "Failed to load conversation", {
+        conversationId,
+        requestId: msg.requestId,
+      });
+      return;
+    }
+    if (!existing.value) {
+      await conversationStore.create(conversationId);
+    }
+
+    // Acquire run lock
+    const release = await runLock.acquire(conversationId);
+
+    try {
+      const userMessage: Message = {
+        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+        role: "user",
+        content: msg.content,
+        timestamp: Date.now(),
+        requestId: msg.requestId,
+      };
+
+      const response = { conversationId, requestId: msg.requestId };
+
+      // Stream agent chunks — deltas are buffered by the channel,
+      // then flushed as a single message on sendDone.
+      let responseMessageId = "";
+      for await (const chunk of agent.run(conversationId, userMessage)) {
+        if (chunk.type === "text") {
+          await channel.sendDelta(msg.senderId, chunk.text, response);
+        }
+      }
+
+      // Get the persisted assistant message ID
+      const msgs = await conversationStore.loadMessages(conversationId);
+      if (msgs.ok && msgs.value.length > 0) {
+        const lastMsg = msgs.value[msgs.value.length - 1];
+        if (lastMsg.role === "assistant") {
+          responseMessageId = lastMsg.id;
+        }
+      }
+
+      await channel.sendDone(msg.senderId, responseMessageId, response);
+    } catch (err) {
+      log.error("Agent run failed", {
+        senderId: msg.senderId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await channel.sendError(msg.senderId, "AGENT_ERROR", "Something went wrong", {
+        conversationId,
+        requestId: msg.requestId,
+      });
+    } finally {
+      release();
+    }
+  }
+
+  private async handleRequest(req: Request, server: Bun.Server<WsConnectionData>): Promise<Response> {
+    const url = new URL(req.url);
+
+    // WebSocket upgrade
+    if (url.pathname === "/ws") {
+      const senderId = url.searchParams.get("senderId") || `anon-${Date.now().toString(36)}`;
+      const upgraded = server.upgrade(req, {
+        data: {
+          senderId,
+          channelId: "web",
+          connectedAt: Date.now(),
+        },
+      });
+      if (upgraded) return undefined as unknown as Response;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
+    // Health endpoint
+    if (req.method === "GET" && url.pathname === "/api/health") {
+      return Response.json({
+        status: "ok",
+        uptime: process.uptime(),
+        provider: this.deps.config.provider.name,
+        model: this.deps.config.provider.model,
+        memory: this.deps.config.memory.backend,
+        embedding: this.deps.embeddingProvider?.name ?? "disabled",
+      });
+    }
+
+    // Conversations list
+    if (req.method === "GET" && url.pathname === "/api/conversations") {
+      const result = await this.deps.conversationStore.list();
+      if (!result.ok) {
+        return Response.json({ error: result.error.message }, { status: 500 });
+      }
+      return Response.json({ conversations: result.value });
+    }
+
+    // 404
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+}
+
+/**
+ * Create a fully-wired Gateway from environment config.
+ * This is the main factory function — call it from index.ts.
+ */
+export async function createGateway(overrides?: {
+  provider?: Provider;
+  embeddingProvider?: EmbeddingProvider;
+  config?: SpaceduckConfig;
+}): Promise<Gateway> {
+  // Load config
+  const configResult = overrides?.config
+    ? { ok: true as const, value: overrides.config }
+    : loadConfig();
+
+  if (!configResult.ok) {
+    console.error("Configuration error:", configResult.error.message);
+    process.exit(1);
+  }
+
+  const config = configResult.value;
+
+  // Create logger
+  const logger = new ConsoleLogger(config.logLevel);
+
+  // Create event bus
+  const eventBus = new SimpleEventBus(logger);
+
+  // Swap to Homebrew SQLite on macOS (must happen before any new Database())
+  ensureCustomSQLite();
+
+  // Create SQLite database
+  const db = new Database(config.memory.connectionString);
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA foreign_keys = ON");
+
+  // Load sqlite-vec extension + run migrations
+  const schema = new SchemaManager(db, logger);
+  schema.loadExtensions();
+  await schema.migrate();
+
+  // Create embedding provider (optional — disabled if EMBEDDING_ENABLED=false)
+  const embeddingProvider = overrides?.embeddingProvider ?? createEmbeddingProvider(config, logger);
+
+  // Create memory layer — pass embedding provider for vector search
+  const conversationStore = new SqliteConversationStore(db, logger);
+  const longTermMemory = new SqliteLongTermMemory(db, logger, embeddingProvider);
+  const sessionManager = new SqliteSessionManager(db, logger);
+
+  // Create provider
+  let provider: Provider;
+  if (overrides?.provider) {
+    provider = overrides.provider;
+  } else if (config.provider.name === "gemini") {
+    const { GeminiProvider } = require("@spaceduck/provider-gemini");
+    provider = new GeminiProvider({
+      apiKey: Bun.env.GEMINI_API_KEY!,
+      model: config.provider.model,
+    });
+  } else if (config.provider.name === "openrouter") {
+    const { OpenRouterProvider } = require("@spaceduck/provider-openrouter");
+    provider = new OpenRouterProvider({
+      apiKey: Bun.env.OPENROUTER_API_KEY!,
+      model: config.provider.model,
+    });
+  } else if (config.provider.name === "lmstudio") {
+    const { LMStudioProvider } = require("@spaceduck/provider-lmstudio");
+    provider = new LMStudioProvider({
+      model: config.provider.model!,
+      baseUrl: Bun.env.LMSTUDIO_BASE_URL,
+      apiKey: Bun.env.LMSTUDIO_API_KEY,
+    });
+  } else if (config.provider.name === "bedrock") {
+    const { BedrockProvider } = require("@spaceduck/provider-bedrock");
+    provider = new BedrockProvider({
+      model: config.provider.model,
+      region: Bun.env.AWS_REGION,
+      accessKeyId: Bun.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: Bun.env.AWS_SECRET_ACCESS_KEY,
+      sessionToken: Bun.env.AWS_SESSION_TOKEN,
+    });
+  } else {
+    logger.error("Unknown provider", { name: config.provider.name });
+    process.exit(1);
+  }
+
+  // Create context builder
+  const contextBuilder = new DefaultContextBuilder(
+    conversationStore,
+    longTermMemory,
+    logger,
+    config.systemPrompt,
+  );
+
+  // Create run lock
+  const runLock = new RunLock();
+
+  // Create tool registry with built-in tools
+  const toolRegistry = createToolRegistry(logger);
+
+  // Create agent loop
+  const agent = new AgentLoop({
+    provider,
+    conversationStore,
+    contextBuilder,
+    sessionManager,
+    eventBus,
+    logger,
+    longTermMemory,
+    toolRegistry,
+  });
+
+  // Wire fact extractor to extract durable facts from assistant responses
+  // Uses the LLM provider for intelligent extraction (falls back to regex if unavailable)
+  const factExtractor = new FactExtractor(longTermMemory, logger, provider);
+  factExtractor.register(eventBus);
+
+  // Create external channels (opt-in via env vars)
+  const channels: Channel[] = [];
+
+  if (Bun.env.WHATSAPP_ENABLED === "true") {
+    const { WhatsAppChannel } = require("@spaceduck/channel-whatsapp");
+    channels.push(
+      new WhatsAppChannel({
+        logger,
+        authDir: Bun.env.WHATSAPP_AUTH_DIR,
+      }),
+    );
+  }
+
+  return new Gateway({
+    config,
+    logger,
+    eventBus,
+    provider,
+    conversationStore,
+    longTermMemory,
+    sessionManager,
+    agent,
+    runLock,
+    embeddingProvider,
+    channels,
+  }, db);
+}

@@ -1,0 +1,35 @@
+---
+description: spaceduck project overview and architecture
+globs: "**/*.ts"
+alwaysApply: true
+---
+
+# spaceduck
+
+A modular, open-source AI chat assistant built with Bun. Monorepo with workspace packages.
+
+## Architecture
+
+- `@spaceduck/core` — zero-dependency contract package (types, interfaces, agent loop, context builder, events, middleware)
+- `@spaceduck/gateway` — composition root that wires everything together, lifecycle orchestration
+- `@spaceduck/channel-web` — Bun fullstack server + React frontend + WebSocket
+- `@spaceduck/provider-gemini` — Google AI Studio (Gemini) streaming adapter (primary)
+- `@spaceduck/provider-bedrock` — AWS Bedrock Converse API streaming adapter (secondary)
+- `@spaceduck/memory-sqlite` — SQLite storage via Bun.SQL (ConversationStore + LongTermMemory)
+
+## Key principles
+
+- Core has ZERO external dependencies. All other packages depend only on core.
+- Gateway is the composition root — it creates instances and wires dependencies.
+- Dependency inversion everywhere: code against interfaces, not implementations.
+- Use `Result<T, E>` for expected failures, exceptions for bugs.
+- Every resource-owning component implements `Lifecycle` (start/stop, idempotent).
+- Structured logging via `Logger` interface — no `console.log` in library code.
+- EventBus for cross-cutting concerns (fact extraction, analytics, logging).
+- Middleware pipeline for pre/post-processing (rate limiting, filtering, audit).
+
+## Conventions
+
+- Use Bun-native APIs wherever possible (Bun.serve, Bun.SQL, bun:test, Bun.env).
+- TypeScript strict mode. No `any`. Explicit return types on public APIs.
+- Exports from each package go through `src/index.ts`.

@@ -1,0 +1,7 @@
+[test]
+coverage = true
+coverageThreshold = { line = 80, function = 80 }
+coverageReporter = ["text", "lcov"]
+
+[serve.static]
+plugins = ["bun-plugin-tailwind"]

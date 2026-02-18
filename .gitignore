@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.local
+.DS_Store
+coverage/
+*.lcov
+*.tsbuildinfo
+tmp/
+data/whatsapp-auth/

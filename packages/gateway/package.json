@@ -1,0 +1,25 @@
+{
+  "name": "@spaceduck/gateway",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@spaceduck/core": "workspace:*",
+    "@spaceduck/memory-sqlite": "workspace:*",
+    "@spaceduck/provider-gemini": "workspace:*",
+    "@spaceduck/provider-openrouter": "workspace:*",
+    "@spaceduck/provider-lmstudio": "workspace:*",
+    "@spaceduck/provider-bedrock": "workspace:*",
+    "@spaceduck/channel-web": "workspace:*",
+    "@spaceduck/channel-whatsapp": "workspace:*",
+    "@spaceduck/tool-browser": "workspace:*",
+    "@spaceduck/tool-web-fetch": "workspace:*"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

@@ -1,0 +1,44 @@
+---
+description: Spaceduck monorepo package structure and coding conventions
+alwaysApply: true
+---
+
+# Project Structure
+
+Spaceduck is a Bun monorepo with workspace packages under `packages/`.
+
+## Package Layout
+
+Every package follows the same structure:
+
+```
+packages/<category>/<name>/
+  package.json
+  src/
+    index.ts          -- barrel re-export (public API)
+    <name>.ts         -- main implementation
+    types.ts          -- type definitions (if needed)
+    __tests__/
+      <name>.test.ts  -- bun:test suite
+```
+
+## Workspace Categories
+
+| Path pattern            | Purpose                      | Naming                     |
+|-------------------------|------------------------------|----------------------------|
+| `packages/core`         | Zero-dep contracts + logic   | `@spaceduck/core`          |
+| `packages/providers/*`  | LLM provider adapters        | `@spaceduck/provider-*`    |
+| `packages/memory/*`     | Storage backends             | `@spaceduck/memory-*`      |
+| `packages/channels/*`   | Messaging channels           | `@spaceduck/channel-*`     |
+| `packages/tools/*`      | Agent tools                  | `@spaceduck/tool-*`        |
+| `packages/gateway`      | HTTP/WS server (composition) | `@spaceduck/gateway`       |
+
+Root `package.json` uses glob patterns: `"packages/tools/*"`, `"packages/providers/*"`, etc.
+
+## Conventions
+
+- **Barrel exports**: every package has `src/index.ts` re-exporting its public API
+- **Error handling**: use `Result<T>` from `@spaceduck/core` -- no throwing in library code
+- **Tests**: colocated in `src/__tests__/` using `bun:test` (`describe`/`it`/`expect`)
+- **Types**: prefer `interface` over `type` for object shapes; export types from dedicated `types.ts`
+- **Imports**: use workspace references (`@spaceduck/core`) not relative paths across packages

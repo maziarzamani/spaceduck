@@ -1,0 +1,18 @@
+{
+  "name": "@spaceduck/tool-web-fetch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "html-to-text": "^9.0.5"
+  },
+  "devDependencies": {
+    "@types/html-to-text": "^9",
+    "bun-types": "latest"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@spaceduck/channel-whatsapp",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10",
+    "@spaceduck/core": "workspace:*",
+    "@whiskeysockets/baileys": "latest",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/qrcode-terminal": "^0.12",
+    "bun-types": "latest"
+  }
+}

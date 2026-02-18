@@ -1,0 +1,31 @@
+{
+  "name": "@spaceduck/channel-web",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./index.html": "./index.html"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@spaceduck/core": "workspace:*",
+    "react": "^19",
+    "react-dom": "^19",
+    "react-markdown": "latest",
+    "lucide-react": "latest",
+    "clsx": "latest",
+    "tailwind-merge": "latest",
+    "class-variance-authority": "latest"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4",
+    "bun-plugin-tailwind": "latest"
+  }
+}

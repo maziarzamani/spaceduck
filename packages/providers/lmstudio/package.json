@@ -1,0 +1,16 @@
+{
+  "name": "@spaceduck/provider-lmstudio",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@spaceduck/core": "workspace:*"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

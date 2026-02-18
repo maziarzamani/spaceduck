@@ -1,0 +1,47 @@
+---
+description: Testing conventions for spaceduck
+globs: "**/*.test.ts"
+alwaysApply: false
+---
+
+# Testing conventions
+
+## Runner
+
+- Use `bun:test` — `describe`, `it`, `expect`, `beforeEach`, `afterEach`
+- Use `spyOn` for mocking methods, `mock` for module mocking
+- Test files live in `src/__tests__/` adjacent to source code
+- Each test file: one `describe` block per function/class
+
+## Pattern
+
+Follow Arrange-Act-Assert:
+
+```typescript
+it("should do the thing", () => {
+  // Arrange
+  const input = createMessage({ content: "hello" });
+
+  // Act
+  const result = processMessage(input);
+
+  // Assert
+  expect(result.ok).toBe(true);
+});
+```
+
+## Fixtures
+
+- Import shared fixtures from `@spaceduck/core` (re-exported from `__fixtures__/`)
+- `MockProvider` — configurable canned responses implementing `Provider`
+- `MockMemory` — in-memory Map-backed `ConversationStore` and `LongTermMemory`
+- `createMessage()`, `createConversation()` — factory functions with sensible defaults
+
+## Rules
+
+- NEVER test against real LLM providers — always use MockProvider
+- SQLite tests use `":memory:"` — new database per test via `beforeEach`
+- WebSocket tests pick a random available port
+- No `any` in tests — use proper typing
+- Test behavior, not implementation — assert on outputs and side effects
+- Aim for 80% coverage, 100% on error paths
