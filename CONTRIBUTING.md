@@ -16,22 +16,23 @@ Welcome. Spaceduck is a personal AI assistant built from scratch — no agent fr
 
 One PR = one topic. Do not bundle unrelated fixes or features. PRs over 500 changed lines get extra review time; if yours is large, explain why in the description.
 
-## Branching (Gitflow)
+## Branching (GitHub Flow)
+
+`main` is always stable and protected. All work happens on short-lived feature branches.
 
 | Branch | Purpose |
 |--------|---------|
-| `main` | Tagged releases only — never commit directly |
-| `develop` | Integration — all features land here |
-| `feature/*` | New work — branch from and PR back to `develop` |
-| `release/*` | Release prep — from `develop`, merges to `main` + `develop` |
-| `hotfix/*` | Urgent fixes — from `main`, merges to `main` + `develop` |
+| `main` | Stable, protected — all PRs target this branch |
+| `feat/*` | New features |
+| `fix/*` | Bug fixes |
+| `chore/*` | Tooling, deps, config |
 
 ### Day-to-day workflow
 
-1. `git checkout develop && git pull`
-2. `git checkout -b feature/your-thing`
+1. `git checkout main && git pull`
+2. `git checkout -b feat/your-thing`
 3. Commit with conventional prefixes (`feat:`, `fix:`, `chore:`…)
-4. Push and open a PR targeting `develop`
+4. Push and open a PR targeting `main`
 5. CI passes → auto-approved → merge
 
 ## Local setup
