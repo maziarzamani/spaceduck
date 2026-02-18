@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before opening a feature request, check the [Roadmap](https://github.com/spaceduck-ai/spaceduck#roadmap) and open [discussions](https://github.com/spaceduck-ai/spaceduck/discussions) — it may already be planned or in progress.
+        Before opening a feature request, check the [Roadmap](https://github.com/maziarzamani/spaceduck#roadmap) and open [discussions](https://github.com/maziarzamani/spaceduck/discussions) — it may already be planned or in progress.
 
   - type: textarea
     id: summary
