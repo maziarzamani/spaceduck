@@ -9,7 +9,7 @@ export interface Fact {
   readonly content: string;
   readonly category?: string;
   /** Where the fact came from. */
-  readonly source: "auto-extracted" | "manual" | "compaction-flush";
+  readonly source: "auto-extracted" | "manual" | "compaction-flush" | "turn-flush";
   /** Confidence score 0-1 set by the firewall heuristic. */
   readonly confidence: number;
   /** Optional expiry timestamp (ms). NULL means never expires. */
