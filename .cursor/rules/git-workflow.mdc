@@ -39,12 +39,24 @@ Commits in this repo use `hi@spaceduck.ai` as the author email (set via local gi
 - **Never commit binaries or build artifacts.** `dist/`, `node_modules/`, `*.db` are gitignored.
 - **Don't skip hooks.** Never use `--no-verify`.
 
-## Branch Strategy
+## Branch Strategy (GitHub Flow)
 
-- `main` — stable, always passes tests
+- `main` — stable, protected. All PRs target `main`. Never push directly.
 - Feature branches: `feat/<short-description>` (e.g., `feat/web-ui`)
 - Fix branches: `fix/<short-description>`
-- Keep branches short-lived. Merge via PR with squash.
+- Chore branches: `chore/<short-description>`
+- Keep branches short-lived. Merge via PR.
+
+### Starting a task
+
+**Always create a feature branch before making changes.** When the user asks you to implement something:
+
+1. `git checkout main && git pull origin main`
+2. `git checkout -b <type>/<short-description>` (e.g., `feat/config-system`, `fix/memory-leak`, `chore/update-deps`)
+3. Do the work, commit incrementally
+4. Push and tell the user to create a PR on GitHub
+
+Never commit directly to `main`. If you find yourself on `main`, create and switch to a branch first.
 
 ## When to Commit
 
@@ -53,7 +65,7 @@ Commit after completing a logical unit of work:
 - A new feature, test suite, or bug fix
 - A rename, refactor, or config change
 
-Do NOT commit half-finished work to `main`. Use a feature branch if needed.
+Do NOT commit half-finished work to `main`. Use a feature branch.
 
 ## Pull Requests
 

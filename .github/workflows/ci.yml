@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 jobs:
   test:
@@ -54,16 +54,3 @@ jobs:
 
       - name: Run tests
         run: bun test --recursive
-
-  auto-approve:
-    name: Auto-approve PR (CI passed)
-    needs: [test]
-    runs-on: ubuntu-latest
-    # Only runs on PRs — not on direct pushes to main
-    if: github.event_name == 'pull_request'
-    permissions:
-      pull-requests: write
-    steps:
-      - uses: hmarr/auto-approve-action@v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}

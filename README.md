@@ -35,6 +35,9 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | Context builder | ✅ | Token budgeting, system prompt injection, LTM fact recall, auto-compaction, afterTurn eager flush |
 | Agent loop | ✅ | Multi-round tool execution with automatic tool → result → LLM cycles |
 | Event bus | ✅ | Typed fire-and-forget + async emit, powers fact extraction pipeline |
+| Configuration system | 🔜 | Structured config file replacing `.env` — type-safe, nestable, multi-environment |
+| Plugin lifecycle | 🔜 | Standardized init/shutdown hooks for providers, channels, and tools |
+| Streaming protocol v2 | 🔜 | Structured envelopes for tool progress, memory events, and error recovery |
 
 ### Memory
 
@@ -46,6 +49,10 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | Fact extraction | ✅ | LLM-based with hardened JSON parsing, regex fallback, afterTurn eager flush |
 | Deduplication | ✅ | SHA-256 content hashing for exact duplicates |
 | Hybrid recall | ✅ | RRF combining vector cosine + FTS5 BM25, recency decay, SQL expiry pushdown |
+| Fact conflict resolution | 🔜 | Detect contradicting facts and prefer the most recent or highest-confidence version |
+| Backfill script | 🔜 | Resumable migration to embed existing unembedded facts |
+| Memory inspector | 🔜 | Web UI panel to browse, edit, and delete stored facts |
+| Per-user isolation | 🔜 | Scope facts by user identity across channels |
 
 ### Providers
 
@@ -57,6 +64,9 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | OpenRouter | ✅ | Multi-model chat streaming (access to hundreds of models) |
 | AWS Bedrock | ✅ | Native Converse API (required for Nova), Titan Text Embeddings V2, Bearer token auth |
 | Embedding factory | ✅ | Provider-agnostic creation from env config, fail-fast dimension validation |
+| Ollama | 🔜 | Local models via Ollama API |
+| Anthropic (direct) | 🔜 | Claude via Anthropic API (non-Bedrock) |
+| Provider fallback chain | 🔜 | Auto-retry with secondary provider on failure or timeout |
 
 ### Channels & Interface
 
@@ -68,6 +78,7 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | Discord | 🔜 | Discord bot channel |
 | Telegram | 🔜 | Telegram bot channel |
 | CLI | 🔜 | Terminal-based chat interface |
+| Multi-user auth | 🔜 | Token-based auth for Web UI, per-user sessions |
 
 ### Tools
 
@@ -75,8 +86,10 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 |-----------|---|---------|
 | Browser | ✅ | Playwright headless with accessibility snapshot refs |
 | Web fetch | ✅ | HTTP fetch + HTML-to-text conversion |
-| Web search | 🔜 | Brave Search API integration |
+| Web search | 🔜 | Brave/SearXNG search API integration |
 | Scheduler | 🔜 | Periodic web monitoring with natural language conditions |
+| File system | 🔜 | Read/write local files with sandboxed access |
+| Code interpreter | 🔜 | Execute code snippets in a sandboxed runtime |
 
 ## What it does today
 
@@ -247,11 +260,13 @@ bun run bench
 
 ## Roadmap
 
-1. **Configuration system** — replace flat `.env` with a structured config file (`spaceduck.config.ts` or `spaceduck.yaml`). The current `.env` approach does not scale: no nesting, no type safety, no multi-environment support, and no way to express complex provider or memory configuration without a growing list of unrelated variables.
-2. **Web search tool** — search API integration for real-time information retrieval
-3. **Scheduler** — periodic web monitoring with natural language conditions
-4. **Backfill script** — resumable migration to embed existing facts
-5. **Skills system** — pluggable agent capabilities loaded from markdown definitions
+All planned features are tracked inline in the [Status](#status) tables above (marked 🔜). The highest-priority items right now:
+
+1. **Configuration system** — replace flat `.env` with a structured config file. The current approach does not scale: no nesting, no type safety, no multi-environment support.
+2. **Per-user isolation** — scope facts by user identity so multi-user setups don't leak memory across people.
+3. **Web search tool** — search API integration for real-time information retrieval.
+4. **Provider fallback chain** — auto-retry with a secondary provider on failure or timeout.
+5. **Memory inspector** — Web UI panel to browse, edit, and delete stored facts.
 
 ---
 

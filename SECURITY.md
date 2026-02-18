@@ -4,7 +4,7 @@
 
 Please do not open a public GitHub issue for security vulnerabilities.
 
-Report privately via **[GitHub Security Advisories](https://github.com/spaceduck-ai/spaceduck/security/advisories/new)**. This keeps the report confidential until a fix is ready.
+Report privately via **[GitHub Security Advisories](https://github.com/maziarzamani/spaceduck/security/advisories/new)**. This keeps the report confidential until a fix is ready.
 
 Include in your report:
 
