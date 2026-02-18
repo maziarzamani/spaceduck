@@ -77,6 +77,7 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | WhatsApp | ✅ | Baileys (WhatsApp Web protocol), QR pairing, typing indicators |
 | Discord | 🔜 | Discord bot channel |
 | Telegram | 🔜 | Telegram bot channel |
+| Desktop app | 🔜 | Native macOS, Linux, and Windows app (Tauri or Electron) |
 | CLI | 🔜 | Terminal-based chat interface |
 | Multi-user auth | 🔜 | Token-based auth for Web UI, per-user sessions |
 
