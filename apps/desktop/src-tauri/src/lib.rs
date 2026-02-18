@@ -1,4 +1,4 @@
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandEvent;
 
@@ -66,7 +66,7 @@ pub fn run() {
                     log::info!("Server ready, navigating to {}", SERVER_URL);
                     if let Some(window) = nav_handle.get_webview_window("main") {
                         let url: tauri::Url = SERVER_URL.parse().unwrap();
-                        let _ = window.navigate(url);
+                        let _: Result<(), _> = window.navigate(url);
                     }
                 } else {
                     log::error!("Server failed to start within {}ms", MAX_WAIT_MS);

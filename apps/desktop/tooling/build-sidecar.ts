@@ -33,6 +33,9 @@ function buildSidecar() {
     "--minify",
     "--no-compile-autoload-dotenv",
     "--no-compile-autoload-bunfig",
+    "--external=playwright-core",
+    "--external=electron",
+    "--external=chromium-bidi",
     `--outfile=${outfile}`,
     GATEWAY_ENTRY,
   ].join(" ");
