@@ -6,6 +6,18 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.3.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.2.0...spaceduck-v0.3.0) (2026-02-18)
+
+
+### Features
+
+* initial release — memory v2, bedrock, web UI, whatsapp ([e97997f](https://github.com/maziarzamani/spaceduck/commit/e97997f69b660cab4ad37b8458933f4badffe74b))
+
+
+### Bug Fixes
+
+* prevent release-please from bumping to 1.0.0 ([9f354ce](https://github.com/maziarzamani/spaceduck/commit/9f354ce6809d9de3a680f7ec071940b4461a47e7))
+
 ## [0.2.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.1.0...spaceduck-v0.2.0) (2026-02-18)
 
 
