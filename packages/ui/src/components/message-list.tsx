@@ -42,8 +42,16 @@ function MessageBubble({ message, isStreaming }: { message: Message; isStreaming
         {isUser ? (
           <p className="whitespace-pre-wrap">{message.content}</p>
         ) : (
-          <div className="prose prose-invert prose-sm max-w-none [&_pre]:bg-background/50 [&_pre]:rounded-lg [&_pre]:p-3 [&_code]:text-primary [&_code]:font-mono [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5">
-            <Markdown>{message.content}</Markdown>
+          <div className="prose prose-invert prose-sm max-w-none [&_pre]:bg-background/50 [&_pre]:rounded-lg [&_pre]:p-3 [&_code]:text-primary [&_code]:font-mono [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_a]:text-primary [&_a]:underline">
+            <Markdown
+              components={{
+                a: ({ href, children, ...rest }) => (
+                  <a {...rest} href={href} target="_blank" rel="noopener noreferrer">
+                    {children}
+                  </a>
+                ),
+              }}
+            >{message.content}</Markdown>
             {isStreaming && (
               <span className="inline-block w-1.5 h-4 bg-primary animate-pulse ml-0.5 rounded-sm" />
             )}
