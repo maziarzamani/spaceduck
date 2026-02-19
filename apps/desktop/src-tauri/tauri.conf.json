@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Spaceduck",
+        "title": "spaceduck",
         "width": 1024,
         "height": 768,
         "minWidth": 600,
@@ -38,7 +38,7 @@
   },
   "plugins": {
     "shell": {
-      "open": false
+      "open": "^https?://"
     }
   }
 }

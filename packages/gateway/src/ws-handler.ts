@@ -249,7 +249,12 @@ export function createWsHandler(deps: WsHandlerDeps) {
       return;
     }
 
-    send(ws, { v: 1, type: "conversation.history", conversationId, messages: result.value });
+    send(ws, {
+      v: 1,
+      type: "conversation.history",
+      conversationId,
+      messages: result.value.filter((m) => m.role === "user" || (m.role === "assistant" && m.content)),
+    });
   }
 
   async function handleConversationCreate(

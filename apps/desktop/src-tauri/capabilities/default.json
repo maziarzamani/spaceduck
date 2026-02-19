@@ -25,6 +25,7 @@
     },
     {
       "identifier": "shell:allow-stdin-write"
-    }
+    },
+    "shell:allow-open"
   ]
 }
