@@ -115,7 +115,7 @@ describe("PDF upload + attachment E2E", () => {
 
     const pdf = createMinimalPdf();
     const formData = new FormData();
-    formData.append("file", new File([pdf], "test.pdf", { type: "application/pdf" }));
+    formData.append("file", new File([pdf as BlobPart], "test.pdf", { type: "application/pdf" }));
 
     const res = await fetch(`http://localhost:${PORT}/api/upload`, {
       method: "POST",
@@ -194,7 +194,7 @@ describe("PDF upload + attachment E2E", () => {
     // Upload a real PDF
     const pdf = createMinimalPdf();
     const formData = new FormData();
-    formData.append("file", new File([pdf], "report.pdf", { type: "application/pdf" }));
+    formData.append("file", new File([pdf as BlobPart], "report.pdf", { type: "application/pdf" }));
 
     const uploadRes = await fetch(`http://localhost:${PORT}/api/upload`, {
       method: "POST",
