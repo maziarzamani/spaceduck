@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach } from "bun:test";
 import { createGateway, Gateway } from "../gateway";
 import type { Message, Provider, ProviderOptions, ProviderChunk } from "@spaceduck/core";
 
+process.env.SPACEDUCK_REQUIRE_AUTH = "0";
+
 /** Minimal mock provider for smoke testing */
 class SmokeTestProvider implements Provider {
   readonly name = "smoke-test";

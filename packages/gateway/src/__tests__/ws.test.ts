@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { createGateway, Gateway } from "../gateway";
 import type { Message, Provider, ProviderOptions, ProviderChunk, WsServerEnvelope } from "@spaceduck/core";
 
+process.env.SPACEDUCK_REQUIRE_AUTH = "0";
+
 class TestProvider implements Provider {
   readonly name = "ws-test";
   async *chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {

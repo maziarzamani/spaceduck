@@ -58,7 +58,7 @@ describe("SchemaManager", () => {
     db.close();
   });
 
-  it("should be idempotent and reach version 8", async () => {
+  it("should be idempotent and reach version 9", async () => {
     const db = createTestDb();
     const schema = new SchemaManager(db, logger);
     schema.loadExtensions();
@@ -68,7 +68,7 @@ describe("SchemaManager", () => {
     const row = db.query("SELECT MAX(version) as version FROM schema_version").get() as {
       version: number;
     };
-    expect(row.version).toBe(8);
+    expect(row.version).toBe(9);
 
     db.close();
   });
