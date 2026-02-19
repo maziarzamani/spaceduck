@@ -6,6 +6,18 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.7.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.6.1...spaceduck-v0.7.0) (2026-02-19)
+
+
+### Features
+
+* add PDF document scanning via Marker and file upload infrastructure ([ff2816d](https://github.com/maziarzamani/spaceduck/commit/ff2816d12ffad4e4f3ab9e4145447c030b8baeb7))
+
+
+### Bug Fixes
+
+* ignore data/uploads/ in any subdirectory, not just repo root ([e3a2da8](https://github.com/maziarzamani/spaceduck/commit/e3a2da8e4ed2c0e8aae1c9c7a4f215b1cb4dae55))
+
 ## [0.6.1](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.6.0...spaceduck-v0.6.1) (2026-02-19)
 
 
