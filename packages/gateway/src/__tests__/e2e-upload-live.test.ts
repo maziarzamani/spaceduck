@@ -53,7 +53,7 @@ describe.if(LIVE)("Live PDF upload + marker_scan E2E", () => {
     const formData = new FormData();
     formData.append(
       "file",
-      new File([pdfContent], "test-doc.pdf", { type: "application/pdf" }),
+      new File([pdfContent as BlobPart], "test-doc.pdf", { type: "application/pdf" }),
     );
 
     // Upload
