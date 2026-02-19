@@ -1,6 +1,7 @@
 // Versioned WebSocket protocol types
 
 import type { Message } from "./message";
+import type { Attachment } from "./attachment";
 import type { ToolCall, ToolResult } from "./tool";
 
 /**
@@ -8,7 +9,7 @@ import type { ToolCall, ToolResult } from "./tool";
  * This enables backward-compatible protocol evolution.
  */
 export type WsClientEnvelope =
-  | { v: 1; type: "message.send"; requestId: string; conversationId?: string; content: string }
+  | { v: 1; type: "message.send"; requestId: string; conversationId?: string; content: string; attachments?: Attachment[] }
   | { v: 1; type: "conversation.list" }
   | { v: 1; type: "conversation.history"; conversationId: string }
   | { v: 1; type: "conversation.create"; title?: string }

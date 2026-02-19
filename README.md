@@ -44,6 +44,7 @@ It remembers what you've said across conversations, acts on your behalf with rea
 - **Web search** — Brave, Perplexity Sonar, or SearXNG — structured results plus AI-synthesized answers
 - **Browser automation** — Playwright headless with accessibility-snapshot element refs
 - **Web fetch** — HTTP fetch with HTML-to-text conversion for any public page
+- **Document scanning** — Upload PDFs via the web UI (drag-and-drop or file picker), auto-convert to markdown with [Marker](https://github.com/VikParuchuri/marker) (optional, user-installed)
 - Multi-round tool execution — the agent loop chains tool → result → LLM cycles automatically
 
 ### Provider Freedom
@@ -72,8 +73,8 @@ It remembers what you've said across conversations, acts on your behalf with rea
 
 | Component | | Details | Tested |
 |-----------|---|---------|--------|
-| Types & contracts | ✅ | `Message`, `Provider`, `EmbeddingProvider`, `ConversationStore`, `LongTermMemory`, `Result<T>` monad | Unit |
-| Context builder | ✅ | Token budgeting, system prompt injection, LTM fact recall, auto-compaction, afterTurn eager flush | Unit |
+| Types & contracts | ✅ | `Message`, `Attachment`, `Provider`, `EmbeddingProvider`, `ConversationStore`, `LongTermMemory`, `Result<T>` monad | Unit |
+| Context builder | ✅ | Token budgeting, system prompt injection, LTM fact recall, auto-compaction, afterTurn eager flush, attachment hints for tool invocation | Unit |
 | Agent loop | ✅ | Multi-round tool execution with automatic tool → result → LLM cycles | Unit |
 | Event bus | ✅ | Typed fire-and-forget + async emit, powers fact extraction pipeline | Unit |
 | Configuration system | 🔜 | Structured config file replacing `.env` — type-safe, nestable, multi-environment | — |
@@ -113,8 +114,9 @@ It remembers what you've said across conversations, acts on your behalf with rea
 
 | Component | | Details | Tested |
 |-----------|---|---------|--------|
-| Web UI | ✅ | React chat with streaming, conversations sidebar, Tailwind CSS | — |
-| Gateway | ✅ | Bun HTTP + WebSocket server, session management, run locking | E2E |
+| Web UI | ✅ | React chat with streaming, conversations sidebar, file upload (drag-drop + paperclip), attachment chips, Tailwind CSS | — |
+| Gateway | ✅ | Bun HTTP + WebSocket server, session management, run locking, `POST /api/upload` with magic-byte validation | E2E |
+| File uploads | ✅ | Multipart upload, PDF magic-byte validation, opaque attachment IDs, server-side `AttachmentStore` with TTL sweeper | Unit |
 | WhatsApp | ✅ | Baileys (WhatsApp Web protocol), QR pairing, typing indicators | — |
 | Discord | 🔜 | Discord bot channel | — |
 | Telegram | 🔜 | Telegram bot channel | — |
@@ -129,6 +131,7 @@ It remembers what you've said across conversations, acts on your behalf with rea
 | Browser | ✅ | Playwright headless with accessibility snapshot refs | E2E |
 | Web fetch | ✅ | HTTP fetch + HTML-to-text conversion | E2E |
 | Web search | ✅ | Brave / Perplexity Sonar / SearXNG — structured search + AI-synthesized answers | Unit |
+| Document scan | ✅ | PDF-to-markdown via [Marker](https://github.com/VikParuchuri/marker) (optional, user-installed). Auto-registered when `marker_single` is on PATH. Configurable timeout, page range, OCR | Unit |
 | Scheduler | 🔜 | Periodic web monitoring with natural language conditions | — |
 | File system | 🔜 | Read/write local files with sandboxed access | — |
 | Code interpreter | 🔜 | Execute code snippets in a sandboxed runtime | — |
@@ -137,23 +140,26 @@ It remembers what you've said across conversations, acts on your behalf with rea
 
 ```mermaid
 graph TD
-    UI["Web UI (React)<br/>WebSocket + streaming deltas"]
+    UI["Web UI (React)<br/>WebSocket + streaming deltas<br/>file upload (drag-drop / picker)"]
     WA["WhatsApp (Baileys)<br/>QR pairing · typing indicators"]
-    GW["Gateway (Bun)<br/>HTTP server · WS handler · sessions"]
+    GW["Gateway (Bun)<br/>HTTP server · WS handler · sessions<br/>POST /api/upload"]
+    AS["Attachment Store<br/>opaque IDs · file sweeper"]
     AL["Agent Loop<br/>+ tool cycles"]
-    CB["Context Builder<br/>+ budget · compact"]
+    CB["Context Builder<br/>+ budget · compact<br/>+ attachment hints"]
     MEM["Memory (SQLite)<br/>conversations · facts<br/>vector embeddings (vec0)<br/>FTS5 search · SHA-256 dedup"]
     CP["Chat Provider<br/>(pluggable)<br/>streaming chunks"]
     EP["Embedding Provider<br/>(pluggable)<br/>configurable dimensions"]
-    TOOLS["Tools<br/>browser · fetch<br/>(extensible)"]
+    TOOLS["Tools<br/>browser · fetch · search<br/>marker_scan · (extensible)"]
 
     UI --> GW
     WA --> GW
+    GW --> AS
     GW --> AL
     GW --> CB
     GW --> MEM
     AL --> CP
     AL --> TOOLS
+    TOOLS -->|"resolve attachmentId"| AS
     MEM --> EP
 ```
 
@@ -197,17 +203,17 @@ spaceduck/
 ├── packages/
 │   ├── core/                  # Zero-dep contracts + logic
 │   │   └── src/
-│   │       ├── types/         # Message, Provider, EmbeddingProvider, Memory, Errors
+│   │       ├── types/         # Message, Attachment, Provider, EmbeddingProvider, Memory, Errors
 │   │       ├── agent.ts       # AgentLoop orchestrator with multi-round tool calling
-│   │       ├── context-builder.ts  # Token budget, compaction, afterTurn eager flush
+│   │       ├── context-builder.ts  # Token budget, compaction, afterTurn eager flush, attachment hints
 │   │       ├── fact-extractor.ts   # LLM-based fact extraction + guardFact firewall
 │   │       ├── events.ts      # Typed EventBus (fire-and-forget + async)
 │   │       └── config.ts
 │   ├── ui/                    # Shared React components, hooks, and styles
 │   │   └── src/
 │   │       ├── app.tsx            # Root App component
-│   │       ├── components/        # Sidebar, MessageList, ChatInput, StatusBar
-│   │       ├── hooks/             # useSpaceduckWs (auto-detects Tauri vs web)
+│   │       ├── components/        # Sidebar, MessageList, ChatInput (file attach + drag-drop), StatusBar
+│   │       ├── hooks/             # useSpaceduckWs (auto-detects Tauri vs web, supports attachments)
 │   │       └── styles.css         # Tailwind CSS
 │   ├── providers/             # Pluggable — add your own by implementing Provider interface
 │   │   ├── gemini/            # Google AI (chat + embeddings)
@@ -224,11 +230,15 @@ spaceduck/
 │   │   └── whatsapp/          # WhatsApp via Baileys (QR pairing)
 │   ├── gateway/               # Composition root — wires everything
 │   │   └── src/
-│   │       ├── gateway.ts         # HTTP/WS server + dependency injection
+│   │       ├── gateway.ts         # HTTP/WS server + upload endpoint + dependency injection
+│   │       ├── attachment-store.ts   # Server-side Map<attachmentId, localPath> with TTL sweeper
+│   │       ├── tool-registrations.ts # Registers all built-in tools (including conditional marker_scan)
 │   │       └── embedding-factory.ts  # Provider-agnostic embedding creation
 │   └── tools/
 │       ├── browser/           # Playwright headless browser
-│       └── web-fetch/         # HTTP fetch + HTML-to-text
+│       ├── web-fetch/         # HTTP fetch + HTML-to-text
+│       ├── web-search/        # Brave / Perplexity Sonar / SearXNG search + answers
+│       └── marker/            # PDF-to-markdown via Marker (optional, user-installed)
 └── package.json               # Bun workspace root
 ```
 
@@ -257,6 +267,18 @@ bun run dev
 # Open http://localhost:3000
 ```
 
+### Optional: Document Scanning (Marker)
+
+To enable PDF-to-markdown conversion via the `marker_scan` tool, install [Marker](https://github.com/VikParuchuri/marker) separately:
+
+```bash
+pip install marker-pdf   # requires Python 3.10+, PyTorch
+```
+
+When `marker_single` is on your PATH, the tool is automatically registered at startup. Upload a PDF through the web UI (paperclip button or drag-and-drop) and the assistant will process it automatically.
+
+> **License note:** Marker is GPL-3.0 with Open Rail model weight restrictions. Spaceduck never bundles Marker — it calls `marker_single` as an external process.
+
 ### Embedding Setup
 
 Vector memory requires an embedding model. The default `.env.example` is configured for Amazon Bedrock (Titan V2):
@@ -282,6 +304,9 @@ bun test packages/core/              # Unit tests (agent, context, events, facts
 bun test packages/memory/            # Memory + vector embedding tests
 bun test packages/tools/browser/     # Browser tool tests
 bun test packages/tools/web-fetch/   # Web-fetch tests
+bun test packages/tools/web-search/  # Web search + answer tests
+bun test packages/tools/marker/      # Marker document scanner tests
+bun test packages/gateway/src/__tests__/attachment-store.test.ts  # Attachment store tests
 
 # Live E2E tests against Bedrock (requires AWS_BEARER_TOKEN_BEDROCK)
 RUN_LIVE_TESTS=1 bun test packages/gateway/src/__tests__/e2e-bedrock.test.ts

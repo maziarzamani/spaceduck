@@ -7,6 +7,10 @@ export type {
 } from "./message";
 
 export type {
+  Attachment,
+} from "./attachment";
+
+export type {
   Provider,
   ProviderOptions,
   ProviderErrorCode,

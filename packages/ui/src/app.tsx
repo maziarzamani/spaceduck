@@ -38,7 +38,7 @@ export function App() {
           />
 
           <ChatInput
-            onSend={(content) => ws.sendMessage(content, ws.activeConversationId ?? undefined)}
+            onSend={(content, attachments) => ws.sendMessage(content, ws.activeConversationId ?? undefined, attachments)}
             disabled={ws.status !== "connected"}
             isStreaming={ws.pendingStream !== null}
           />

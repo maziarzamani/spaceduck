@@ -37,6 +37,7 @@ import { RunLock } from "./run-lock";
 import { createWsHandler, type WsConnectionData } from "./ws-handler";
 import { createToolRegistry } from "./tool-registrations";
 import { createEmbeddingProvider } from "./embedding-factory";
+import { AttachmentStore } from "./attachment-store";
 
 export interface GatewayDeps {
   readonly config: SpaceduckConfig;
@@ -50,6 +51,7 @@ export interface GatewayDeps {
   readonly runLock: RunLock;
   readonly embeddingProvider?: EmbeddingProvider;
   readonly channels?: Channel[];
+  readonly attachmentStore: AttachmentStore;
 }
 
 export class Gateway implements Lifecycle {
@@ -122,6 +124,9 @@ export class Gateway implements Lifecycle {
       this.server.stop(true);
       this.server = null;
     }
+
+    // Stop attachment store sweeper
+    this.deps.attachmentStore.stop();
 
     if (this.db) {
       this.db.close();
@@ -270,8 +275,77 @@ export class Gateway implements Lifecycle {
       return Response.json({ conversations: result.value });
     }
 
+    // File upload
+    if (req.method === "POST" && url.pathname === "/api/upload") {
+      return this.handleUpload(req);
+    }
+
     // 404
     return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  private async handleUpload(req: Request): Promise<Response> {
+    const { logger, attachmentStore } = this.deps;
+    const maxSizeMb = Number(Bun.env.UPLOAD_MAX_SIZE_MB || "50");
+    const maxSizeBytes = maxSizeMb * 1024 * 1024;
+
+    try {
+      const contentType = req.headers.get("content-type") || "";
+      if (!contentType.includes("multipart/form-data")) {
+        return Response.json({ error: "Expected multipart/form-data" }, { status: 400 });
+      }
+
+      const formData = await req.formData();
+      const file = formData.get("file");
+      if (!file || !(file instanceof File)) {
+        return Response.json({ error: "Missing file field" }, { status: 400 });
+      }
+
+      if (file.size > maxSizeBytes) {
+        return Response.json(
+          { error: `File too large (max ${maxSizeMb}MB)` },
+          { status: 413 },
+        );
+      }
+
+      // Validate magic bytes — currently only PDF is supported
+      const buffer = await file.arrayBuffer();
+      const header = new Uint8Array(buffer.slice(0, 5));
+      const pdfMagic = new TextDecoder().decode(header);
+      if (!pdfMagic.startsWith("%PDF-")) {
+        return Response.json(
+          { error: "Invalid file: only PDF files are accepted" },
+          { status: 415 },
+        );
+      }
+
+      const id = `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+      const ext = ".pdf";
+      const localPath = `${attachmentStore.getUploadDir()}/${id}${ext}`;
+
+      await Bun.write(localPath, buffer);
+
+      attachmentStore.register(id, {
+        localPath,
+        filename: file.name,
+        mimeType: "application/pdf",
+        size: file.size,
+      });
+
+      logger.info("File uploaded", { id, filename: file.name, size: file.size });
+
+      return Response.json({
+        id,
+        filename: file.name,
+        mimeType: "application/pdf",
+        size: file.size,
+      });
+    } catch (err) {
+      logger.error("Upload failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return Response.json({ error: "Upload failed" }, { status: 500 });
+    }
   }
 }
 
@@ -351,9 +425,6 @@ export async function createGateway(overrides?: {
     provider = new BedrockProvider({
       model: config.provider.model,
       region: Bun.env.AWS_REGION,
-      accessKeyId: Bun.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: Bun.env.AWS_SECRET_ACCESS_KEY,
-      sessionToken: Bun.env.AWS_SESSION_TOKEN,
     });
   } else {
     logger.error("Unknown provider", { name: config.provider.name });
@@ -371,8 +442,11 @@ export async function createGateway(overrides?: {
   // Create run lock
   const runLock = new RunLock();
 
+  // Create attachment store for file uploads
+  const attachmentStore = new AttachmentStore();
+
   // Create tool registry with built-in tools
-  const toolRegistry = createToolRegistry(logger);
+  const toolRegistry = createToolRegistry(logger, attachmentStore);
 
   // Create agent loop
   const agent = new AgentLoop({
@@ -416,5 +490,6 @@ export async function createGateway(overrides?: {
     runLock,
     embeddingProvider,
     channels,
+    attachmentStore,
   }, db);
 }

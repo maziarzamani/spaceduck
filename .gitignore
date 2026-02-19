@@ -12,6 +12,7 @@ coverage/
 *.tsbuildinfo
 tmp/
 data/whatsapp-auth/
+data/uploads/
 
 # Tauri desktop app
 apps/desktop/src-tauri/target/

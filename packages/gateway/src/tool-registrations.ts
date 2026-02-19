@@ -6,12 +6,14 @@ import { ToolRegistry } from "@spaceduck/core";
 import { BrowserTool } from "@spaceduck/tool-browser";
 import { WebFetchTool } from "@spaceduck/tool-web-fetch";
 import { WebSearchTool, WebAnswerTool, type SearchProvider } from "@spaceduck/tool-web-search";
+import { MarkerTool } from "@spaceduck/tool-marker";
+import type { AttachmentStore } from "./attachment-store";
 
 /**
  * Build a ToolRegistry pre-loaded with all built-in tools.
  * Lazily launches the browser only on first use.
  */
-export function createToolRegistry(logger: Logger): ToolRegistry {
+export function createToolRegistry(logger: Logger, attachmentStore?: AttachmentStore): ToolRegistry {
   const registry = new ToolRegistry();
   const log = logger.child({ component: "ToolRegistry" });
 
@@ -312,6 +314,46 @@ export function createToolRegistry(logger: Logger): ToolRegistry {
     });
   } else {
     log.debug("web_answer not registered (no PERPLEXITY_API_KEY or OPENROUTER_API_KEY)");
+  }
+
+  // ── marker_scan (conditional — only if marker_single is on PATH) ────
+  if (attachmentStore) {
+    MarkerTool.isAvailable().then((available) => {
+      if (!available) {
+        log.debug("marker_scan not registered (marker_single not on PATH)");
+        return;
+      }
+
+      const marker = new MarkerTool();
+
+      registry.register(
+        {
+          name: "marker_scan",
+          description:
+            "Convert a PDF document to markdown. Use when the user uploads a PDF or asks to read/summarize a document. Requires an attachmentId from a file the user uploaded.",
+          parameters: {
+            type: "object",
+            properties: {
+              attachmentId: { type: "string", description: "The attachment ID from the uploaded file." },
+              pageRange: { type: "string", description: "Optional page range, e.g. '0-5' for first 6 pages." },
+              forceOcr: { type: "boolean", description: "Force OCR even for text-based PDFs." },
+            },
+            required: ["attachmentId"],
+          },
+        },
+        async (args) => {
+          const path = attachmentStore.resolve(args.attachmentId as string);
+          if (!path) return "Error: attachment not found or expired.";
+          log.debug("marker_scan", { attachmentId: args.attachmentId });
+          return marker.convert(path, {
+            pageRange: args.pageRange as string | undefined,
+            forceOcr: args.forceOcr as boolean | undefined,
+          });
+        },
+      );
+
+      log.info("marker_scan registered");
+    });
   }
 
   log.info("Tool registry initialized", { tools: registry.size });
