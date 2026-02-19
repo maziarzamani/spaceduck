@@ -6,6 +6,17 @@ import type {
   Message,
 } from "@spaceduck/core";
 
+function getWsUrl(): string {
+  if (typeof window !== "undefined" && "__TAURI__" in window) {
+    return "ws://localhost:3000/ws";
+  }
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws`;
+}
+
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30000;
+
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 export interface PendingStream {
@@ -36,6 +47,9 @@ export function useSpaceduckWs(): UseSpaceduckWs {
   const [pendingStream, setPendingStream] = useState<PendingStream | null>(null);
 
   const streamBufferRef = useRef<string>("");
+  const retriesRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unmountedRef = useRef(false);
 
   const send = useCallback((envelope: WsClientEnvelope) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -43,24 +57,36 @@ export function useSpaceduckWs(): UseSpaceduckWs {
     }
   }, []);
 
-  // Connect on mount
-  useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+  const connect = useCallback(() => {
+    if (unmountedRef.current) return;
 
+    const wsUrl = getWsUrl();
     setStatus("connecting");
+
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      retriesRef.current = 0;
       setStatus("connected");
-      // Request conversation list on connect
       send({ v: 1, type: "conversation.list" });
     };
 
     ws.onclose = () => {
+      if (unmountedRef.current) return;
       setStatus("disconnected");
       wsRef.current = null;
+
+      const delay = Math.min(
+        RECONNECT_BASE_MS * Math.pow(2, retriesRef.current),
+        RECONNECT_MAX_MS,
+      );
+      retriesRef.current++;
+      reconnectTimerRef.current = setTimeout(connect, delay);
+    };
+
+    ws.onerror = () => {
+      // onclose will fire after onerror, which triggers reconnect
     };
 
     ws.onmessage = (event) => {
@@ -71,11 +97,20 @@ export function useSpaceduckWs(): UseSpaceduckWs {
         // Ignore malformed messages
       }
     };
+  }, []);
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    connect();
 
     return () => {
-      ws.close();
+      unmountedRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      wsRef.current?.close();
     };
-  }, []);
+  }, [connect]);
 
   function handleServerMessage(envelope: WsServerEnvelope) {
     switch (envelope.type) {
@@ -86,7 +121,6 @@ export function useSpaceduckWs(): UseSpaceduckWs {
       case "conversation.created":
         setActiveConversationId(envelope.conversationId);
         setMessages([]);
-        // Refresh list
         send({ v: 1, type: "conversation.list" });
         break;
 
@@ -103,7 +137,6 @@ export function useSpaceduckWs(): UseSpaceduckWs {
         break;
 
       case "message.accepted":
-        // Auto-set active conversation if not set
         if (!activeConversationId) {
           setActiveConversationId(envelope.conversationId);
         }
@@ -129,7 +162,6 @@ export function useSpaceduckWs(): UseSpaceduckWs {
         const finalContent = streamBufferRef.current;
         setPendingStream(null);
         streamBufferRef.current = "";
-        // Add the completed assistant message to local state
         setMessages((prev) => [
           ...prev,
           {
@@ -139,7 +171,6 @@ export function useSpaceduckWs(): UseSpaceduckWs {
             timestamp: Date.now(),
           },
         ]);
-        // Refresh conversations to update lastActiveAt / titles
         send({ v: 1, type: "conversation.list" });
         break;
       }
@@ -160,7 +191,6 @@ export function useSpaceduckWs(): UseSpaceduckWs {
       const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
       const convId = conversationId || activeConversationId || undefined;
 
-      // Optimistically add user message
       const userMsg: Message = {
         id: `local-${requestId}`,
         role: "user",

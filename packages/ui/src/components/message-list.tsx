@@ -5,6 +5,8 @@ import { cn } from "../lib/utils";
 import { Bot, User } from "lucide-react";
 import Markdown from "react-markdown";
 import { SpaceduckLogo } from "./spaceduck-logo";
+import { Avatar, AvatarFallback } from "../ui/avatar";
+import { ScrollArea } from "../ui/scroll-area";
 
 interface MessageListProps {
   messages: Message[];
@@ -22,9 +24,11 @@ function MessageBubble({ message, isStreaming }: { message: Message; isStreaming
       )}
     >
       {!isUser && (
-        <div className="shrink-0 w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-          <Bot size={16} className="text-primary" />
-        </div>
+        <Avatar className="bg-primary/20">
+          <AvatarFallback className="bg-primary/20">
+            <Bot size={16} className="text-primary" />
+          </AvatarFallback>
+        </Avatar>
       )}
 
       <div
@@ -48,9 +52,11 @@ function MessageBubble({ message, isStreaming }: { message: Message; isStreaming
       </div>
 
       {isUser && (
-        <div className="shrink-0 w-8 h-8 rounded-lg bg-secondary flex items-center justify-center">
-          <User size={16} className="text-muted-foreground" />
-        </div>
+        <Avatar className="bg-secondary">
+          <AvatarFallback className="bg-secondary">
+            <User size={16} className="text-muted-foreground" />
+          </AvatarFallback>
+        </Avatar>
       )}
     </div>
   );
@@ -78,24 +84,26 @@ export function MessageList({ messages, pendingStream }: MessageListProps) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto py-4">
-      {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} />
-      ))}
+    <ScrollArea className="flex-1">
+      <div className="py-4">
+        {messages.map((msg) => (
+          <MessageBubble key={msg.id} message={msg} />
+        ))}
 
-      {pendingStream && (
-        <MessageBubble
-          message={{
-            id: `stream-${pendingStream.requestId}`,
-            role: "assistant",
-            content: pendingStream.content || "Thinking...",
-            timestamp: Date.now(),
-          }}
-          isStreaming
-        />
-      )}
+        {pendingStream && (
+          <MessageBubble
+            message={{
+              id: `stream-${pendingStream.requestId}`,
+              role: "assistant",
+              content: pendingStream.content || "Thinking...",
+              timestamp: Date.now(),
+            }}
+            isStreaming
+          />
+        )}
 
-      <div ref={bottomRef} />
-    </div>
+        <div ref={bottomRef} />
+      </div>
+    </ScrollArea>
   );
 }

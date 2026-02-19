@@ -77,7 +77,7 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | WhatsApp | ✅ | Baileys (WhatsApp Web protocol), QR pairing, typing indicators |
 | Discord | 🔜 | Discord bot channel |
 | Telegram | 🔜 | Telegram bot channel |
-| Desktop app | 🔜 | Native macOS, Linux, and Windows app (Tauri or Electron) |
+| Desktop app | 🚧 | Tauri v2 shell + Bun gateway sidecar — macOS, Linux, Windows |
 | CLI | 🔜 | Terminal-based chat interface |
 | Multi-user auth | 🔜 | Token-based auth for Web UI, per-user sessions |
 
@@ -91,6 +91,12 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | Scheduler | 🔜 | Periodic web monitoring with natural language conditions |
 | File system | 🔜 | Read/write local files with sandboxed access |
 | Code interpreter | 🔜 | Execute code snippets in a sandboxed runtime |
+
+<p align="center">
+  <img src="docs/assets/desktop-app-screenshot.png" alt="Spaceduck Desktop App" width="720">
+  <br>
+  <sub>Spaceduck desktop app (Tauri v2) — macOS</sub>
+</p>
 
 ## What it does today
 
@@ -155,6 +161,13 @@ flowchart TD
 
 ```
 spaceduck/
+├── apps/
+│   ├── web/                   # Web deployment entry point (served by gateway)
+│   │   ├── index.html         # HTML entry + font preloads
+│   │   └── src/client.tsx     # React mount (imports @spaceduck/ui)
+│   └── desktop/               # Tauri v2 desktop app (macOS, Linux, Windows)
+│       ├── src-tauri/         # Rust shell, sidecar config, capabilities
+│       └── tooling/           # Build scripts (sidecar + frontend)
 ├── packages/
 │   ├── core/                  # Zero-dep contracts + logic
 │   │   └── src/
@@ -164,6 +177,12 @@ spaceduck/
 │   │       ├── fact-extractor.ts   # LLM-based fact extraction + guardFact firewall
 │   │       ├── events.ts      # Typed EventBus (fire-and-forget + async)
 │   │       └── config.ts
+│   ├── ui/                    # Shared React components, hooks, and styles
+│   │   └── src/
+│   │       ├── app.tsx            # Root App component
+│   │       ├── components/        # Sidebar, MessageList, ChatInput, StatusBar
+│   │       ├── hooks/             # useSpaceduckWs (auto-detects Tauri vs web)
+│   │       └── styles.css         # Tailwind CSS
 │   ├── providers/             # Pluggable — add your own by implementing Provider interface
 │   │   ├── gemini/            # Google AI (chat + embeddings)
 │   │   ├── bedrock/           # Amazon Bedrock (native Converse API + Titan V2 embeddings)
@@ -176,7 +195,6 @@ spaceduck/
 │   │           ├── long-term.ts   # Hybrid recall (RRF) + vector + FTS + dedup
 │   │           └── migrations/    # 001–007 SQL migrations
 │   ├── channels/
-│   │   ├── web/               # React web UI + WebSocket
 │   │   └── whatsapp/          # WhatsApp via Baileys (QR pairing)
 │   ├── gateway/               # Composition root — wires everything
 │   │   └── src/
