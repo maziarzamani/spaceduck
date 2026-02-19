@@ -6,6 +6,13 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.5.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.4.0...spaceduck-v0.5.0) (2026-02-19)
+
+
+### Features
+
+* **tools:** add web_search + web_answer tools with Brave, Perplexity, SearXNG ([042c6ef](https://github.com/maziarzamani/spaceduck/commit/042c6ef0eb35d4e720682f24573bc6d32682417c))
+
 ## [0.4.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.3.0...spaceduck-v0.4.0) (2026-02-19)
 
 
