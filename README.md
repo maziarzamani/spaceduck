@@ -92,6 +92,12 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | File system | 🔜 | Read/write local files with sandboxed access |
 | Code interpreter | 🔜 | Execute code snippets in a sandboxed runtime |
 
+<p align="center">
+  <img src="docs/assets/desktop-app-screenshot.png" alt="Spaceduck Desktop App" width="720">
+  <br>
+  <sub>Spaceduck desktop app (Tauri v2) — macOS</sub>
+</p>
+
 ## What it does today
 
 - Chat via a streaming Web UI (WebSocket, token-by-token)
