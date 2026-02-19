@@ -225,19 +225,15 @@ export class WhatsAppChannel implements Channel {
             return;
           }
 
-          // Status 440 = conflict: replaced — another session took over.
-          // Back off aggressively to avoid a reconnect storm.
+          // Status 440 = conflict: replaced — another WhatsApp Web session
+          // took over. Do NOT retry: retrying just creates an infinite loop
+          // where two sessions keep kicking each other off.
           if (statusCode === 440) {
-            this.reconnectAttempts++;
-            if (this.reconnectAttempts > this.maxReconnectAttempts) {
-              this.logger.error("WhatsApp: too many conflict:replaced errors, giving up. Another session may be active.");
-              this._status = "stopped";
-              return;
-            }
-            const delay = this.baseReconnectMs * Math.pow(2, this.reconnectAttempts);
-            this.logger.warn(`WhatsApp conflict:replaced — attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}, retrying in ${delay}ms`);
-            this.reconnecting = true;
-            setTimeout(() => this.connect(), delay);
+            this.logger.error(
+              "WhatsApp: conflict:replaced — another session is active. " +
+              "Close other WhatsApp Web sessions or stop other gateway instances, then restart."
+            );
+            this._status = "stopped";
             return;
           }
 
