@@ -51,11 +51,12 @@ async function chunkHash(messages: Message[]): Promise<string> {
 const FLUSH_EXTRACTION_PROMPT = `You are a memory consolidation system. Extract durable, long-term facts from this conversation chunk before it is archived.
 
 Rules:
+- The conversation may be in any language. Always extract facts as canonical English sentences.
 - Extract ONLY concrete facts about the user (preferences, decisions, personal info, technical choices)
 - Do NOT extract transient information or summaries
-- Each fact must be a single self-contained sentence
+- Each fact must be a single self-contained English sentence
 - Return a JSON array of strings: ["fact 1", "fact 2"]
-- Return [] if no durable facts are worth preserving
+- Return [] if no durable facts are worth preserving. Do not guess.
 - Maximum 8 facts`;
 
 /**
@@ -111,7 +112,7 @@ export class DefaultContextBuilder implements ContextWindowManager {
           context.push({
             id: `facts-${Date.now()}`,
             role: "system",
-            content: `Relevant context from previous conversations:\n${factsText}`,
+            content: `Tidligere brugeroplysninger (kan være forældede). Hvis brugerens besked modsiger en lagret oplysning, antag den nye besked er korrekt. Stil kun afklarende spørgsmål hvis rettelsen er tvetydig.\n${factsText}`,
             timestamp: 0,
             source: "system",
           });
@@ -257,15 +258,20 @@ export class DefaultContextBuilder implements ContextWindowManager {
 
       const facts = await this.extractFlushFacts(toSummarize, provider);
 
+      let stored = 0;
+      let filtered = 0;
       for (const content of facts) {
-        if (content.length < 5 || content.length > 300) continue;
-        // Cap confidence: 0.6–0.75 — compaction prompts produce broad statements
+        if (content.length < 5 || content.length > 300) {
+          filtered++;
+          continue;
+        }
         await this.ltm!.remember({
           conversationId,
           content,
           source: "compaction-flush",
           confidence: 0.65,
         });
+        stored++;
       }
 
       // Mark as flushed
@@ -274,7 +280,10 @@ export class DefaultContextBuilder implements ContextWindowManager {
 
       this.logger.info("Pre-compaction flush complete", {
         conversationId,
-        factsStored: facts.length,
+        stage: "compaction-flush",
+        factsExtracted: facts.length,
+        factsStored: stored,
+        filteredByLength: filtered,
       });
     } catch (flushErr) {
       // Flush failure must never block compaction
@@ -389,13 +398,16 @@ export class DefaultContextBuilder implements ContextWindowManager {
       const facts = await this.extractFlushFacts(recentPair, provider);
 
       let stored = 0;
+      let filtered = 0;
       for (const content of facts) {
-        if (content.length < 5 || content.length > 300) continue;
+        if (content.length < 5 || content.length > 300) {
+          filtered++;
+          continue;
+        }
         await this.ltm!.remember({
           conversationId,
           content,
           source: "turn-flush",
-          // Direct observation → higher confidence than compaction-flush
           confidence: 0.75,
         });
         stored++;
@@ -406,7 +418,18 @@ export class DefaultContextBuilder implements ContextWindowManager {
       if (stored > 0) {
         this.logger.info("Turn facts persisted to LTM", {
           conversationId,
+          stage: "turn-flush",
+          factsExtracted: facts.length,
           factsStored: stored,
+          filteredByLength: filtered,
+        });
+      } else {
+        this.logger.debug("Turn flush: no facts stored", {
+          conversationId,
+          stage: "turn-flush",
+          reason: facts.length === 0 ? "llm_empty" : "all_filtered",
+          factsExtracted: facts.length,
+          filteredByLength: filtered,
         });
       }
     } catch (err) {

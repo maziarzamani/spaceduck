@@ -34,11 +34,15 @@ export type {
   LongTermMemory,
   Fact,
   FactInput,
+  FactSlot,
+  SlotFactInput,
   RecallOptions,
 } from "./memory";
 
 export type {
   EmbeddingProvider,
+  EmbedPurpose,
+  EmbedOptions,
 } from "./embedding";
 
 export type {

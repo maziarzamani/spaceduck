@@ -3,13 +3,16 @@
 import type { Message, Conversation } from "./message";
 import type { Result } from "./errors";
 
+/** Identity slots for conflict resolution — only one active fact per slot. */
+export type FactSlot = "name" | "age" | "location" | "preference" | "other";
+
 export interface Fact {
   readonly id: string;
   readonly conversationId: string;
   readonly content: string;
   readonly category?: string;
   /** Where the fact came from. */
-  readonly source: "auto-extracted" | "manual" | "compaction-flush" | "turn-flush";
+  readonly source: "auto-extracted" | "regex" | "llm" | "manual" | "compaction-flush" | "turn-flush" | "pre_regex" | "post_llm";
   /** Confidence score 0-1 set by the firewall heuristic. */
   readonly confidence: number;
   /** Optional expiry timestamp (ms). NULL means never expires. */
@@ -17,13 +20,24 @@ export interface Fact {
   readonly createdAt: number;
   /** Set to createdAt on first write; updated when fact is rewritten/merged. */
   readonly updatedAt: number;
+  /** Identity slot for conflict resolution (e.g., "name", "age"). */
+  readonly slot?: FactSlot;
+  /** Raw extracted value (e.g., "Maziar", "42", "Copenhagen"). */
+  readonly slotValue?: string;
+  /** Source language ISO 639-1 code. Always set: "en", "da", or "und" (unknown). */
+  readonly lang: string;
+  /** Whether this fact is active (not superseded by a newer fact in the same slot). */
+  readonly isActive: boolean;
 }
 
-/** Input type for remember(). System-generated fields (id, createdAt, updatedAt) are omitted.
- *  source and confidence are optional — defaults applied by the implementation. */
-export type FactInput = Omit<Fact, "id" | "createdAt" | "updatedAt" | "source" | "confidence"> & {
+/** Input type for remember(). System-generated fields (id, createdAt, updatedAt, isActive) are omitted.
+ *  source, confidence, lang, slot, slotValue are optional — defaults applied by the implementation. */
+export type FactInput = Omit<Fact, "id" | "createdAt" | "updatedAt" | "source" | "confidence" | "isActive" | "lang" | "slot" | "slotValue"> & {
   source?: Fact["source"];
   confidence?: number;
+  lang?: string;
+  slot?: FactSlot;
+  slotValue?: string;
 };
 
 export interface RecallOptions {
@@ -49,8 +63,27 @@ export interface ConversationStore {
   loadMessages(conversationId: string, limit?: number, before?: number): Promise<Result<Message[]>>;
 }
 
+/** Input for upsertSlotFact(): identity slot writes with source tracking and write guards. */
+export interface SlotFactInput {
+  readonly slot: FactSlot;
+  readonly slotValue: string;
+  readonly content: string;
+  readonly conversationId: string;
+  readonly lang: string;
+  readonly source: "pre_regex" | "post_llm";
+  readonly derivedFromMessageId: string;
+  readonly confidence: number;
+}
+
 export interface LongTermMemory {
   remember(fact: FactInput): Promise<Result<Fact>>;
+  /**
+   * Upsert an identity slot fact with write guards:
+   * - pre_regex wins over post_llm for the same messageId
+   * - newer messages always win over older ones (time-ordering)
+   * - deactivate + insert in a single transaction
+   */
+  upsertSlotFact(input: SlotFactInput): Promise<Result<Fact | null>>;
   /** @deprecated Use options.topK instead of limit. limit is kept for backward compat. */
   recall(query: string, limit?: number, options?: RecallOptions): Promise<Result<Fact[]>>;
   forget(factId: string): Promise<Result<void>>;

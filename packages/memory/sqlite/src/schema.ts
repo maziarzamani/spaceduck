@@ -120,9 +120,10 @@ export class SchemaManager {
           throw err;
         }
       } else {
+        const sql = this.guardAlterTable(migration.sql);
         this.db.exec("BEGIN TRANSACTION");
         try {
-          this.db.exec(migration.sql);
+          this.db.exec(sql);
           this.db.exec("COMMIT");
           this.logger.info("Migration applied", { version: migration.version });
         } catch (err) {

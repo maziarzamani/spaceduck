@@ -617,7 +617,12 @@ export async function createGateway(overrides?: {
   // Create tool registry with built-in tools
   const toolRegistry = createToolRegistry(logger, attachmentStore);
 
-  // Create agent loop
+  // Wire fact extractor to extract durable facts from assistant responses
+  // Uses the LLM provider for intelligent extraction (falls back to regex if unavailable)
+  const factExtractor = new FactExtractor(longTermMemory, logger, provider);
+  factExtractor.register(eventBus);
+
+  // Create agent loop (factExtractor enables pre-context regex extraction)
   const agent = new AgentLoop({
     provider,
     conversationStore,
@@ -626,13 +631,9 @@ export async function createGateway(overrides?: {
     eventBus,
     logger,
     longTermMemory,
+    factExtractor,
     toolRegistry,
   });
-
-  // Wire fact extractor to extract durable facts from assistant responses
-  // Uses the LLM provider for intelligent extraction (falls back to regex if unavailable)
-  const factExtractor = new FactExtractor(longTermMemory, logger, provider);
-  factExtractor.register(eventBus);
 
   // Create external channels (opt-in via env vars)
   const channels: Channel[] = [];
