@@ -6,6 +6,20 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.4.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.3.0...spaceduck-v0.4.0) (2026-02-19)
+
+
+### Features
+
+* **desktop:** scaffold Tauri v2 desktop app with sidecar architecture ([87da5ab](https://github.com/maziarzamani/spaceduck/commit/87da5abcca81454f2ae2df0b785b704f2eac2699))
+* shared UI architecture — web + desktop from one codebase ([ec01c71](https://github.com/maziarzamani/spaceduck/commit/ec01c714365d5430424455503999dfd8371de3e4))
+* **ui:** rebuild interface with shadcn/ui components + auto-reconnect ([064d654](https://github.com/maziarzamani/spaceduck/commit/064d654062fa1e35dcabac1eb895dcdef0619c9f))
+
+
+### Bug Fixes
+
+* **desktop:** compilation fixes — imports, externals, placeholder icons ([591dc94](https://github.com/maziarzamani/spaceduck/commit/591dc943ed68df3c6e993e7d8b6fe6820f95b679))
+
 ## [0.3.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.2.0...spaceduck-v0.3.0) (2026-02-18)
 
 
