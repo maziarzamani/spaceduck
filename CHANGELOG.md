@@ -6,6 +6,13 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.9.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.8.1...spaceduck-v0.9.0) (2026-02-19)
+
+
+### Features
+
+* fix cross-conversation fact memory with slot-based conflict resolution ([80dfccf](https://github.com/maziarzamani/spaceduck/commit/80dfccf195d02a0db81562bc1ab5a5e556ab0577))
+
 ## [0.8.1](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.8.0...spaceduck-v0.8.1) (2026-02-19)
 
 
