@@ -5,7 +5,7 @@
   "identifier": "ai.spaceduck.desktop",
   "build": {
     "beforeBuildCommand": "bun run build:all",
-    "beforeDevCommand": "bun run --cwd ../.. dev",
+    "beforeDevCommand": "",
     "devUrl": "http://localhost:3000",
     "frontendDist": "../dist"
   },
