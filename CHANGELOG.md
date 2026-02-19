@@ -6,6 +6,14 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.8.1](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.8.0...spaceduck-v0.8.1) (2026-02-19)
+
+
+### Bug Fixes
+
+* cast Uint8Array to BlobPart in upload tests for stricter TS envs ([4fe55c8](https://github.com/maziarzamani/spaceduck/commit/4fe55c80d203bdddd2abf1135332fd26b9f2b6cc))
+* treat WhatsApp conflict:replaced as fatal, stop retrying entirely ([0e8147f](https://github.com/maziarzamani/spaceduck/commit/0e8147f080e95d249efe66d27e1dd22aabf5bf78))
+
 ## [0.8.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.7.0...spaceduck-v0.8.0) (2026-02-19)
 
 
