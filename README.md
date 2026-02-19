@@ -96,6 +96,9 @@ It remembers what you've said across conversations, acts on your behalf with rea
 | Memory inspector | 🔜 | Web UI panel to browse, edit, and delete stored facts | — |
 | Per-user isolation | 🔜 | Scope facts by user identity across channels | — |
 
+**Language support for fact extraction:**
+Regex extraction (same-turn, deterministic) currently covers English and Danish. Adding a language requires a small regex "booster pack" for identity patterns. LLM extraction (post-response, best-effort) works in any language the configured chat model understands. Embedding recall (cross-conversation) depends on the embedding model — most modern models support 100+ languages.
+
 ### Providers
 
 | Component | | Details | Tested |
