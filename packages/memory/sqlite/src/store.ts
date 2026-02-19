@@ -113,10 +113,16 @@ export class SqliteConversationStore implements ConversationStore {
           ? JSON.stringify(message.toolCalls)
           : null;
 
+      // Serialize attachments array to JSON if present
+      const attachmentsJson =
+        message.attachments && message.attachments.length > 0
+          ? JSON.stringify(message.attachments)
+          : null;
+
       this.db
         .query(
-          `INSERT INTO messages (id, conversation_id, role, content, timestamp, status, trace_id, source, request_id, tool_calls, tool_call_id, tool_name)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+          `INSERT INTO messages (id, conversation_id, role, content, timestamp, status, trace_id, source, request_id, tool_calls, tool_call_id, tool_name, attachments)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
         )
         .run(
           message.id,
@@ -131,6 +137,7 @@ export class SqliteConversationStore implements ConversationStore {
           toolCallsJson,
           message.toolCallId ?? null,
           message.toolName ?? null,
+          attachmentsJson,
         );
 
       return ok(undefined);
@@ -167,7 +174,7 @@ export class SqliteConversationStore implements ConversationStore {
   ): Promise<Result<Message[]>> {
     try {
       let sql =
-        "SELECT id, conversation_id, role, content, timestamp, status, trace_id, source, request_id, tool_calls, tool_call_id, tool_name FROM messages WHERE conversation_id = ?1";
+        "SELECT id, conversation_id, role, content, timestamp, status, trace_id, source, request_id, tool_calls, tool_call_id, tool_name, attachments FROM messages WHERE conversation_id = ?1";
       const params: (string | number)[] = [conversationId];
 
       if (before !== undefined) {
@@ -196,6 +203,7 @@ export class SqliteConversationStore implements ConversationStore {
         tool_calls: string | null;
         tool_call_id: string | null;
         tool_name: string | null;
+        attachments: string | null;
       }[];
 
       return ok(
@@ -217,6 +225,15 @@ export class SqliteConversationStore implements ConversationStore {
           if (row.tool_calls) {
             try {
               (msg as any).toolCalls = JSON.parse(row.tool_calls);
+            } catch {
+              // Ignore malformed JSON
+            }
+          }
+
+          // Deserialize attachments JSON
+          if (row.attachments) {
+            try {
+              (msg as any).attachments = JSON.parse(row.attachments);
             } catch {
               // Ignore malformed JSON
             }

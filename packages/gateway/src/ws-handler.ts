@@ -135,7 +135,7 @@ export function createWsHandler(deps: WsHandlerDeps) {
     ws: { send(data: string): void; data: WsConnectionData },
     envelope: Extract<WsClientEnvelope, { type: "message.send" }>,
   ) {
-    const { requestId, content, conversationId: requestedConvId } = envelope;
+    const { requestId, content, conversationId: requestedConvId, attachments } = envelope;
 
     if (!requestId || !content) {
       sendError(ws, "INVALID_REQUEST", "message.send requires requestId and content");
@@ -173,6 +173,7 @@ export function createWsHandler(deps: WsHandlerDeps) {
         content,
         timestamp: Date.now(),
         requestId,
+        attachments: attachments?.length ? attachments : undefined,
       };
 
       // Run agent and stream chunks (text deltas, tool calls, tool results)

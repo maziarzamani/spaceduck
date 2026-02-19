@@ -122,6 +122,21 @@ export class DefaultContextBuilder implements ContextWindowManager {
     // Add recent conversation messages
     for (const msg of messages) {
       context.push(msg);
+
+      // Inject a system hint after any user message that has attachments
+      if (msg.role === "user" && msg.attachments?.length) {
+        const hints = msg.attachments.map(
+          (a) =>
+            `The user attached: ${a.filename} (${a.mimeType}, ${a.size} bytes). To process this PDF, call the marker_scan tool with attachmentId: "${a.id}".`,
+        );
+        context.push({
+          id: `attachment-hint-${msg.id}`,
+          role: "system",
+          content: hints.join("\n"),
+          timestamp: msg.timestamp,
+          source: "system",
+        });
+      }
     }
 
     return ok(context);

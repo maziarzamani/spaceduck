@@ -4,6 +4,7 @@ import type {
   WsServerEnvelope,
   ConversationSummary,
   Message,
+  Attachment,
 } from "@spaceduck/core";
 
 function getWsUrl(): string {
@@ -31,7 +32,7 @@ export interface UseSpaceduckWs {
   messages: Message[];
   activeConversationId: string | null;
   pendingStream: PendingStream | null;
-  sendMessage: (content: string, conversationId?: string) => string;
+  sendMessage: (content: string, conversationId?: string, attachments?: Attachment[]) => string;
   createConversation: (title?: string) => void;
   deleteConversation: (conversationId: string) => void;
   selectConversation: (conversationId: string) => void;
@@ -187,7 +188,7 @@ export function useSpaceduckWs(): UseSpaceduckWs {
   }
 
   const sendMessage = useCallback(
-    (content: string, conversationId?: string): string => {
+    (content: string, conversationId?: string, attachments?: Attachment[]): string => {
       const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
       const convId = conversationId || activeConversationId || undefined;
 
@@ -197,10 +198,18 @@ export function useSpaceduckWs(): UseSpaceduckWs {
         content,
         timestamp: Date.now(),
         requestId,
+        attachments: attachments?.length ? attachments : undefined,
       };
       setMessages((prev) => [...prev, userMsg]);
 
-      send({ v: 1, type: "message.send", requestId, conversationId: convId, content });
+      send({
+        v: 1,
+        type: "message.send",
+        requestId,
+        conversationId: convId,
+        content,
+        attachments: attachments?.length ? attachments : undefined,
+      });
       return requestId;
     },
     [activeConversationId, send],

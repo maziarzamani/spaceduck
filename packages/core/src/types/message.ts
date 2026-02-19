@@ -1,6 +1,7 @@
 // Message types and conversation structure
 
 import type { ToolCall, ToolResult } from "./tool";
+import type { Attachment } from "./attachment";
 
 export type ResponseStatus =
   | "streaming"
@@ -23,6 +24,8 @@ export interface Message {
   readonly toolCallId?: string;
   /** The tool name (present when role === "tool") */
   readonly toolName?: string;
+  /** File attachments (present when user uploads files alongside their message) */
+  readonly attachments?: Attachment[];
 }
 
 export interface Conversation {
