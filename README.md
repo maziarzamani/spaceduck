@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/runtime-Bun_1.3+-f9f1e1?style=for-the-badge&logo=bun&logoColor=14151a" alt="Bun">
   <img src="https://img.shields.io/badge/language-TypeScript-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite">
-  <img src="https://github.com/maziarzamani/spaceduck/actions/workflows/ci.yml/badge.svg" alt="CI">
+  <img src="https://img.shields.io/github/actions/workflow/status/maziarzamani/spaceduck/ci.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=CI" alt="CI">
 </p>
 
 > [!WARNING]
@@ -21,9 +21,48 @@
 
 ---
 
-**Spaceduck** runs locally and turns chat into actions. It remembers what you tell it using semantic memory (vector embeddings with FTS fallback), streams replies to a WebSocket UI, and can browse the web and run tools on your behalf.
+**Spaceduck** is a local-first AI assistant with persistent memory.
 
-Built from scratch with no agent frameworks or orchestration wrappers. Core layers (context management, vector memory, fact extraction, provider abstraction, streaming protocol) are handwritten in TypeScript on Bun. Swap chat models and embedding models via environment variables.
+It remembers what you've said across conversations, acts on your behalf with real tools, and runs entirely on your machine. No agent frameworks, no orchestration wrappers — every layer (context management, vector memory, fact extraction, provider abstraction, streaming protocol) is "handwritten" TypeScript on Bun.
+
+## Features
+
+### Persistent Memory
+- **Hybrid recall** (vector cosine + FTS5 BM25) — finds what you said even when you don't use the same words
+- **Eager extraction** — facts are persisted after every response via `afterTurn()`, not only at compaction
+- **SHA-256 deduplication** — exact-duplicate facts are caught before they hit storage
+- **Memory firewall** (`guardFact`) — rejects questions, noisy content, and hallucinated facts
+- **Recency decay + expiry** — older facts fade gracefully; stale facts are filtered at the SQL level
+
+### Multi-Channel
+- **Web UI** — React chat with streaming deltas, conversations sidebar, Tailwind CSS
+- **WhatsApp** — Baileys (WhatsApp Web protocol), QR pairing, typing indicators
+- **Desktop app** — Tauri v2 shell with Bun gateway sidecar — macOS, Linux, Windows
+- Discord, Telegram, and CLI planned
+
+### Agentic Tools
+- **Web search** — Brave, Perplexity Sonar, or SearXNG — structured results plus AI-synthesized answers
+- **Browser automation** — Playwright headless with accessibility-snapshot element refs
+- **Web fetch** — HTTP fetch with HTML-to-text conversion for any public page
+- Multi-round tool execution — the agent loop chains tool → result → LLM cycles automatically
+
+### Provider Freedom
+- **Gemini** — chat streaming + embeddings via Google AI
+- **AWS Bedrock** — native Converse API, Titan Text Embeddings V2, Bearer token auth
+- **OpenRouter** — access to hundreds of models through a single key
+- **LM Studio** — any local model via OpenAI-compatible API
+- Swap chat or embedding provider with a single env var; bring your own by implementing the `Provider` interface
+
+### Built for Developers
+- Zero framework dependencies — no LangChain, no LlamaIndex, no hidden abstractions
+- `Result<T, E>` monads — errors are values, not exceptions
+- Typed `EventBus` — fire-and-forget + async emit powers the fact extraction pipeline
+- Token-budgeted context builder with automatic compaction
+- Streaming protocol delivers tokens over WebSocket to the UI in real time
+
+<p align="center">
+  <img src="docs/assets/desktop-app-screenshot.png" alt="Spaceduck Desktop App" width="720">
+</p>
 
 ## Status
 
@@ -93,19 +132,6 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 | Scheduler | 🔜 | Periodic web monitoring with natural language conditions | — |
 | File system | 🔜 | Read/write local files with sandboxed access | — |
 | Code interpreter | 🔜 | Execute code snippets in a sandboxed runtime | — |
-
-<p align="center">
-  <img src="docs/assets/desktop-app-screenshot.png" alt="Spaceduck Desktop App" width="720">
-</p>
-
-## What it does today
-
-- Chat via a streaming Web UI (WebSocket, token-by-token)
-- Remember durable facts across conversations — recalled by hybrid vector + keyword search
-- Eager fact extraction after every response via `afterTurn()` — no waiting for compaction
-- Browse pages with Playwright and summarize or extract content
-- Run tools inside an agent loop and return structured results
-- Chat over WhatsApp (Baileys, QR pairing, typing indicators)
 
 ## Architecture
 
