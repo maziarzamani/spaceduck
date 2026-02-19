@@ -1,0 +1,50 @@
+import { Sidebar } from "./sidebar";
+import { MessageList } from "./message-list";
+import { ChatInput } from "./chat-input";
+import { StatusBar } from "./status-bar";
+import { Separator } from "../ui/separator";
+import type { UseSpaceduckWs } from "../hooks/use-spaceduck-ws";
+
+interface ChatViewProps {
+  ws: UseSpaceduckWs;
+  onOpenSettings: () => void;
+}
+
+export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
+  return (
+    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+      <Sidebar
+        conversations={ws.conversations}
+        activeId={ws.activeConversationId}
+        onSelect={ws.selectConversation}
+        onCreate={() => ws.createConversation()}
+        onDelete={ws.deleteConversation}
+        onOpenSettings={onOpenSettings}
+      />
+
+      <main className="flex-1 flex flex-col min-w-0">
+        <header className="flex items-center justify-between px-4 py-2">
+          <h2 className="text-sm font-medium text-foreground truncate">
+            {ws.activeConversationId
+              ? ws.conversations.find((c) => c.id === ws.activeConversationId)?.title || "Untitled"
+              : "New conversation"}
+          </h2>
+          <StatusBar status={ws.status} />
+        </header>
+
+        <Separator />
+
+        <MessageList
+          messages={ws.messages}
+          pendingStream={ws.pendingStream}
+        />
+
+        <ChatInput
+          onSend={(content, attachments) => ws.sendMessage(content, ws.activeConversationId ?? undefined, attachments)}
+          disabled={ws.status !== "connected"}
+          isStreaming={ws.pendingStream !== null}
+        />
+      </main>
+    </div>
+  );
+}
