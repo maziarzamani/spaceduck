@@ -6,6 +6,16 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.8.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.7.0...spaceduck-v0.8.0) (2026-02-19)
+
+
+### Features
+
+* add gateway pairing and token authentication (Slice 1) ([6edc6c3](https://github.com/maziarzamani/spaceduck/commit/6edc6c3e856a7afc51b43a157d2372f9cc043fc5))
+* add view router, extract ChatView, and add shadcn primitives (Slice 2) ([5329fdc](https://github.com/maziarzamani/spaceduck/commit/5329fdc64a1c9bfed7fa9d40a1f6d283153863c9))
+* implement onboarding wizard with 5-screen pairing flow (Slice 3) ([14d8642](https://github.com/maziarzamani/spaceduck/commit/14d864267e7d0d1184feedc6ac5df96f8c67752a))
+* implement settings page with device management (Slice 4) ([39a770f](https://github.com/maziarzamani/spaceduck/commit/39a770ff770459f5d56563c45b6a8d23ce2d350c))
+
 ## [0.7.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.6.1...spaceduck-v0.7.0) (2026-02-19)
 
 
