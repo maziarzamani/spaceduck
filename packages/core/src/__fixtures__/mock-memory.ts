@@ -7,6 +7,7 @@ import type {
   Message,
   Fact,
   FactInput,
+  SlotFactInput,
   Result,
 } from "../types";
 import { ok } from "../types";
@@ -96,6 +97,35 @@ export class MockLongTermMemory implements LongTermMemory {
       expiresAt: input.expiresAt,
       createdAt: now,
       updatedAt: now,
+      slot: input.slot,
+      slotValue: input.slotValue,
+      lang: input.lang ?? "und",
+      isActive: true,
+    };
+    this.facts.set(full.id, full);
+    return ok(full);
+  }
+
+  async upsertSlotFact(input: SlotFactInput): Promise<Result<Fact | null>> {
+    const now = Date.now();
+    // Deactivate existing facts in the same slot
+    for (const f of this.facts.values()) {
+      if (f.slot === input.slot && f.isActive) {
+        this.facts.set(f.id, { ...f, isActive: false, updatedAt: now });
+      }
+    }
+    const full: Fact = {
+      id: generateId(),
+      conversationId: input.conversationId,
+      content: input.content,
+      source: input.source as Fact["source"],
+      confidence: input.confidence,
+      createdAt: now,
+      updatedAt: now,
+      slot: input.slot,
+      slotValue: input.slotValue,
+      lang: input.lang,
+      isActive: true,
     };
     this.facts.set(full.id, full);
     return ok(full);

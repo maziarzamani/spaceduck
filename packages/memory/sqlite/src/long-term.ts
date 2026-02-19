@@ -19,6 +19,7 @@ import type {
   LongTermMemory,
   Fact,
   FactInput,
+  SlotFactInput,
   RecallOptions,
   Result,
   Logger,
@@ -38,7 +39,13 @@ function generateId(): string {
  * Normalize text for content hashing: lowercase, collapse whitespace, trim.
  */
 function normalizeForHash(text: string): string {
-  return text.toLowerCase().replace(/\s+/g, " ").trim();
+  return text
+    .normalize("NFC")
+    .replace(/[\u2018\u2019\u2032]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -66,7 +73,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-/** Row shape returned by the facts table SELECT (all v2 columns). */
+/** Row shape returned by the facts table SELECT (all v2+ columns). */
 interface FactRow {
   id: string;
   conversation_id: string;
@@ -77,6 +84,11 @@ interface FactRow {
   expires_at: number | null;
   created_at: number;
   updated_at: number | null;
+  slot: string | null;
+  slot_value: string | null;
+  lang: string;
+  is_active: number;
+  derived_from_message_id: string | null;
 }
 
 function rowToFact(row: FactRow): Fact {
@@ -90,6 +102,10 @@ function rowToFact(row: FactRow): Fact {
     expiresAt: row.expires_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? row.created_at,
+    slot: (row.slot ?? undefined) as Fact["slot"],
+    slotValue: row.slot_value ?? undefined,
+    lang: row.lang ?? "und",
+    isActive: row.is_active !== 0,
   };
 }
 
@@ -112,12 +128,15 @@ export class SqliteLongTermMemory implements LongTermMemory {
       const source: Fact["source"] = input.source ?? "auto-extracted";
       const confidence: number = input.confidence ?? 1.0;
       const expiresAt: number | null = input.expiresAt ?? null;
+      const slot: string | null = input.slot ?? null;
+      const slotValue: string | null = input.slotValue ?? null;
+      const lang: string = input.lang ?? "und";
 
       // Exact dedup: check content_hash UNIQUE constraint
       const existing = this.db
         .query(
           `SELECT id, conversation_id, content, category, source, confidence,
-                  expires_at, created_at, updated_at
+                  expires_at, created_at, updated_at, slot, slot_value, lang, is_active
            FROM facts WHERE content_hash = ?1`,
         )
         .get(hash) as FactRow | null;
@@ -130,12 +149,22 @@ export class SqliteLongTermMemory implements LongTermMemory {
         return ok(rowToFact(existing));
       }
 
+      // Slot conflict resolution: deactivate previous facts in the same identity slot
+      if (slot && slot !== "other" && slot !== "preference") {
+        this.db
+          .query(
+            `UPDATE facts SET is_active = 0, updated_at = ?1
+             WHERE slot = ?2 AND is_active = 1`,
+          )
+          .run(now, slot);
+      }
+
       this.db
         .query(
           `INSERT INTO facts
              (id, conversation_id, content, category, source, confidence,
-              expires_at, created_at, updated_at, content_hash)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9)`,
+              expires_at, created_at, updated_at, content_hash, slot, slot_value, lang, is_active)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, ?10, ?11, ?12, 1)`,
         )
         .run(
           id,
@@ -147,12 +176,15 @@ export class SqliteLongTermMemory implements LongTermMemory {
           expiresAt,
           now,
           hash,
+          slot,
+          slotValue,
+          lang,
         );
 
       // Embed and store vector if provider available
       if (this.embedding) {
         try {
-          const vector = await this.embedding.embed(input.content);
+          const vector = await this.embedding.embed(input.content, { purpose: "index" });
           this.validateDimensions(vector);
           this.db
             .query("INSERT INTO vec_facts (fact_id, embedding) VALUES (?1, vec_f32(?2))")
@@ -175,9 +207,139 @@ export class SqliteLongTermMemory implements LongTermMemory {
         expiresAt: expiresAt ?? undefined,
         createdAt: now,
         updatedAt: now,
+        slot: input.slot,
+        slotValue: input.slotValue,
+        lang,
+        isActive: true,
       });
     } catch (cause) {
       return err(new MemoryError(`Failed to remember fact: ${cause}`, cause));
+    }
+  }
+
+  /**
+   * Upsert an identity slot fact with transactional write guards.
+   *
+   * Guards enforced:
+   * 1. Same-message source precedence: pre_regex wins over post_llm for the same messageId
+   * 2. Time-ordering: a newer message always wins; late async from older messages cannot revert
+   * 3. Deactivate + insert in a single transaction (never 0 or 2 active facts for a slot)
+   *
+   * Returns null (ok) if the write was skipped by a guard.
+   */
+  async upsertSlotFact(input: SlotFactInput): Promise<Result<Fact | null>> {
+    try {
+      const now = Date.now();
+      const hash = await contentHash(input.content);
+
+      // Exact dedup
+      const dup = this.db
+        .query(`SELECT id FROM facts WHERE content_hash = ?1`)
+        .get(hash) as { id: string } | null;
+      if (dup) {
+        this.logger.debug("upsertSlotFact: exact duplicate skipped", { existingId: dup.id });
+        return ok(null);
+      }
+
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        // Check current active fact for this slot
+        const existing = this.db
+          .query(
+            `SELECT id, source, derived_from_message_id, created_at
+             FROM facts WHERE slot = ?1 AND is_active = 1
+             ORDER BY created_at DESC LIMIT 1`,
+          )
+          .get(input.slot) as {
+            id: string; source: string; derived_from_message_id: string | null; created_at: number;
+          } | null;
+
+        if (existing) {
+          // Guard 1: pre_regex wins over post_llm for the same message
+          if (
+            existing.derived_from_message_id === input.derivedFromMessageId &&
+            existing.source === "pre_regex" &&
+            input.source === "post_llm"
+          ) {
+            this.db.exec("COMMIT");
+            this.logger.debug("upsertSlotFact: skipped (pre_regex wins for same message)", {
+              slot: input.slot, messageId: input.derivedFromMessageId,
+            });
+            return ok(null);
+          }
+
+          // Guard 2: newer message wins — don't let older messages revert
+          if (existing.created_at > now) {
+            this.db.exec("COMMIT");
+            this.logger.debug("upsertSlotFact: skipped (existing is newer)", {
+              slot: input.slot,
+            });
+            return ok(null);
+          }
+
+          // Deactivate old
+          this.db
+            .query(`UPDATE facts SET is_active = 0, updated_at = ?1 WHERE id = ?2`)
+            .run(now, existing.id);
+        }
+
+        // Insert new active fact
+        const id = generateId();
+        this.db
+          .query(
+            `INSERT INTO facts
+               (id, conversation_id, content, category, source, confidence,
+                expires_at, created_at, updated_at, content_hash,
+                slot, slot_value, lang, is_active, derived_from_message_id)
+             VALUES (?1, ?2, ?3, NULL, ?4, ?5, NULL, ?6, ?6, ?7, ?8, ?9, ?10, 1, ?11)`,
+          )
+          .run(
+            id, input.conversationId, input.content, input.source, input.confidence,
+            now, hash, input.slot, input.slotValue, input.lang, input.derivedFromMessageId,
+          );
+
+        this.db.exec("COMMIT");
+
+        // Embed (outside transaction -- non-critical)
+        if (this.embedding) {
+          try {
+            const vector = await this.embedding.embed(input.content, { purpose: "index" });
+            this.validateDimensions(vector);
+            this.db
+              .query("INSERT INTO vec_facts (fact_id, embedding) VALUES (?1, vec_f32(?2))")
+              .run(id, new Float32Array(vector));
+          } catch (embErr) {
+            this.logger.warn("upsertSlotFact: embedding failed (stored without vector)", {
+              factId: id, error: String(embErr),
+            });
+          }
+        }
+
+        const fact: Fact = {
+          id,
+          conversationId: input.conversationId,
+          content: input.content,
+          source: input.source as Fact["source"],
+          confidence: input.confidence,
+          createdAt: now,
+          updatedAt: now,
+          slot: input.slot,
+          slotValue: input.slotValue,
+          lang: input.lang,
+          isActive: true,
+        };
+
+        this.logger.debug("upsertSlotFact: stored", {
+          factId: id, slot: input.slot, value: input.slotValue, source: input.source,
+        });
+
+        return ok(fact);
+      } catch (innerErr) {
+        this.db.exec("ROLLBACK");
+        throw innerErr;
+      }
+    } catch (cause) {
+      return err(new MemoryError(`Failed to upsert slot fact: ${cause}`, cause));
     }
   }
 
@@ -228,7 +390,7 @@ export class SqliteLongTermMemory implements LongTermMemory {
   async listAll(conversationId?: string): Promise<Result<Fact[]>> {
     try {
       let sql = `SELECT id, conversation_id, content, category, source, confidence,
-                        expires_at, created_at, updated_at
+                        expires_at, created_at, updated_at, slot, slot_value, lang, is_active
                  FROM facts`;
       const params: (string | number)[] = [];
 
@@ -264,7 +426,7 @@ export class SqliteLongTermMemory implements LongTermMemory {
     const vectorRanks = new Map<string, number>();
     if (this.embedding) {
       try {
-        const queryVec = await this.embedding.embed(query);
+        const queryVec = await this.embedding.embed(query, { purpose: "retrieval" });
         this.validateDimensions(queryVec);
         const vecRows = this.db
           .query(
@@ -325,9 +487,10 @@ export class SqliteLongTermMemory implements LongTermMemory {
     const rows = this.db
       .query(
         `SELECT id, conversation_id, content, category, source, confidence,
-                expires_at, created_at, updated_at
+                expires_at, created_at, updated_at, slot, slot_value, lang, is_active
          FROM facts
          WHERE id IN (${placeholders})
+           AND is_active = 1
            AND (expires_at IS NULL OR expires_at > ?1)`,
       )
       .all(now, ...idList) as FactRow[];
@@ -380,9 +543,8 @@ export class SqliteLongTermMemory implements LongTermMemory {
     }
 
     const startMs = Date.now();
-    const queryVec = await this.embedding.embed(query);
+    const queryVec = await this.embedding.embed(query, { purpose: "retrieval" });
     this.validateDimensions(queryVec);
-
     const fetchN = clamp(topK * 3, 30, 200);
     const results = this.searchByEmbedding(queryVec, fetchN, minScore);
     const elapsedMs = Date.now() - startMs;
@@ -404,9 +566,10 @@ export class SqliteLongTermMemory implements LongTermMemory {
     const rows = this.db
       .query(
         `SELECT id, conversation_id, content, category, source, confidence,
-                expires_at, created_at, updated_at
+                expires_at, created_at, updated_at, slot, slot_value, lang, is_active
          FROM facts
          WHERE id IN (${placeholders})
+           AND is_active = 1
            AND (expires_at IS NULL OR expires_at > ?1)`,
       )
       .all(now, ...factIds) as FactRow[];
@@ -470,10 +633,12 @@ export class SqliteLongTermMemory implements LongTermMemory {
       // ORDER BY bm25() ASC: SQLite FTS5 bm25() returns negative floats where
       // smaller (more negative) = better match. ASC puts best matches first.
       const sql = `SELECT f.id, f.conversation_id, f.content, f.category,
-                          f.source, f.confidence, f.expires_at, f.created_at, f.updated_at
+                          f.source, f.confidence, f.expires_at, f.created_at, f.updated_at,
+                          f.slot, f.slot_value, f.lang, f.is_active
                    FROM facts f
                    JOIN facts_fts ON facts_fts.rowid = f.rowid
                    WHERE facts_fts MATCH ?1
+                     AND f.is_active = 1
                      AND (f.expires_at IS NULL OR f.expires_at > ?2)
                    ORDER BY bm25(facts_fts) ASC
                    LIMIT ?3`;
@@ -488,9 +653,11 @@ export class SqliteLongTermMemory implements LongTermMemory {
     const params: (string | number)[] = [now, ...words.map((w) => `%${w}%`)];
 
     const sql = `SELECT id, conversation_id, content, category,
-                        source, confidence, expires_at, created_at, updated_at
+                        source, confidence, expires_at, created_at, updated_at,
+                        slot, slot_value, lang, is_active
                  FROM facts
                  WHERE (${conditions})
+                   AND is_active = 1
                    AND (expires_at IS NULL OR expires_at > ?1)
                  ORDER BY created_at DESC
                  LIMIT ?${params.length + 1}`;

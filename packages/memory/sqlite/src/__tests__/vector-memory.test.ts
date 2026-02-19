@@ -267,3 +267,316 @@ describe("distanceToScore()", () => {
     expect(distanceToScore(3)).toBe(0.0);
   });
 });
+
+// ── Slot superseding ────────────────────────────────────────────────────────
+
+describe("Slot superseding (name change)", () => {
+  let db: Database;
+  let embedding: MockEmbeddingProvider;
+  let ltm: SqliteLongTermMemory;
+
+  beforeEach(async () => {
+    db = createTestDb();
+    await setupSchema(db);
+    embedding = new MockEmbeddingProvider(1024);
+    ltm = new SqliteLongTermMemory(db, logger, embedding);
+  });
+
+  it("should deactivate old name when new name is stored", async () => {
+    const r1 = await ltm.remember({
+      conversationId: "conv-1",
+      content: "User's name is Maziar",
+      slot: "name",
+      slotValue: "Maziar",
+      lang: "da",
+      source: "regex",
+    });
+    expect(r1.ok).toBe(true);
+
+    const r2 = await ltm.remember({
+      conversationId: "conv-1",
+      content: "User's name is Jens",
+      slot: "name",
+      slotValue: "Jens",
+      lang: "da",
+      source: "regex",
+    });
+    expect(r2.ok).toBe(true);
+
+    // Recall should only return Jens (Maziar deactivated)
+    const recalled = await ltm.recall("name", 10, { strategy: "fts" });
+    expect(recalled.ok).toBe(true);
+    if (!recalled.ok) return;
+
+    const nameContents = recalled.value.map((f) => f.content);
+    expect(nameContents).toContain("User's name is Jens");
+    expect(nameContents).not.toContain("User's name is Maziar");
+  });
+
+  it("should keep both facts when slots are different", async () => {
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "User's name is Maziar",
+      slot: "name",
+      slotValue: "Maziar",
+      lang: "en",
+      source: "regex",
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "User lives in Copenhagen",
+      slot: "location",
+      slotValue: "Copenhagen",
+      lang: "en",
+      source: "regex",
+    });
+
+    const all = await ltm.listAll();
+    expect(all.ok).toBe(true);
+    if (!all.ok) return;
+
+    const active = all.value.filter((f) => f.isActive);
+    expect(active).toHaveLength(2);
+  });
+
+  it("should handle three successive name changes", async () => {
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "User's name is Alice",
+      slot: "name", slotValue: "Alice", lang: "en", source: "regex",
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "User's name is Bob",
+      slot: "name", slotValue: "Bob", lang: "en", source: "regex",
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "User's name is Charlie",
+      slot: "name", slotValue: "Charlie", lang: "en", source: "regex",
+    });
+
+    const recalled = await ltm.recall("name", 10, { strategy: "fts" });
+    expect(recalled.ok).toBe(true);
+    if (!recalled.ok) return;
+
+    expect(recalled.value).toHaveLength(1);
+    expect(recalled.value[0].content).toContain("Charlie");
+    expect(recalled.value[0].isActive).toBe(true);
+
+    // Verify the old ones are in DB but deactivated
+    const allRows = db.query("SELECT content, is_active FROM facts ORDER BY created_at").all() as
+      { content: string; is_active: number }[];
+    expect(allRows).toHaveLength(3);
+    expect(allRows[0].is_active).toBe(0); // Alice
+    expect(allRows[1].is_active).toBe(0); // Bob
+    expect(allRows[2].is_active).toBe(1); // Charlie
+  });
+
+  it("should not deactivate 'preference' or 'other' slots", async () => {
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "User prefers dark mode",
+      slot: "preference", slotValue: "dark mode", lang: "en", source: "regex",
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "User prefers TypeScript",
+      slot: "preference", slotValue: "TypeScript", lang: "en", source: "regex",
+    });
+
+    const all = await ltm.listAll();
+    expect(all.ok).toBe(true);
+    if (!all.ok) return;
+
+    const active = all.value.filter((f) => f.isActive);
+    expect(active).toHaveLength(2);
+  });
+});
+
+// ── Full integration: FactExtractor → SqliteLongTermMemory ──────────────────
+
+describe("FactExtractor + SqliteLongTermMemory integration", () => {
+  let db: Database;
+  let ltm: SqliteLongTermMemory;
+
+  beforeEach(async () => {
+    db = createTestDb();
+    await setupSchema(db);
+    ltm = new SqliteLongTermMemory(db, logger);
+  });
+
+  it("should extract name via regex and supersede on change", async () => {
+    const { FactExtractor } = await import("@spaceduck/core");
+    const { SimpleEventBus } = await import("@spaceduck/core");
+    const bus = new SimpleEventBus(logger);
+    const extractor = new FactExtractor(ltm, logger);
+    extractor.register(bus);
+
+    // User says their name is Maziar
+    await bus.emitAsync("message:response", {
+      conversationId: "conv-1",
+      message: { id: "m1", role: "user", content: "Jeg hedder Maziar", timestamp: Date.now() },
+      durationMs: 10,
+    });
+
+    // Verify name=Maziar was stored
+    let facts = await ltm.listAll();
+    expect(facts.ok).toBe(true);
+    const maziarFact = facts.ok ? facts.value.find((f) => f.slot === "name") : undefined;
+    expect(maziarFact).toBeTruthy();
+    expect(maziarFact!.slotValue).toBe("Maziar");
+    expect(maziarFact!.isActive).toBe(true);
+
+    // User changes their name to Jens
+    await bus.emitAsync("message:response", {
+      conversationId: "conv-2",
+      message: { id: "m2", role: "user", content: "Jeg hedder Jens", timestamp: Date.now() },
+      durationMs: 10,
+    });
+
+    // Verify Jens is active, Maziar is deactivated
+    facts = await ltm.listAll();
+    expect(facts.ok).toBe(true);
+    if (!facts.ok) return;
+
+    const allNames = facts.value.filter((f) => f.slot === "name");
+    expect(allNames).toHaveLength(2);
+
+    const active = allNames.filter((f) => f.isActive);
+    expect(active).toHaveLength(1);
+    expect(active[0].slotValue).toBe("Jens");
+
+    const deactivated = allNames.filter((f) => !f.isActive);
+    expect(deactivated).toHaveLength(1);
+    expect(deactivated[0].slotValue).toBe("Maziar");
+  });
+});
+
+// ── upsertSlotFact: write guards and time-ordering ────────────────────────
+
+describe("upsertSlotFact write guards", () => {
+  let db: Database;
+  let ltm: SqliteLongTermMemory;
+
+  beforeEach(async () => {
+    db = createTestDb();
+    await setupSchema(db);
+    ltm = new SqliteLongTermMemory(db, logger);
+  });
+
+  it("pre_regex wins over post_llm for the same messageId", async () => {
+    // pre_regex writes first
+    const r1 = await ltm.upsertSlotFact({
+      slot: "name", slotValue: "Maziar",
+      content: "User's name is Maziar", conversationId: "c1",
+      lang: "da", source: "pre_regex", derivedFromMessageId: "msg-1", confidence: 0.8,
+    });
+    expect(r1.ok).toBe(true);
+    expect(r1.ok && r1.value).toBeTruthy();
+
+    // post_llm tries same slot + same messageId => should be skipped
+    const r2 = await ltm.upsertSlotFact({
+      slot: "name", slotValue: "Maz",
+      content: "User's name is Maz", conversationId: "c1",
+      lang: "da", source: "post_llm", derivedFromMessageId: "msg-1", confidence: 0.7,
+    });
+    expect(r2.ok).toBe(true);
+    expect(r2.ok && r2.value).toBeNull();
+
+    // Only Maziar should be active
+    const facts = await ltm.listAll();
+    expect(facts.ok).toBe(true);
+    if (!facts.ok) return;
+    const active = facts.value.filter(f => f.isActive && f.slot === "name");
+    expect(active).toHaveLength(1);
+    expect(active[0].slotValue).toBe("Maziar");
+  });
+
+  it("post_llm with different messageId DOES supersede pre_regex", async () => {
+    // Message 1: pre_regex
+    await ltm.upsertSlotFact({
+      slot: "name", slotValue: "Jens",
+      content: "User's name is Jens", conversationId: "c1",
+      lang: "da", source: "pre_regex", derivedFromMessageId: "msg-1", confidence: 0.8,
+    });
+
+    // Message 2: post_llm (different messageId, so it's a newer message)
+    const r2 = await ltm.upsertSlotFact({
+      slot: "name", slotValue: "Karina",
+      content: "User's name is Karina", conversationId: "c1",
+      lang: "da", source: "post_llm", derivedFromMessageId: "msg-2", confidence: 0.7,
+    });
+    expect(r2.ok).toBe(true);
+    expect(r2.ok && r2.value).toBeTruthy();
+
+    const facts = await ltm.listAll();
+    expect(facts.ok).toBe(true);
+    if (!facts.ok) return;
+    const active = facts.value.filter(f => f.isActive && f.slot === "name");
+    expect(active).toHaveLength(1);
+    expect(active[0].slotValue).toBe("Karina");
+  });
+
+  it("slot superseding preserves different slots independently", async () => {
+    await ltm.upsertSlotFact({
+      slot: "name", slotValue: "Maziar",
+      content: "User's name is Maziar", conversationId: "c1",
+      lang: "da", source: "pre_regex", derivedFromMessageId: "msg-1", confidence: 0.8,
+    });
+    await ltm.upsertSlotFact({
+      slot: "location", slotValue: "Copenhagen",
+      content: "User lives in Copenhagen", conversationId: "c1",
+      lang: "da", source: "pre_regex", derivedFromMessageId: "msg-1", confidence: 0.8,
+    });
+
+    // Change name only
+    await ltm.upsertSlotFact({
+      slot: "name", slotValue: "Jens",
+      content: "User's name is Jens", conversationId: "c1",
+      lang: "da", source: "pre_regex", derivedFromMessageId: "msg-2", confidence: 0.8,
+    });
+
+    const facts = await ltm.listAll();
+    expect(facts.ok).toBe(true);
+    if (!facts.ok) return;
+    const active = facts.value.filter(f => f.isActive);
+    expect(active).toHaveLength(2);
+    expect(active.find(f => f.slot === "name")!.slotValue).toBe("Jens");
+    expect(active.find(f => f.slot === "location")!.slotValue).toBe("Copenhagen");
+  });
+
+  it("exact duplicate content is skipped", async () => {
+    await ltm.upsertSlotFact({
+      slot: "name", slotValue: "Maziar",
+      content: "User's name is Maziar", conversationId: "c1",
+      lang: "da", source: "pre_regex", derivedFromMessageId: "msg-1", confidence: 0.8,
+    });
+
+    // Same content again
+    const r2 = await ltm.upsertSlotFact({
+      slot: "name", slotValue: "Maziar",
+      content: "User's name is Maziar", conversationId: "c1",
+      lang: "da", source: "pre_regex", derivedFromMessageId: "msg-2", confidence: 0.8,
+    });
+    expect(r2.ok).toBe(true);
+    expect(r2.ok && r2.value).toBeNull();
+  });
+
+  it("triple name change keeps only the latest active", async () => {
+    for (const [i, name] of ["Maziar", "Jens", "Karina"].entries()) {
+      await ltm.upsertSlotFact({
+        slot: "name", slotValue: name,
+        content: `User's name is ${name}`, conversationId: "c1",
+        lang: "da", source: "pre_regex", derivedFromMessageId: `msg-${i + 1}`, confidence: 0.8,
+      });
+    }
+
+    const facts = await ltm.listAll();
+    expect(facts.ok).toBe(true);
+    if (!facts.ok) return;
+    const active = facts.value.filter(f => f.isActive && f.slot === "name");
+    expect(active).toHaveLength(1);
+    expect(active[0].slotValue).toBe("Karina");
+  });
+});

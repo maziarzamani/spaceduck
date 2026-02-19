@@ -62,14 +62,18 @@ export function createEmbeddingProvider(
     case "bedrock": {
       const { BedrockEmbeddingProvider } = require("@spaceduck/provider-bedrock");
       const dims = dimensions ?? 1024;
-      if (dims !== 256 && dims !== 512 && dims !== 1024) {
+      const effectiveModel = model ?? "amazon.titan-embed-text-v2:0";
+      const isNova = effectiveModel.includes("nova");
+      const validDims = isNova ? [256, 384, 1024, 3072] : [256, 512, 1024];
+      if (!validDims.includes(dims)) {
+        const modelLabel = isNova ? "Nova 2 Multimodal Embeddings" : "Titan Embeddings V2";
         throw new ConfigError(
-          `Titan Embeddings V2 only supports dimensions 256, 512, or 1024. Got: ${dims}`,
+          `${modelLabel} supports dimensions ${validDims.join(", ")}. Got: ${dims}`,
         );
       }
       provider = new BedrockEmbeddingProvider({
-        model: model ?? "amazon.titan-embed-text-v2:0",
-        dimensions: dims as 256 | 512 | 1024,
+        model: effectiveModel,
+        dimensions: dims,
         region: Bun.env.AWS_REGION,
         apiKey: Bun.env.AWS_BEARER_TOKEN_BEDROCK ?? Bun.env.BEDROCK_API_KEY,
       });

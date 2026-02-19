@@ -6,8 +6,9 @@
 //   - Content is an array of { text } objects
 //   - Tool results use { toolResult: { toolUseId, content } } format
 //
-// Embeddings: Amazon Titan Text Embeddings V2
+// Embeddings: Titan Text Embeddings V2 + Nova 2 Multimodal Embeddings
 //   POST /model/{modelId}/invoke
+//   Model auto-detected: "nova" in ID → Nova API, otherwise → Titan API
 //
 // Authentication: Amazon Bedrock API key (Bearer token)
 //   Generate at: AWS Console → Amazon Bedrock → API keys
@@ -26,6 +27,7 @@ import type {
   ProviderErrorCode,
   ToolDefinition,
   EmbeddingProvider,
+  EmbedOptions,
 } from "@spaceduck/core";
 import { ProviderError } from "@spaceduck/core";
 
@@ -307,16 +309,25 @@ export class BedrockProvider implements Provider {
   }
 }
 
-// ── Titan Embedding Provider ──────────────────────────────────────────────────
+// ── Bedrock Embedding Provider ────────────────────────────────────────────────
+// Supports both Titan Text Embeddings V2 and Nova 2 Multimodal Embeddings.
+// Model auto-detected by ID: contains "nova" → Nova API, otherwise → Titan API.
+
+/** Internal Nova purpose enum — maps from our clean API to Bedrock wire values. */
+const PURPOSE_MAP = {
+  index: "GENERIC_INDEX",
+  retrieval: "TEXT_RETRIEVAL",
+} as const;
 
 export interface BedrockEmbeddingConfig {
   /**
-   * Titan model ID. Default: amazon.titan-embed-text-v2:0
-   * Supports output dimensions of 256, 512, or 1024.
+   * Embedding model ID.
+   * Default: amazon.titan-embed-text-v2:0
+   * Nova 2: amazon.nova-2-multimodal-embeddings-v1:0
    */
   readonly model?: string;
-  /** Output vector size: 256 | 512 | 1024. Default: 1024 */
-  readonly dimensions?: 256 | 512 | 1024;
+  /** Output vector size. Titan: 256|512|1024. Nova: 256|384|1024|3072. Default: 1024 */
+  readonly dimensions?: number;
   /** Amazon Bedrock API key. Falls back to AWS_BEARER_TOKEN_BEDROCK or BEDROCK_API_KEY env vars. */
   readonly apiKey?: string;
   /** AWS region. Falls back to AWS_REGION env var. Default: us-east-1 */
@@ -324,12 +335,10 @@ export interface BedrockEmbeddingConfig {
 }
 
 /**
- * Amazon Titan Text Embeddings V2 provider.
+ * Amazon Bedrock embedding provider (Titan V2 + Nova 2 Multimodal).
  *
  * Uses the InvokeModel REST API with Bearer token auth.
  * Endpoint: https://bedrock-runtime.{region}.amazonaws.com/model/{modelId}/invoke
- *
- * Supports 100+ languages including Danish. Output: 1024 dims (default).
  */
 export class BedrockEmbeddingProvider implements EmbeddingProvider {
   readonly name = "bedrock";
@@ -338,10 +347,12 @@ export class BedrockEmbeddingProvider implements EmbeddingProvider {
   private readonly model: string;
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly isNova: boolean;
 
   constructor(config: BedrockEmbeddingConfig = {}) {
     this.dimensions = config.dimensions ?? 1024;
     this.model = config.model ?? "amazon.titan-embed-text-v2:0";
+    this.isNova = this.model.includes("nova");
 
     const region = config.region ?? process.env.AWS_REGION ?? "us-east-1";
     this.baseUrl = `https://bedrock-runtime.${region}.amazonaws.com`;
@@ -353,8 +364,11 @@ export class BedrockEmbeddingProvider implements EmbeddingProvider {
       "";
   }
 
-  async embed(text: string): Promise<Float32Array> {
+  async embed(text: string, options?: EmbedOptions): Promise<Float32Array> {
     const url = `${this.baseUrl}/model/${encodeURIComponent(this.model)}/invoke`;
+    const body = this.isNova
+      ? this.buildNovaBody(text, options)
+      : this.buildTitanBody(text);
 
     let response: Response;
     try {
@@ -365,11 +379,7 @@ export class BedrockEmbeddingProvider implements EmbeddingProvider {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: JSON.stringify({
-          inputText: text,
-          dimensions: this.dimensions,
-          normalize: true,
-        }),
+        body: JSON.stringify(body),
       });
     } catch (cause) {
       throw new ProviderError(
@@ -380,44 +390,111 @@ export class BedrockEmbeddingProvider implements EmbeddingProvider {
     }
 
     if (!response.ok) {
-      const body = await response.text().catch(() => "(no body)");
+      const errBody = await response.text().catch(() => "(no body)");
       const code: ProviderErrorCode =
         response.status === 401 || response.status === 403 ? "auth_failed" :
         response.status === 429 ? "throttled" : "invalid_request";
       throw new ProviderError(
-        `Bedrock embedding API error ${response.status}: ${body}`,
+        `Bedrock embedding API error ${response.status}: ${errBody}`,
         code,
       );
     }
 
-    const json = (await response.json()) as { embedding?: number[] };
+    const json = await response.json();
+    return this.isNova ? this.parseNovaResponse(json) : this.parseTitanResponse(json);
+  }
 
-    if (!json.embedding || !Array.isArray(json.embedding)) {
+  async embedBatch(texts: string[], options?: EmbedOptions): Promise<Float32Array[]> {
+    if (texts.length === 0) return [];
+    const CONCURRENCY = 8;
+    const results: Float32Array[] = [];
+    for (let i = 0; i < texts.length; i += CONCURRENCY) {
+      const batch = texts.slice(i, i + CONCURRENCY);
+      const batchResults = await Promise.all(batch.map((t) => this.embed(t, options)));
+      results.push(...batchResults);
+    }
+    return results;
+  }
+
+  // ── Nova 2 Multimodal Embeddings ────────────────────────────────────
+
+  private buildNovaBody(text: string, options?: EmbedOptions): Record<string, unknown> {
+    const purpose = options?.purpose ?? "index";
+    return {
+      schemaVersion: "nova-multimodal-embed-v1",
+      taskType: "SINGLE_EMBEDDING",
+      singleEmbeddingParams: {
+        embeddingPurpose: PURPOSE_MAP[purpose],
+        embeddingDimension: this.dimensions,
+        text: {
+          truncationMode: "END",
+          value: text,
+        },
+      },
+    };
+  }
+
+  private parseNovaResponse(json: unknown): Float32Array {
+    const body = json as {
+      embeddings?: Array<{
+        embedding?: number[];
+        truncatedCharLength?: number;
+      }>;
+    };
+
+    const entry = body?.embeddings?.[0];
+    if (!entry?.embedding || !Array.isArray(entry.embedding)) {
+      const preview = JSON.stringify(json).slice(0, 200);
+      throw new ProviderError(
+        `Nova embedding response missing embeddings[0].embedding. Body: ${preview}`,
+        "invalid_request",
+      );
+    }
+
+    if (entry.truncatedCharLength !== undefined) {
+      // Truncation occurred — callers should know
+      console.warn(
+        `[bedrock-embed] Input truncated at ${entry.truncatedCharLength} chars (model: ${this.model})`,
+      );
+    }
+
+    if (entry.embedding.length !== this.dimensions) {
+      throw new ProviderError(
+        `Nova embedding dimension mismatch: expected ${this.dimensions}, got ${entry.embedding.length}`,
+        "invalid_request",
+      );
+    }
+
+    return new Float32Array(entry.embedding);
+  }
+
+  // ── Titan Text Embeddings V2 ────────────────────────────────────────
+
+  private buildTitanBody(text: string): Record<string, unknown> {
+    return {
+      inputText: text,
+      dimensions: this.dimensions,
+      normalize: true,
+    };
+  }
+
+  private parseTitanResponse(json: unknown): Float32Array {
+    const body = json as { embedding?: number[] };
+
+    if (!body?.embedding || !Array.isArray(body.embedding)) {
       throw new ProviderError(
         "Bedrock Titan embedding response missing 'embedding' array",
         "invalid_request",
       );
     }
 
-    if (json.embedding.length !== this.dimensions) {
+    if (body.embedding.length !== this.dimensions) {
       throw new ProviderError(
-        `Titan embedding dimension mismatch: expected ${this.dimensions}, got ${json.embedding.length}`,
+        `Titan embedding dimension mismatch: expected ${this.dimensions}, got ${body.embedding.length}`,
         "invalid_request",
       );
     }
 
-    return new Float32Array(json.embedding);
-  }
-
-  async embedBatch(texts: string[]): Promise<Float32Array[]> {
-    if (texts.length === 0) return [];
-    const CONCURRENCY = 8;
-    const results: Float32Array[] = [];
-    for (let i = 0; i < texts.length; i += CONCURRENCY) {
-      const batch = texts.slice(i, i + CONCURRENCY);
-      const batchResults = await Promise.all(batch.map((t) => this.embed(t)));
-      results.push(...batchResults);
-    }
-    return results;
+    return new Float32Array(body.embedding);
   }
 }

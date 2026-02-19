@@ -25,7 +25,7 @@ export {
 export { InMemorySessionManager } from "./session-manager";
 
 // Fact extractor
-export { FactExtractor } from "./fact-extractor";
+export { FactExtractor, guardFact, type FactCandidate } from "./fact-extractor";
 
 // Agent
 export { type AgentDeps, type AgentRunResult, type AgentChunk, AgentLoop } from "./agent";
