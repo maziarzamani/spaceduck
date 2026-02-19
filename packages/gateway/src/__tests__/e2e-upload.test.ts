@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach } from "bun:test";
 import { createGateway, Gateway } from "../gateway";
 import type { Message, Provider, ProviderOptions, ProviderChunk, ToolDefinition } from "@spaceduck/core";
 
+process.env.SPACEDUCK_REQUIRE_AUTH = "0";
+
 /**
  * Mock provider that detects marker_scan tool calls and returns their output.
  * When it sees the marker_scan tool is available, it emits a tool_call for it.

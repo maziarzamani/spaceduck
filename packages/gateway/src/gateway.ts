@@ -38,6 +38,19 @@ import { createWsHandler, type WsConnectionData } from "./ws-handler";
 import { createToolRegistry } from "./tool-registrations";
 import { createEmbeddingProvider } from "./embedding-factory";
 import { AttachmentStore } from "./attachment-store";
+import {
+  ensureGatewaySettings,
+  getGatewayInfo,
+  createPairingSession,
+  getActivePairingCode,
+  confirmPairing,
+  requireAuth,
+  extractToken,
+  verifyToken,
+  listTokens,
+  revokeToken,
+  type GatewayInfo,
+} from "./auth";
 
 export interface GatewayDeps {
   readonly config: SpaceduckConfig;
@@ -58,12 +71,15 @@ export class Gateway implements Lifecycle {
   private _status: LifecycleStatus = "stopped";
   private server: ReturnType<typeof Bun.serve> | null = null;
   private db: Database | null = null;
+  private authRequired: boolean;
+  private gatewayInfo: GatewayInfo | null = null;
 
   readonly deps: GatewayDeps;
 
   constructor(deps: GatewayDeps, db?: Database) {
     this.deps = deps;
     this.db = db ?? null;
+    this.authRequired = (Bun.env.SPACEDUCK_REQUIRE_AUTH ?? "1") !== "0";
   }
 
   get status(): LifecycleStatus {
@@ -75,6 +91,14 @@ export class Gateway implements Lifecycle {
     this._status = "starting";
 
     const { config, logger } = this.deps;
+
+    if (this.db) {
+      this.gatewayInfo = ensureGatewaySettings(this.db);
+    }
+
+    if (!this.authRequired) {
+      logger.warn("⚠️  AUTH DISABLED — all endpoints are publicly accessible. Set SPACEDUCK_REQUIRE_AUTH=1 for production.");
+    }
 
     const wsHandler = createWsHandler({
       logger,
@@ -240,8 +264,16 @@ export class Gateway implements Lifecycle {
   private async handleRequest(req: Request, server: Bun.Server<WsConnectionData>): Promise<Response> {
     const url = new URL(req.url);
 
-    // WebSocket upgrade
+    // ── Unauthenticated routes ───────────────────────────────────────
+
+    // WebSocket upgrade (auth checked via token query param)
     if (url.pathname === "/ws") {
+      if (this.db && this.authRequired) {
+        const raw = extractToken(req);
+        if (!raw || !verifyToken(this.db, raw)) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+      }
       const senderId = url.searchParams.get("senderId") || `anon-${Date.now().toString(36)}`;
       const upgraded = server.upgrade(req, {
         data: {
@@ -266,22 +298,159 @@ export class Gateway implements Lifecycle {
       });
     }
 
-    // Conversations list
-    if (req.method === "GET" && url.pathname === "/api/conversations") {
-      const result = await this.deps.conversationStore.list();
-      if (!result.ok) {
-        return Response.json({ error: result.error.message }, { status: 500 });
-      }
-      return Response.json({ conversations: result.value });
+    // Public gateway info (no auth — used by onboarding to validate URL)
+    if (req.method === "GET" && url.pathname === "/api/gateway/public-info") {
+      const info = this.gatewayInfo ?? { gatewayId: "unknown", gatewayName: "unknown" };
+      return Response.json({
+        gatewayId: info.gatewayId,
+        gatewayName: info.gatewayName,
+        version: "0.1.0",
+        requiresAuth: this.authRequired,
+        wsPath: "/ws",
+      });
     }
 
-    // File upload
-    if (req.method === "POST" && url.pathname === "/api/upload") {
-      return this.handleUpload(req);
+    // Pairing start
+    if (req.method === "POST" && url.pathname === "/api/pair/start") {
+      if (!this.db) return Response.json({ error: "No database" }, { status: 500 });
+      const session = createPairingSession(this.db);
+      const logCode = (Bun.env.SPACEDUCK_PAIRING_LOG_CODE ?? "0") === "1";
+      if (logCode) {
+        this.deps.logger.info(`PAIR CODE: ${session.code}`);
+      }
+      return Response.json({
+        pairingId: session.pairingId,
+        codeHint: `${session.code.length}-digit code`,
+      });
+    }
+
+    // Pairing confirm
+    if (req.method === "POST" && url.pathname === "/api/pair/confirm") {
+      if (!this.db) return Response.json({ error: "No database" }, { status: 500 });
+      try {
+        const body = await req.json() as { pairingId?: string; code?: string; deviceName?: string };
+        if (!body.pairingId || !body.code) {
+          return Response.json({ error: "Missing pairingId or code" }, { status: 400 });
+        }
+        const result = confirmPairing(this.db, body.pairingId, body.code, body.deviceName);
+        if (!result.ok) {
+          const status = result.error === "rate_limited" ? 429
+            : result.error === "expired" ? 410
+            : result.error === "not_found" ? 404
+            : 401;
+          return Response.json({ error: result.error }, { status });
+        }
+        return Response.json(result.result);
+      } catch {
+        return Response.json({ error: "Invalid request body" }, { status: 400 });
+      }
+    }
+
+    // Pairing page (simple HTML)
+    if (req.method === "GET" && url.pathname === "/pair") {
+      return this.servePairingPage();
+    }
+
+    // ── Authenticated routes ─────────────────────────────────────────
+
+    if (this.db) {
+      const token = requireAuth(req, this.db, this.authRequired);
+
+      // Gateway info (authenticated)
+      if (req.method === "GET" && url.pathname === "/api/gateway/info") {
+        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        const info = this.gatewayInfo ?? { gatewayId: "unknown", gatewayName: "unknown" };
+        return Response.json({
+          gatewayId: info.gatewayId,
+          gatewayName: info.gatewayName,
+          version: "0.1.0",
+          wsPath: "/ws",
+          httpBase: "/",
+        });
+      }
+
+      // List tokens (devices)
+      if (req.method === "GET" && url.pathname === "/api/tokens") {
+        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        const tokens = listTokens(this.db).map((t) => ({
+          id: t.id,
+          deviceName: t.deviceName,
+          createdAt: t.createdAt,
+          lastUsedAt: t.lastUsedAt,
+          isCurrent: t.tokenHash === token.tokenHash,
+        }));
+        return Response.json({ tokens });
+      }
+
+      // Revoke token
+      if (req.method === "POST" && url.pathname === "/api/tokens/revoke") {
+        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        try {
+          const body = await req.json() as { tokenId?: string };
+          const targetId = body.tokenId ?? token.id;
+          const revoked = revokeToken(this.db, targetId);
+          return Response.json({ revoked });
+        } catch {
+          return Response.json({ error: "Invalid request body" }, { status: 400 });
+        }
+      }
+
+      // Conversations list
+      if (req.method === "GET" && url.pathname === "/api/conversations") {
+        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        const result = await this.deps.conversationStore.list();
+        if (!result.ok) {
+          return Response.json({ error: result.error.message }, { status: 500 });
+        }
+        return Response.json({ conversations: result.value });
+      }
+
+      // File upload
+      if (req.method === "POST" && url.pathname === "/api/upload") {
+        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        return this.handleUpload(req);
+      }
     }
 
     // 404
     return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  private servePairingPage(): Response {
+    const code = this.db ? getActivePairingCode(this.db) : null;
+    const name = this.gatewayInfo?.gatewayName ?? "Spaceduck Gateway";
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spaceduck Pairing</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0a0a0a; color: #e5e5e5; }
+    .card { text-align: center; padding: 3rem 4rem; border: 1px solid #333; border-radius: 1rem; background: #141414; }
+    h1 { font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem; color: #a3a3a3; }
+    .code { font-size: 4rem; font-weight: 700; letter-spacing: 0.5rem; font-variant-numeric: tabular-nums; margin: 1.5rem 0; color: #fff; }
+    .no-code { font-size: 1.2rem; color: #737373; margin: 1.5rem 0; }
+    .name { font-size: 0.85rem; color: #525252; margin-top: 1rem; }
+    button { background: #262626; color: #e5e5e5; border: 1px solid #404040; padding: 0.5rem 1.5rem; border-radius: 0.5rem; cursor: pointer; font-size: 0.9rem; margin-top: 1rem; }
+    button:hover { background: #333; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Pairing Code</h1>
+    ${code
+      ? `<div class="code">${code}</div>`
+      : `<div class="no-code">No active pairing session</div>`}
+    <button onclick="fetch('/api/pair/start',{method:'POST'}).then(()=>location.reload())">
+      ${code ? "Regenerate" : "Generate Code"}
+    </button>
+    <div class="name">${name}</div>
+  </div>
+  <script>setTimeout(()=>location.reload(), 30000)</script>
+</body>
+</html>`;
+    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
   }
 
   private async handleUpload(req: Request): Promise<Response> {

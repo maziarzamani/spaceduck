@@ -16,6 +16,8 @@ import { createGateway, Gateway } from "../gateway";
 import type { Message } from "@spaceduck/core";
 import { MarkerTool } from "@spaceduck/tool-marker";
 
+process.env.SPACEDUCK_REQUIRE_AUTH = "0";
+
 const LIVE =
   Bun.env.RUN_LIVE_TESTS === "1" && (await MarkerTool.isAvailable());
 

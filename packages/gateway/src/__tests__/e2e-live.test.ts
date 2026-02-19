@@ -12,6 +12,8 @@ import { describe, it, expect, afterAll, beforeAll } from "bun:test";
 import { createGateway, Gateway } from "../gateway";
 import type { WsServerEnvelope } from "@spaceduck/core";
 
+process.env.SPACEDUCK_REQUIRE_AUTH = "0";
+
 const LIVE = Bun.env.RUN_LIVE_TESTS === "1" && !!Bun.env.GEMINI_API_KEY;
 
 describe.skipIf(!LIVE)("Live Gemini E2E", () => {

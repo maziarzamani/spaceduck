@@ -19,6 +19,8 @@ import { createGateway, type Gateway } from "../gateway";
 import { BedrockProvider, BedrockEmbeddingProvider } from "@spaceduck/provider-bedrock";
 import type { WsServerEnvelope } from "@spaceduck/core";
 
+process.env.SPACEDUCK_REQUIRE_AUTH = "0";
+
 const LIVE =
   Bun.env.RUN_LIVE_TESTS === "1" &&
   !!(Bun.env.AWS_BEARER_TOKEN_BEDROCK ?? Bun.env.BEDROCK_API_KEY);

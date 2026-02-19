@@ -8,11 +8,26 @@ import type {
 } from "@spaceduck/core";
 
 function getWsUrl(): string {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    return "ws://localhost:3000/ws";
+  const stored = localStorage.getItem("spaceduck.gatewayUrl");
+  const token = localStorage.getItem("spaceduck.token");
+
+  let base: string;
+  if (stored) {
+    const parsed = new URL(stored);
+    const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+    base = `${protocol}//${parsed.host}/ws`;
+  } else if (typeof window !== "undefined" && "__TAURI__" in window) {
+    base = "ws://localhost:3000/ws";
+  } else {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    base = `${protocol}//${window.location.host}/ws`;
   }
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/ws`;
+
+  if (token) {
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}token=${encodeURIComponent(token)}`;
+  }
+  return base;
 }
 
 const RECONNECT_BASE_MS = 1000;

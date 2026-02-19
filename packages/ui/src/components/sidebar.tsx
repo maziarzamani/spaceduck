@@ -1,6 +1,6 @@
 import { cn } from "../lib/utils";
 import type { ConversationSummary } from "@spaceduck/core";
-import { MessageSquarePlus, Trash2, MessageCircle } from "lucide-react";
+import { MessageSquarePlus, Trash2, MessageCircle, Settings } from "lucide-react";
 import { SpaceduckLogo } from "./spaceduck-logo";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
@@ -13,6 +13,7 @@ interface SidebarProps {
   onSelect: (id: string) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
+  onOpenSettings?: () => void;
 }
 
 function timeAgo(ts: number): string {
@@ -23,7 +24,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete }: SidebarProps) {
+export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete, onOpenSettings }: SidebarProps) {
   return (
     <aside className="flex flex-col w-64 h-full bg-card border-r border-border">
       <div className="flex items-center justify-between px-4 py-3">
@@ -95,8 +96,18 @@ export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete 
       </ScrollArea>
 
       <Separator />
-      <div className="px-4 py-3">
+      <div className="flex items-center justify-between px-4 py-3">
         <p className="text-xs text-muted-foreground">spaceduck v0.1.0</p>
+        {onOpenSettings && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onOpenSettings} className="h-7 w-7">
+                <Settings size={16} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Settings</TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </aside>
   );
