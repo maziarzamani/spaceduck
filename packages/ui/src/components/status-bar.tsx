@@ -1,32 +1,37 @@
 import type { ConnectionStatus } from "../hooks/use-spaceduck-ws";
-import { cn } from "../lib/utils";
 import { Wifi, WifiOff, Loader2 } from "lucide-react";
+import { Badge } from "../ui/badge";
 
 interface StatusBarProps {
   status: ConnectionStatus;
 }
 
+const statusConfig = {
+  connected: {
+    label: "Connected",
+    icon: Wifi,
+    variant: "default" as const,
+  },
+  connecting: {
+    label: "Connecting...",
+    icon: Loader2,
+    variant: "secondary" as const,
+  },
+  disconnected: {
+    label: "Disconnected",
+    icon: WifiOff,
+    variant: "destructive" as const,
+  },
+} satisfies Record<ConnectionStatus, { label: string; icon: React.ComponentType<{ size?: number; className?: string }>; variant: "default" | "secondary" | "destructive" }>;
+
 export function StatusBar({ status }: StatusBarProps) {
+  const config = statusConfig[status];
+  const Icon = config.icon;
+
   return (
-    <div className="flex items-center gap-1.5 px-3 py-1">
-      {status === "connected" && (
-        <>
-          <Wifi size={12} className="text-emerald-400" />
-          <span className="text-xs text-emerald-400">Connected</span>
-        </>
-      )}
-      {status === "connecting" && (
-        <>
-          <Loader2 size={12} className="text-amber-400 animate-spin" />
-          <span className="text-xs text-amber-400">Connecting...</span>
-        </>
-      )}
-      {status === "disconnected" && (
-        <>
-          <WifiOff size={12} className="text-destructive" />
-          <span className="text-xs text-destructive">Disconnected</span>
-        </>
-      )}
-    </div>
+    <Badge variant={config.variant} className="gap-1.5 font-normal">
+      <Icon size={12} className={status === "connecting" ? "animate-spin" : ""} />
+      {config.label}
+    </Badge>
   );
 }

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Send } from "lucide-react";
 import { cn } from "../lib/utils";
+import { Button } from "../ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 interface ChatInputProps {
   onSend: (content: string) => void;
@@ -12,7 +14,6 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -48,24 +49,28 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
           disabled={disabled}
           rows={1}
           className={cn(
-            "flex-1 min-w-0 resize-none rounded-xl border border-input bg-background px-4 py-3 text-sm leading-[1.375rem]",
-            "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
-            "disabled:opacity-50 disabled:cursor-not-allowed",
+            "flex-1 min-w-0 min-h-[44px] resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-sm",
+            "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "disabled:cursor-not-allowed disabled:opacity-50",
             "transition-colors",
           )}
         />
-        <button
-          onClick={handleSubmit}
-          disabled={!canSend}
-          className={cn(
-            "shrink-0 self-end h-[44px] w-[44px] flex items-center justify-center rounded-xl transition-all",
-            canSend
-              ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25"
-              : "bg-muted text-muted-foreground cursor-not-allowed",
-          )}
-        >
-          <Send size={18} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              onClick={handleSubmit}
+              disabled={!canSend}
+              size="icon"
+              variant={canSend ? "default" : "secondary"}
+              className="h-[44px] w-[44px] shrink-0 rounded-xl"
+            >
+              <Send size={18} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {canSend ? "Send message" : "Type a message to send"}
+          </TooltipContent>
+        </Tooltip>
       </div>
       <p className="text-center text-xs text-muted-foreground mt-2 max-w-3xl mx-auto">
         Shift+Enter for new line. Enter to send.
