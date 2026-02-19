@@ -5,6 +5,7 @@ import type { Logger } from "@spaceduck/core";
 import { ToolRegistry } from "@spaceduck/core";
 import { BrowserTool } from "@spaceduck/tool-browser";
 import { WebFetchTool } from "@spaceduck/tool-web-fetch";
+import { WebSearchTool, WebAnswerTool, type SearchProvider } from "@spaceduck/tool-web-search";
 
 /**
  * Build a ToolRegistry pre-loaded with all built-in tools.
@@ -202,6 +203,116 @@ export function createToolRegistry(logger: Logger): ToolRegistry {
       return b.evaluate(args.script as string);
     },
   );
+
+  // ── web_search (Brave / SearXNG) ──────────────────────────────────
+  const braveApiKey = Bun.env.BRAVE_API_KEY;
+  const searxngUrl = Bun.env.SEARXNG_URL;
+  const searchProvider = (Bun.env.SEARCH_PROVIDER ?? "brave") as SearchProvider;
+
+  if (braveApiKey || searxngUrl) {
+    const webSearch = new WebSearchTool({
+      provider: searxngUrl && !braveApiKey ? "searxng" : searchProvider,
+      braveApiKey,
+      searxngUrl,
+      searxngUserAgent: Bun.env.SEARXNG_USER_AGENT,
+    });
+
+    registry.register(
+      {
+        name: "web_search",
+        description:
+          "Find web pages about a query and return a ranked list of results (title, URL, snippet, optional published date). " +
+          "Use this when you need sources, links, or to compare multiple pages. " +
+          "Do NOT use this tool to write a final answer; it returns search results, not a synthesized response. " +
+          "If the user asks for a direct answer with citations, prefer the web_answer tool.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query." },
+            count: {
+              type: "integer",
+              minimum: 1,
+              maximum: 10,
+              description: "Number of results to return (1–10, default 5).",
+            },
+            freshness: {
+              type: "string",
+              enum: ["pd", "pw", "pm", "py"],
+              description: "Freshness filter: pd=past day, pw=past week, pm=past month, py=past year.",
+            },
+            country: {
+              type: "string",
+              description: 'Country code for region-specific results (e.g. "DK", "US").',
+            },
+            searchLang: {
+              type: "string",
+              description: 'Language code for results (e.g. "da", "en", "da-DK").',
+            },
+          },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+      async (args) => {
+        log.debug("web_search", { query: args.query, provider: searchProvider });
+        return webSearch.search(args.query as string, {
+          count: args.count as number | undefined,
+          freshness: args.freshness as "pd" | "pw" | "pm" | "py" | undefined,
+          country: args.country as string | undefined,
+          searchLang: args.searchLang as string | undefined,
+        });
+      },
+    );
+
+    log.info("web_search registered", { provider: webSearch["provider"] });
+  } else {
+    log.debug("web_search not registered (no BRAVE_API_KEY or SEARXNG_URL)");
+  }
+
+  // ── web_answer (Perplexity Sonar) ───────────────────────────────────
+  const perplexityApiKey = Bun.env.PERPLEXITY_API_KEY;
+  const openrouterApiKey = Bun.env.OPENROUTER_API_KEY;
+
+  if (perplexityApiKey || openrouterApiKey) {
+    const webAnswer = new WebAnswerTool({
+      perplexityApiKey,
+      openrouterApiKey,
+    });
+
+    registry.register(
+      {
+        name: "web_answer",
+        description:
+          "Answer a factual question using real-time web search and return a concise answer with sources. " +
+          "Use this when the user wants a direct answer with citations. " +
+          "If sources/citations are missing (provider limitation), say so explicitly and suggest using web_search to verify.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Question to answer." },
+            searchLang: {
+              type: "string",
+              description: 'Language code (e.g. "da", "en", "da-DK").',
+            },
+          },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+      async (args) => {
+        log.debug("web_answer", { query: args.query, provider: webAnswer["provider"] });
+        return webAnswer.answer(args.query as string, {
+          searchLang: args.searchLang as string | undefined,
+        });
+      },
+    );
+
+    log.info("web_answer registered", {
+      provider: perplexityApiKey ? "perplexity-direct" : "openrouter",
+    });
+  } else {
+    log.debug("web_answer not registered (no PERPLEXITY_API_KEY or OPENROUTER_API_KEY)");
+  }
 
   log.info("Tool registry initialized", { tools: registry.size });
   return registry;

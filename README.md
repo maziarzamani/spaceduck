@@ -27,75 +27,75 @@ Built from scratch with no agent frameworks or orchestration wrappers. Core laye
 
 ## Status
 
+> **Tested** column: `E2E` = verified against live APIs/services, `Unit` = tested with mocks, `—` = no automated tests yet.
+
 ### Core
 
-| Component | | Details |
-|-----------|---|---------|
-| Types & contracts | ✅ | `Message`, `Provider`, `EmbeddingProvider`, `ConversationStore`, `LongTermMemory`, `Result<T>` monad |
-| Context builder | ✅ | Token budgeting, system prompt injection, LTM fact recall, auto-compaction, afterTurn eager flush |
-| Agent loop | ✅ | Multi-round tool execution with automatic tool → result → LLM cycles |
-| Event bus | ✅ | Typed fire-and-forget + async emit, powers fact extraction pipeline |
-| Configuration system | 🔜 | Structured config file replacing `.env` — type-safe, nestable, multi-environment |
-| Plugin lifecycle | 🔜 | Standardized init/shutdown hooks for providers, channels, and tools |
-| Streaming protocol v2 | 🔜 | Structured envelopes for tool progress, memory events, and error recovery |
+| Component | | Details | Tested |
+|-----------|---|---------|--------|
+| Types & contracts | ✅ | `Message`, `Provider`, `EmbeddingProvider`, `ConversationStore`, `LongTermMemory`, `Result<T>` monad | Unit |
+| Context builder | ✅ | Token budgeting, system prompt injection, LTM fact recall, auto-compaction, afterTurn eager flush | Unit |
+| Agent loop | ✅ | Multi-round tool execution with automatic tool → result → LLM cycles | Unit |
+| Event bus | ✅ | Typed fire-and-forget + async emit, powers fact extraction pipeline | Unit |
+| Configuration system | 🔜 | Structured config file replacing `.env` — type-safe, nestable, multi-environment | — |
+| Plugin lifecycle | 🔜 | Standardized init/shutdown hooks for providers, channels, and tools | — |
+| Streaming protocol v2 | 🔜 | Structured envelopes for tool progress, memory events, and error recovery | — |
 
 ### Memory
 
-| Component | | Details |
-|-----------|---|---------|
-| Conversation store | ✅ | Full message history in SQLite with WAL mode |
-| Long-term facts | ✅ | Durable personal facts with FTS5 full-text search |
-| Vector embeddings | ✅ | sqlite-vec cosine similarity, configurable dimensions, `minScore` filtering, FTS5 fallback |
-| Fact extraction | ✅ | LLM-based with hardened JSON parsing, regex fallback, afterTurn eager flush |
-| Deduplication | ✅ | SHA-256 content hashing for exact duplicates |
-| Hybrid recall | ✅ | RRF combining vector cosine + FTS5 BM25, recency decay, SQL expiry pushdown |
-| Fact conflict resolution | 🔜 | Detect contradicting facts and prefer the most recent or highest-confidence version |
-| Backfill script | 🔜 | Resumable migration to embed existing unembedded facts |
-| Memory inspector | 🔜 | Web UI panel to browse, edit, and delete stored facts |
-| Per-user isolation | 🔜 | Scope facts by user identity across channels |
+| Component | | Details | Tested |
+|-----------|---|---------|--------|
+| Conversation store | ✅ | Full message history in SQLite with WAL mode | Unit |
+| Long-term facts | ✅ | Durable personal facts with FTS5 full-text search | Unit |
+| Vector embeddings | ✅ | sqlite-vec cosine similarity, configurable dimensions, `minScore` filtering, FTS5 fallback | Unit |
+| Fact extraction | ✅ | LLM-based with hardened JSON parsing, regex fallback, afterTurn eager flush | Unit |
+| Deduplication | ✅ | SHA-256 content hashing for exact duplicates | Unit |
+| Hybrid recall | ✅ | RRF combining vector cosine + FTS5 BM25, recency decay, SQL expiry pushdown | Unit |
+| Fact conflict resolution | 🔜 | Detect contradicting facts and prefer the most recent or highest-confidence version | — |
+| Backfill script | 🔜 | Resumable migration to embed existing unembedded facts | — |
+| Memory inspector | 🔜 | Web UI panel to browse, edit, and delete stored facts | — |
+| Per-user isolation | 🔜 | Scope facts by user identity across channels | — |
 
 ### Providers
 
-| Component | | Details |
-|-----------|---|---------|
-| Provider interface | ✅ | Pluggable `Provider` and `EmbeddingProvider` contracts — bring any model |
-| Gemini | ✅ | Chat streaming + embeddings via Google AI |
-| LM Studio | ✅ | Chat streaming + embeddings via OpenAI-compatible API (any local model) |
-| OpenRouter | ✅ | Multi-model chat streaming (access to hundreds of models) |
-| AWS Bedrock | ✅ | Native Converse API (required for Nova), Titan Text Embeddings V2, Bearer token auth |
-| Embedding factory | ✅ | Provider-agnostic creation from env config, fail-fast dimension validation |
-| Ollama | 🔜 | Local models via Ollama API |
-| Anthropic (direct) | 🔜 | Claude via Anthropic API (non-Bedrock) |
-| Provider fallback chain | 🔜 | Auto-retry with secondary provider on failure or timeout |
+| Component | | Details | Tested |
+|-----------|---|---------|--------|
+| Provider interface | ✅ | Pluggable `Provider` and `EmbeddingProvider` contracts — bring any model | Unit |
+| Gemini | ✅ | Chat streaming + embeddings via Google AI | E2E |
+| LM Studio | ✅ | Chat streaming + embeddings via OpenAI-compatible API (any local model) | — |
+| OpenRouter | ✅ | Multi-model chat streaming (access to hundreds of models) | — |
+| AWS Bedrock | ✅ | Native Converse API (required for Nova), Titan Text Embeddings V2, Bearer token auth | E2E |
+| Embedding factory | ✅ | Provider-agnostic creation from env config, fail-fast dimension validation | Unit |
+| Ollama | 🔜 | Local models via Ollama API | — |
+| Anthropic (direct) | 🔜 | Claude via Anthropic API (non-Bedrock) | — |
+| Provider fallback chain | 🔜 | Auto-retry with secondary provider on failure or timeout | — |
 
 ### Channels & Interface
 
-| Component | | Details |
-|-----------|---|---------|
-| Web UI | ✅ | React chat with streaming, conversations sidebar, Tailwind CSS |
-| Gateway | ✅ | Bun HTTP + WebSocket server, session management, run locking |
-| WhatsApp | ✅ | Baileys (WhatsApp Web protocol), QR pairing, typing indicators |
-| Discord | 🔜 | Discord bot channel |
-| Telegram | 🔜 | Telegram bot channel |
-| Desktop app | 🚧 | Tauri v2 shell + Bun gateway sidecar — macOS, Linux, Windows |
-| CLI | 🔜 | Terminal-based chat interface |
-| Multi-user auth | 🔜 | Token-based auth for Web UI, per-user sessions |
+| Component | | Details | Tested |
+|-----------|---|---------|--------|
+| Web UI | ✅ | React chat with streaming, conversations sidebar, Tailwind CSS | — |
+| Gateway | ✅ | Bun HTTP + WebSocket server, session management, run locking | E2E |
+| WhatsApp | ✅ | Baileys (WhatsApp Web protocol), QR pairing, typing indicators | — |
+| Discord | 🔜 | Discord bot channel | — |
+| Telegram | 🔜 | Telegram bot channel | — |
+| Desktop app | ✅ | Tauri v2 shell + Bun gateway sidecar — macOS, Linux, Windows | — |
+| CLI | 🔜 | Terminal-based chat interface | — |
+| Multi-user auth | 🔜 | Token-based auth for Web UI, per-user sessions | — |
 
 ### Tools
 
-| Component | | Details |
-|-----------|---|---------|
-| Browser | ✅ | Playwright headless with accessibility snapshot refs |
-| Web fetch | ✅ | HTTP fetch + HTML-to-text conversion |
-| Web search | 🔜 | Brave/SearXNG search API integration |
-| Scheduler | 🔜 | Periodic web monitoring with natural language conditions |
-| File system | 🔜 | Read/write local files with sandboxed access |
-| Code interpreter | 🔜 | Execute code snippets in a sandboxed runtime |
+| Component | | Details | Tested |
+|-----------|---|---------|--------|
+| Browser | ✅ | Playwright headless with accessibility snapshot refs | E2E |
+| Web fetch | ✅ | HTTP fetch + HTML-to-text conversion | E2E |
+| Web search | ✅ | Brave / Perplexity Sonar / SearXNG — structured search + AI-synthesized answers | Unit |
+| Scheduler | 🔜 | Periodic web monitoring with natural language conditions | — |
+| File system | 🔜 | Read/write local files with sandboxed access | — |
+| Code interpreter | 🔜 | Execute code snippets in a sandboxed runtime | — |
 
 <p align="center">
   <img src="docs/assets/desktop-app-screenshot.png" alt="Spaceduck Desktop App" width="720">
-  <br>
-  <sub>Spaceduck desktop app (Tauri v2) — macOS</sub>
 </p>
 
 ## What it does today
@@ -283,9 +283,8 @@ All planned features are tracked inline in the [Status](#status) tables above (m
 
 1. **Configuration system** — replace flat `.env` with a structured config file. The current approach does not scale: no nesting, no type safety, no multi-environment support.
 2. **Per-user isolation** — scope facts by user identity so multi-user setups don't leak memory across people.
-3. **Web search tool** — search API integration for real-time information retrieval.
-4. **Provider fallback chain** — auto-retry with a secondary provider on failure or timeout.
-5. **Memory inspector** — Web UI panel to browse, edit, and delete stored facts.
+3. **Provider fallback chain** — auto-retry with a secondary provider on failure or timeout.
+4. **Memory inspector** — Web UI panel to browse, edit, and delete stored facts.
 
 ---
 
