@@ -21,6 +21,8 @@ import type { EventBus } from "./events";
 import type { Middleware, MessageContext } from "./middleware";
 import { composeMiddleware } from "./middleware";
 import type { ToolRegistry } from "./tool-registry";
+import type { FactExtractor } from "./fact-extractor";
+import { guardFact } from "./fact-extractor";
 
 function generateId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
@@ -34,6 +36,7 @@ export interface AgentDeps {
   readonly eventBus: EventBus;
   readonly logger: Logger;
   readonly longTermMemory?: LongTermMemory;
+  readonly factExtractor?: FactExtractor;
   readonly middleware?: Middleware[];
   readonly toolRegistry?: ToolRegistry;
   readonly maxToolRounds?: number;
@@ -105,6 +108,33 @@ export class AgentLoop {
       conversationId,
       message: userMessage,
     });
+
+    // ── Pre-context regex extraction: update identity slots BEFORE building context ──
+    if (this.deps.factExtractor && this.deps.longTermMemory) {
+      try {
+        const candidates = this.deps.factExtractor.extractRegexFromText(userMessage.content);
+        for (const c of candidates) {
+          if (c.slot === "other" || c.slot === "preference") continue;
+          const guard = guardFact(c.content);
+          if (!guard.pass) continue;
+
+          await this.deps.longTermMemory.upsertSlotFact({
+            slot: c.slot,
+            slotValue: c.slotValue ?? "",
+            content: c.content,
+            conversationId,
+            lang: c.lang,
+            source: "pre_regex",
+            derivedFromMessageId: userMessage.id,
+            confidence: guard.confidence,
+          });
+        }
+      } catch (e) {
+        this.logger.warn("Pre-context regex extraction failed (non-fatal)", {
+          conversationId, error: String(e),
+        });
+      }
+    }
 
     // Get tool definitions if a registry is available
     const toolDefs = this.deps.toolRegistry?.getDefinitions() ?? [];

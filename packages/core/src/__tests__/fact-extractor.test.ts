@@ -44,7 +44,7 @@ describe("FactExtractor", () => {
     expect(facts.ok).toBe(true);
     if (facts.ok) {
       expect(facts.value.length).toBeGreaterThanOrEqual(1);
-      expect(facts.value.every((f) => f.source === "auto-extracted")).toBe(true);
+      expect(facts.value.every((f) => f.source === "regex" || f.source === "auto-extracted")).toBe(true);
       expect(facts.value.every((f) => typeof f.confidence === "number")).toBe(true);
     }
   });
@@ -122,6 +122,7 @@ describe("FactExtractor", () => {
     const brokenLtm = {
       ...ltm,
       remember: async () => ({ ok: false as const, error: new Error("DB down") as any }),
+      upsertSlotFact: async () => ({ ok: false as const, error: new Error("DB down") as any }),
       recall: ltm.recall.bind(ltm),
       forget: ltm.forget.bind(ltm),
       listAll: ltm.listAll.bind(ltm),

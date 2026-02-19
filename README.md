@@ -76,7 +76,7 @@ It remembers what you've said across conversations, acts on your behalf with rea
 | Types & contracts | ✅ | `Message`, `Attachment`, `Provider`, `EmbeddingProvider`, `ConversationStore`, `LongTermMemory`, `Result<T>` monad | Unit |
 | Context builder | ✅ | Token budgeting, system prompt injection, LTM fact recall, auto-compaction, afterTurn eager flush, attachment hints for tool invocation | Unit |
 | Agent loop | ✅ | Multi-round tool execution with automatic tool → result → LLM cycles | Unit |
-| Event bus | ✅ | Typed fire-and-forget + async emit, powers fact extraction pipeline | Unit |
+| Event bus | ✅ | Typed fire-and-forget + async emit, powers the fact extraction pipeline | Unit |
 | Configuration system | 🔜 | Structured config file replacing `.env` — type-safe, nestable, multi-environment | — |
 | Plugin lifecycle | 🔜 | Standardized init/shutdown hooks for providers, channels, and tools | — |
 | Streaming protocol v2 | 🔜 | Structured envelopes for tool progress, memory events, and error recovery | — |
@@ -86,12 +86,12 @@ It remembers what you've said across conversations, acts on your behalf with rea
 | Component | | Details | Tested |
 |-----------|---|---------|--------|
 | Conversation store | ✅ | Full message history in SQLite with WAL mode | Unit |
-| Long-term facts | ✅ | Durable personal facts with FTS5 full-text search | Unit |
-| Vector embeddings | ✅ | sqlite-vec cosine similarity, configurable dimensions, `minScore` filtering, FTS5 fallback | Unit |
-| Fact extraction | ✅ | LLM-based with hardened JSON parsing, regex fallback, afterTurn eager flush | Unit |
-| Deduplication | ✅ | SHA-256 content hashing for exact duplicates | Unit |
+| Long-term facts | ✅ | Durable personal facts with FTS5 full-text search, identity slot model (`name`/`age`/`location`/`preference`) | Unit |
+| Vector embeddings | ✅ | sqlite-vec cosine similarity, configurable dimensions, `minScore` filtering, FTS5 fallback, purpose-aware embeddings (`index`/`retrieval`) | Unit |
+| Fact extraction | ✅ | Regex-first + LLM-second pipeline, pre-context extraction for same-turn updates, V2 Danish grammar support, symmetric negation detection | Unit |
+| Deduplication | ✅ | SHA-256 content hashing with Unicode normalization for exact duplicates | Unit |
 | Hybrid recall | ✅ | RRF combining vector cosine + FTS5 BM25, recency decay, SQL expiry pushdown | Unit |
-| Fact conflict resolution | 🔜 | Detect contradicting facts and prefer the most recent or highest-confidence version | — |
+| Fact conflict resolution | ✅ | Transactional `upsertSlotFact` with SQL write guards: `pre_regex` beats `post_llm` per message, time-ordering prevents stale overwrites | Unit |
 | Backfill script | 🔜 | Resumable migration to embed existing unembedded facts | — |
 | Memory inspector | 🔜 | Web UI panel to browse, edit, and delete stored facts | — |
 | Per-user isolation | 🔜 | Scope facts by user identity across channels | — |
@@ -206,7 +206,7 @@ spaceduck/
 │   │       ├── types/         # Message, Attachment, Provider, EmbeddingProvider, Memory, Errors
 │   │       ├── agent.ts       # AgentLoop orchestrator with multi-round tool calling
 │   │       ├── context-builder.ts  # Token budget, compaction, afterTurn eager flush, attachment hints
-│   │       ├── fact-extractor.ts   # LLM-based fact extraction + guardFact firewall
+│   │       ├── fact-extractor.ts   # Regex-first + LLM fact extraction with slot conflict resolution
 │   │       ├── events.ts      # Typed EventBus (fire-and-forget + async)
 │   │       └── config.ts
 │   ├── ui/                    # Shared React components, hooks, and styles

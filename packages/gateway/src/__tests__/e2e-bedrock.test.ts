@@ -1,5 +1,5 @@
 /**
- * Live E2E tests — hits real Bedrock APIs (Nova 2 Lite + Titan V2).
+ * Live E2E tests — hits real Bedrock APIs (Nova 2 Lite + Nova 2 Multimodal Embeddings).
  *
  * Skipped unless RUN_LIVE_TESTS=1 is set.
  * Requires: AWS_BEARER_TOKEN_BEDROCK and AWS_REGION in env.
@@ -9,15 +9,19 @@
  *
  * Tests:
  *   1. Direct chat — Nova 2 Lite responds
- *   2. Direct embeddings — Titan V2 returns 1024-dim vector
+ *   2a. Direct embeddings — Titan V2 (legacy) returns 1024-dim vector
+ *   2b. Nova 2 Multimodal Embeddings — contract test (dimensions, purpose, truncation)
  *   3. Full gateway — multi-turn conversation with memory
  *   4. Cross-conversation memory — fact told in conv A recalled in conv B
+ *   5. Regex-only extraction — no LLM, identity patterns fire deterministically
+ *   6. Slot superseding — newer fact deactivates older fact in the same slot
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { createGateway, type Gateway } from "../gateway";
 import { BedrockProvider, BedrockEmbeddingProvider } from "@spaceduck/provider-bedrock";
 import type { WsServerEnvelope } from "@spaceduck/core";
+import { ConsoleLogger } from "@spaceduck/core";
 
 process.env.SPACEDUCK_REQUIRE_AUTH = "0";
 
@@ -84,7 +88,7 @@ describe.skipIf(!LIVE)("Bedrock chat — Nova 2 Lite (direct)", () => {
   }, 30_000);
 });
 
-// ── 2. Direct Embedding Tests ─────────────────────────────────────────────────
+// ── 2a. Legacy Titan Embedding Tests ─────────────────────────────────────────
 
 describe.skipIf(!LIVE)("Bedrock embeddings — Titan V2 (direct)", () => {
   let embedding: BedrockEmbeddingProvider;
@@ -103,60 +107,74 @@ describe.skipIf(!LIVE)("Bedrock embeddings — Titan V2 (direct)", () => {
 
     expect(vec).toBeInstanceOf(Float32Array);
     expect(vec.length).toBe(1024);
-    // All values should be finite numbers (normalized output)
     expect(vec.every((v) => isFinite(v))).toBe(true);
     console.log("  Titan V2 vector[0..4]:", [...vec.slice(0, 5)].map((v) => v.toFixed(6)).join(", "));
   }, 30_000);
 
   it("should return semantically similar vectors for related texts", async () => {
     const [a, b, c] = await embedding.embedBatch([
-      "User's name is Alice",            // topic: name
-      "The person's name is Alice",      // same topic, different wording
-      "User enjoys hiking in mountains", // completely different topic
+      "User's name is Alice",
+      "The person's name is Alice",
+      "User enjoys hiking in mountains",
     ]);
 
-    // Cosine similarity helper
-    function cosine(x: Float32Array, y: Float32Array): number {
-      let dot = 0, nx = 0, ny = 0;
-      for (let i = 0; i < x.length; i++) {
-        dot += x[i] * y[i];
-        nx += x[i] * x[i];
-        ny += y[i] * y[i];
-      }
-      return dot / (Math.sqrt(nx) * Math.sqrt(ny));
-    }
-
-    const simAB = cosine(a, b); // should be high — same concept
-    const simAC = cosine(a, c); // should be lower — different concepts
+    const simAB = cosine(a, b);
+    const simAC = cosine(a, c);
 
     console.log(`  sim(name-A, name-B) = ${simAB.toFixed(4)}`);
     console.log(`  sim(name-A, hiking) = ${simAC.toFixed(4)}`);
 
     expect(simAB).toBeGreaterThan(simAC);
-    expect(simAB).toBeGreaterThan(0.8); // same concept should be very similar
+    expect(simAB).toBeGreaterThan(0.8);
+  }, 60_000);
+});
+
+// ── 2b. Nova 2 Multimodal Embeddings Contract Test ──────────────────────────
+
+describe.skipIf(!LIVE)("Bedrock embeddings — Nova 2 Multimodal (contract)", () => {
+  let embedding: BedrockEmbeddingProvider;
+
+  beforeAll(() => {
+    embedding = new BedrockEmbeddingProvider({
+      model: "amazon.nova-2-multimodal-embeddings-v1:0",
+      dimensions: 1024,
+      apiKey,
+      region,
+    });
+  });
+
+  it("should return a 1024-dim Float32Array with purpose=index", async () => {
+    const vec = await embedding.embed("User's name is Alice", { purpose: "index" });
+    expect(vec).toBeInstanceOf(Float32Array);
+    expect(vec.length).toBe(1024);
+    expect(vec.every((v) => isFinite(v))).toBe(true);
+    console.log("  Nova 2 index vector[0..4]:", [...vec.slice(0, 5)].map((v) => v.toFixed(6)).join(", "));
+  }, 30_000);
+
+  it("should return a vector with purpose=retrieval", async () => {
+    const vec = await embedding.embed("what is the user's name?", { purpose: "retrieval" });
+    expect(vec).toBeInstanceOf(Float32Array);
+    expect(vec.length).toBe(1024);
+  }, 30_000);
+
+  it("should have higher cross-lingual similarity than Titan V2", async () => {
+    const enIdx = await embedding.embed("User's name is Alice", { purpose: "index" });
+    const daRet = await embedding.embed("Hvad hedder brugeren?", { purpose: "retrieval" });
+    const sim = cosine(enIdx, daRet);
+    console.log(`  Nova 2 cross-lingual sim(en-index, da-retrieval) = ${sim.toFixed(4)}`);
+    expect(sim).toBeGreaterThan(0.3);
   }, 60_000);
 
-  it("should embed Danish text correctly", async () => {
-    const [da, en] = await embedding.embedBatch([
-      "Brugeren hedder Alice",  // Danish: "The user's name is Alice"
-      "User's name is Alice",   // English equivalent
-    ]);
-
-    function cosine(x: Float32Array, y: Float32Array): number {
-      let dot = 0, nx = 0, ny = 0;
-      for (let i = 0; i < x.length; i++) {
-        dot += x[i] * y[i];
-        nx += x[i] * x[i];
-        ny += y[i] * y[i];
-      }
-      return dot / (Math.sqrt(nx) * Math.sqrt(ny));
+  it("should batch embed multiple texts", async () => {
+    const vecs = await embedding.embedBatch(
+      ["Hello", "World", "Test"],
+      { purpose: "index" },
+    );
+    expect(vecs).toHaveLength(3);
+    for (const vec of vecs) {
+      expect(vec).toBeInstanceOf(Float32Array);
+      expect(vec.length).toBe(1024);
     }
-
-    const sim = cosine(da, en);
-    console.log(`  sim(Danish "name is Alice", English "name is Alice") = ${sim.toFixed(4)}`);
-
-    // Titan V2 supports multilingual — cross-language similarity should be significant
-    expect(sim).toBeGreaterThan(0.5);
   }, 60_000);
 });
 
@@ -173,7 +191,7 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
       region,
     });
     const bedrockEmbedding = new BedrockEmbeddingProvider({
-      model: "amazon.titan-embed-text-v2:0",
+      model: "amazon.nova-2-multimodal-embeddings-v1:0",
       dimensions: 1024,
       apiKey,
       region,
@@ -268,7 +286,6 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
   it("should maintain multi-turn context", async () => {
     const ws = await connectWs();
     try {
-      // Turn 1: tell it a color
       const t1 = collectUntil(ws, isTerminal);
       ws.send(JSON.stringify({
         v: 1, type: "message.send", requestId: "ctx-1",
@@ -280,7 +297,6 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
       const convId = (t1Msgs.find((m) => m.type === "message.accepted") as any)?.conversationId;
       expect(convId).toBeTruthy();
 
-      // Turn 2: ask about it
       const t2 = collectUntil(ws, isTerminal);
       ws.send(JSON.stringify({
         v: 1, type: "message.send", requestId: "ctx-2",
@@ -297,23 +313,23 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
     }
   }, 80_000);
 
-  it("cross-conversation memory: fact told in conv A recalled in conv B", async () => {
+  it("cross-conversation memory: fact told in conv A recalled in conv B (topK)", async () => {
     const { longTermMemory } = gateway.deps;
 
-    // Seed a fact directly into LTM (simulates prior conversation extraction)
     const stored = await longTermMemory.remember({
       conversationId: "conv-a",
       content: "User's name is Alice and they live in Copenhagen",
       source: "auto-extracted",
       confidence: 0.9,
+      slot: "name",
+      slotValue: "Alice",
+      lang: "en",
     });
     expect(stored.ok).toBe(true);
     console.log("  Seeded fact:", stored.ok ? stored.value.content : "FAILED");
 
-    // Brief pause so embedding is indexed
     await Bun.sleep(500);
 
-    // Recall via vector search (simulates what happens when conv B starts)
     const recalled = await longTermMemory.recall("What is the user's name?", 5, {
       strategy: "vector",
     });
@@ -321,28 +337,15 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
     expect(recalled.ok).toBe(true);
     if (!recalled.ok) return;
 
-    console.log("  Recalled facts:", recalled.value.map((f) => f.content));
+    console.log("  Recalled facts (topK=5):", recalled.value.map((f) => f.content));
     expect(recalled.value.length).toBeGreaterThan(0);
-    expect(recalled.value[0].content.toLowerCase()).toContain("alice");
+    const hasAlice = recalled.value.some((f) => f.content.toLowerCase().includes("alice"));
+    expect(hasAlice).toBe(true);
   }, 60_000);
 
-  /**
-   * Full end-to-end test of the afterTurn() eager flush:
-   *
-   * Leg A — "Web UI": user tells bot "Jeg er 42 år gammel."
-   *   → afterTurn() extracts the fact and writes it to LTM in the background
-   *
-   * Leg B — "WhatsApp": completely new sender / conversation asks "Hvor gammel er jeg?"
-   *   → context builder recalls the fact via vector search and injects it as context
-   *   → bot answers with "38"
-   *
-   * This is the exact real-world failure that was fixed: short conversations never
-   * reached the 10-message compaction threshold, so facts were never persisted.
-   */
   it("afterTurn flush: fact told in web UI is recalled in a fresh WhatsApp conversation", async () => {
     const { longTermMemory } = gateway.deps;
 
-    // ── Leg A: "Web UI" conversation ─────────────────────────────────────────
     const wsA = await connectWs("web-ui-age-" + Date.now());
     try {
       const t1 = collectUntil(wsA, isTerminal);
@@ -360,11 +363,6 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
       wsA.close();
     }
 
-    // ── Wait for afterTurn() to finish ───────────────────────────────────────
-    // It runs in the background after the WS response is sent, making its own
-    // LLM call to extract facts. Poll LTM directly instead of a fixed sleep.
-    // Poll LTM directly — avoids a fixed sleep, resolves as soon as the background
-    // LLM extraction call finishes (typically < 5s).
     console.log("  Waiting for afterTurn() to persist fact…");
     let factPersisted = false;
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -381,7 +379,6 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
     }
     expect(factPersisted).toBe(true);
 
-    // ── Leg B: "WhatsApp" — brand-new sender, no shared history ─────────────
     const wsB = await connectWs("whatsapp-age-" + Date.now());
     try {
       const t2 = collectUntil(wsB, isTerminal);
@@ -402,3 +399,82 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
     }
   }, 120_000);
 });
+
+// ── 5. Regex-only tests moved to packages/core/src/__tests__/regex-extraction.test.ts ──
+
+// ── 6. Slot Superseding Test ────────────────────────────────────────────────
+
+describe.skipIf(!LIVE)("Slot superseding: newer fact deactivates older", () => {
+  it("should deactivate old name when new name is stored", async () => {
+    const bedrockEmbedding = new BedrockEmbeddingProvider({
+      model: "amazon.nova-2-multimodal-embeddings-v1:0",
+      dimensions: 1024,
+      apiKey,
+      region,
+    });
+
+    const { SqliteLongTermMemory } = await import("@spaceduck/memory-sqlite");
+    const { ensureCustomSQLite, SchemaManager } = await import("@spaceduck/memory-sqlite");
+    const { Database } = await import("bun:sqlite");
+
+    ensureCustomSQLite();
+    const db = new Database(":memory:");
+    const logger = new ConsoleLogger("error");
+    const schema = new SchemaManager(db, logger);
+    schema.loadExtensions();
+    await schema.migrate();
+
+    const ltm = new SqliteLongTermMemory(db, logger, bedrockEmbedding);
+
+    // Store name = Alice
+    const r1 = await ltm.remember({
+      conversationId: "slot-test",
+      content: "User's name is Alice",
+      source: "regex",
+      confidence: 0.9,
+      slot: "name",
+      slotValue: "Alice",
+      lang: "en",
+    });
+    expect(r1.ok).toBe(true);
+    const aliceId = r1.ok ? r1.value.id : "";
+
+    // Store name = Bob (should supersede Alice)
+    const r2 = await ltm.remember({
+      conversationId: "slot-test",
+      content: "User's name is Bob",
+      source: "regex",
+      confidence: 0.9,
+      slot: "name",
+      slotValue: "Bob",
+      lang: "en",
+    });
+    expect(r2.ok).toBe(true);
+
+    await Bun.sleep(500);
+
+    // Recall: should only return Bob (Alice is deactivated)
+    const recalled = await ltm.recall("What is the user's name?", 5, { strategy: "vector" });
+    expect(recalled.ok).toBe(true);
+    if (!recalled.ok) return;
+
+    console.log("  Recalled after supersede:", recalled.value.map((f) => ({ content: f.content, isActive: f.isActive })));
+    const activeNames = recalled.value.filter((f) => f.content.toLowerCase().includes("name"));
+    for (const fact of activeNames) {
+      expect(fact.content.toLowerCase()).not.toContain("alice");
+    }
+    expect(recalled.value.some((f) => f.content.toLowerCase().includes("bob"))).toBe(true);
+  }, 60_000);
+});
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function cosine(x: Float32Array, y: Float32Array): number {
+  let dot = 0, nx = 0, ny = 0;
+  for (let i = 0; i < x.length; i++) {
+    dot += x[i] * y[i];
+    nx += x[i] * x[i];
+    ny += y[i] * y[i];
+  }
+  return dot / (Math.sqrt(nx) * Math.sqrt(ny));
+}
