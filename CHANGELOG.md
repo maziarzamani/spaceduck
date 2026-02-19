@@ -6,6 +6,13 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.6.1](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.6.0...spaceduck-v0.6.1) (2026-02-19)
+
+
+### Bug Fixes
+
+* **ui:** filter tool messages from history, add target=_blank to markdown links ([900c89e](https://github.com/maziarzamani/spaceduck/commit/900c89e2036909f713d397bf6f91c366d60abfd3))
+
 ## [0.6.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.5.0...spaceduck-v0.6.0) (2026-02-19)
 
 
