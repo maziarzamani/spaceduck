@@ -50,6 +50,9 @@ export class WhatsAppChannel implements Channel {
   private readonly authDir: string;
   private readonly logger: Logger;
   private reconnecting = false;
+  private reconnectAttempts = 0;
+  private readonly maxReconnectAttempts = 5;
+  private readonly baseReconnectMs = 3000;
 
   // Buffer streamed deltas per (senderId, requestId) so we can send a
   // single WhatsApp message when the stream completes.
@@ -176,6 +179,12 @@ export class WhatsAppChannel implements Channel {
   // ── Internals ──────────────────────────────────────────────────────
 
   private async connect(): Promise<void> {
+    // Close any existing socket to prevent multiple concurrent connections
+    if (this.sock) {
+      try { this.sock.end(undefined); } catch { /* best effort */ }
+      this.sock = null;
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -203,6 +212,7 @@ export class WhatsAppChannel implements Channel {
         if (connection === "open") {
           this._status = "running";
           this.reconnecting = false;
+          this.reconnectAttempts = 0;
           this.logger.info("WhatsApp channel connected");
         }
 
@@ -215,13 +225,33 @@ export class WhatsAppChannel implements Channel {
             return;
           }
 
-          // Reconnect on transient failures
+          // Status 440 = conflict: replaced — another session took over.
+          // Back off aggressively to avoid a reconnect storm.
+          if (statusCode === 440) {
+            this.reconnectAttempts++;
+            if (this.reconnectAttempts > this.maxReconnectAttempts) {
+              this.logger.error("WhatsApp: too many conflict:replaced errors, giving up. Another session may be active.");
+              this._status = "stopped";
+              return;
+            }
+            const delay = this.baseReconnectMs * Math.pow(2, this.reconnectAttempts);
+            this.logger.warn(`WhatsApp conflict:replaced — attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}, retrying in ${delay}ms`);
+            this.reconnecting = true;
+            setTimeout(() => this.connect(), delay);
+            return;
+          }
+
+          // Reconnect on other transient failures
           if (!this.reconnecting && this._status !== "stopping") {
             this.reconnecting = true;
+            this.reconnectAttempts++;
+            const delay = Math.min(this.baseReconnectMs * Math.pow(2, this.reconnectAttempts - 1), 30_000);
             this.logger.warn("WhatsApp disconnected, reconnecting...", {
               statusCode,
+              attempt: this.reconnectAttempts,
+              delayMs: delay,
             });
-            setTimeout(() => this.connect(), 3000);
+            setTimeout(() => this.connect(), delay);
           }
         }
       }
