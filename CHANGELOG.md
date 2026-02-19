@@ -6,6 +6,13 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.6.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.5.0...spaceduck-v0.6.0) (2026-02-19)
+
+
+### Features
+
+* **desktop:** replace placeholder Tauri icons with spaceduck logo ([9628789](https://github.com/maziarzamani/spaceduck/commit/9628789104e0b055e98ce1b8bd1b602eb9a4f992))
+
 ## [0.5.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.4.0...spaceduck-v0.5.0) (2026-02-19)
 
 
