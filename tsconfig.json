@@ -22,7 +22,8 @@
       "@spaceduck/channel-whatsapp": ["packages/channels/whatsapp/src"],
       "@spaceduck/provider-bedrock": ["packages/providers/bedrock/src"],
       "@spaceduck/provider-gemini": ["packages/providers/gemini/src"],
-      "@spaceduck/memory-sqlite": ["packages/memory/sqlite/src"]
+      "@spaceduck/memory-sqlite": ["packages/memory/sqlite/src"],
+      "@spaceduck/tool-web-search": ["packages/tools/web-search/src"]
     },
     "types": ["bun-types"],
     "jsx": "react-jsx"

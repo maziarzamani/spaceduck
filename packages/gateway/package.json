@@ -17,7 +17,8 @@
     "@spaceduck/web": "workspace:*",
     "@spaceduck/channel-whatsapp": "workspace:*",
     "@spaceduck/tool-browser": "workspace:*",
-    "@spaceduck/tool-web-fetch": "workspace:*"
+    "@spaceduck/tool-web-fetch": "workspace:*",
+    "@spaceduck/tool-web-search": "workspace:*"
   },
   "devDependencies": {
     "bun-types": "latest"
