@@ -13,6 +13,7 @@ coverage/
 tmp/
 data/whatsapp-auth/
 data/uploads/
+**/data/uploads/
 
 # Tauri desktop app
 apps/desktop/src-tauri/target/
