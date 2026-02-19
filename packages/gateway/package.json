@@ -14,7 +14,7 @@
     "@spaceduck/provider-openrouter": "workspace:*",
     "@spaceduck/provider-lmstudio": "workspace:*",
     "@spaceduck/provider-bedrock": "workspace:*",
-    "@spaceduck/channel-web": "workspace:*",
+    "@spaceduck/web": "workspace:*",
     "@spaceduck/channel-whatsapp": "workspace:*",
     "@spaceduck/tool-browser": "workspace:*",
     "@spaceduck/tool-web-fetch": "workspace:*"

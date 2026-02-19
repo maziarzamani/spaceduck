@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "ai.spaceduck.desktop",
   "build": {
-    "beforeBuildCommand": "bun run build:sidecar",
-    "beforeDevCommand": "bun run build:sidecar",
-    "frontendDist": "./",
-    "devUrl": "http://localhost:3000"
+    "beforeBuildCommand": "bun run build:all",
+    "beforeDevCommand": "bun run --cwd ../.. dev",
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
@@ -16,12 +16,11 @@
         "width": 1024,
         "height": 768,
         "minWidth": 600,
-        "minHeight": 400,
-        "url": "loading.html"
+        "minHeight": 400
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:3000 ws://localhost:3000; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com data:"
     }
   },
   "bundle": {

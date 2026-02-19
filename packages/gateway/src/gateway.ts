@@ -2,7 +2,7 @@
 
 // Bun HTML import — auto-bundles <script>/<link> tags for fullstack dev server
 // @ts-ignore: Bun HTML import
-import homepage from "@spaceduck/channel-web/index.html";
+import homepage from "@spaceduck/web/index.html";
 
 import { Database } from "bun:sqlite";
 import {

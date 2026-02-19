@@ -12,7 +12,9 @@ A modular, open-source AI chat assistant built with Bun. Monorepo with workspace
 
 - `@spaceduck/core` — zero-dependency contract package (types, interfaces, agent loop, context builder, events, middleware)
 - `@spaceduck/gateway` — composition root that wires everything together, lifecycle orchestration
-- `@spaceduck/channel-web` — Bun fullstack server + React frontend + WebSocket
+- `@spaceduck/ui` — shared React components, hooks, and styles (used by web + desktop)
+- `@spaceduck/web` — web deployment entry point (served by gateway via Bun HTML import)
+- `@spaceduck/desktop` — Tauri v2 desktop app (embeds UI + Bun gateway sidecar)
 - `@spaceduck/provider-gemini` — Google AI Studio (Gemini) streaming adapter (primary)
 - `@spaceduck/provider-bedrock` — AWS Bedrock Converse API streaming adapter (secondary)
 - `@spaceduck/memory-sqlite` — SQLite storage via Bun.SQL (ConversationStore + LongTermMemory)

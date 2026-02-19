@@ -11,18 +11,29 @@
         "typescript": "^5",
       },
     },
-    "packages/channels/web": {
-      "name": "@spaceduck/channel-web",
+    "apps/desktop": {
+      "name": "@spaceduck/desktop",
       "version": "0.1.0",
       "dependencies": {
-        "@spaceduck/core": "workspace:*",
-        "class-variance-authority": "latest",
-        "clsx": "latest",
-        "lucide-react": "latest",
+        "@spaceduck/ui": "workspace:*",
+        "@tauri-apps/api": "^2",
+        "@tauri-apps/plugin-shell": "^2",
+      },
+      "devDependencies": {
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "bun-plugin-tailwind": "latest",
+        "bun-types": "latest",
+        "tailwindcss": "^4",
+      },
+    },
+    "apps/web": {
+      "name": "@spaceduck/web",
+      "version": "0.1.0",
+      "dependencies": {
+        "@spaceduck/ui": "workspace:*",
         "react": "^19",
         "react-dom": "^19",
-        "react-markdown": "latest",
-        "tailwind-merge": "latest",
       },
       "devDependencies": {
         "@types/react": "^19",
@@ -57,7 +68,6 @@
       "name": "@spaceduck/gateway",
       "version": "0.1.0",
       "dependencies": {
-        "@spaceduck/channel-web": "workspace:*",
         "@spaceduck/channel-whatsapp": "workspace:*",
         "@spaceduck/core": "workspace:*",
         "@spaceduck/memory-sqlite": "workspace:*",
@@ -67,6 +77,7 @@
         "@spaceduck/provider-openrouter": "workspace:*",
         "@spaceduck/tool-browser": "workspace:*",
         "@spaceduck/tool-web-fetch": "workspace:*",
+        "@spaceduck/web": "workspace:*",
       },
       "devDependencies": {
         "bun-types": "latest",
@@ -145,6 +156,27 @@
       "devDependencies": {
         "@types/html-to-text": "^9",
         "bun-types": "latest",
+      },
+    },
+    "packages/ui": {
+      "name": "@spaceduck/ui",
+      "version": "0.1.0",
+      "dependencies": {
+        "@spaceduck/core": "workspace:*",
+        "class-variance-authority": "latest",
+        "clsx": "latest",
+        "lucide-react": "latest",
+        "react": "^19",
+        "react-dom": "^19",
+        "react-markdown": "latest",
+        "tailwind-merge": "latest",
+      },
+      "devDependencies": {
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "bun-plugin-tailwind": "latest",
+        "bun-types": "latest",
+        "tailwindcss": "^4",
       },
     },
   },
@@ -271,11 +303,11 @@
 
     "@selderee/plugin-htmlparser2": ["@selderee/plugin-htmlparser2@0.11.0", "", { "dependencies": { "domhandler": "^5.0.3", "selderee": "^0.11.0" } }, "sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ=="],
 
-    "@spaceduck/channel-web": ["@spaceduck/channel-web@workspace:packages/channels/web"],
-
     "@spaceduck/channel-whatsapp": ["@spaceduck/channel-whatsapp@workspace:packages/channels/whatsapp"],
 
     "@spaceduck/core": ["@spaceduck/core@workspace:packages/core"],
+
+    "@spaceduck/desktop": ["@spaceduck/desktop@workspace:apps/desktop"],
 
     "@spaceduck/gateway": ["@spaceduck/gateway@workspace:packages/gateway"],
 
@@ -292,6 +324,14 @@
     "@spaceduck/tool-browser": ["@spaceduck/tool-browser@workspace:packages/tools/browser"],
 
     "@spaceduck/tool-web-fetch": ["@spaceduck/tool-web-fetch@workspace:packages/tools/web-fetch"],
+
+    "@spaceduck/ui": ["@spaceduck/ui@workspace:packages/ui"],
+
+    "@spaceduck/web": ["@spaceduck/web@workspace:apps/web"],
+
+    "@tauri-apps/api": ["@tauri-apps/api@2.10.1", "", {}, "sha512-hKL/jWf293UDSUN09rR69hrToyIXBb8CjGaWC7gfinvnQrBVvnLr08FeFi38gxtugAVyVcTa5/FD/Xnkb1siBw=="],
+
+    "@tauri-apps/plugin-shell": ["@tauri-apps/plugin-shell@2.3.5", "", { "dependencies": { "@tauri-apps/api": "^2.10.1" } }, "sha512-jewtULhiQ7lI7+owCKAjc8tYLJr92U16bPOeAa472LHJdgaibLP83NcfAF2e+wkEcA53FxKQAZ7byDzs2eeizg=="],
 
     "@tokenizer/inflate": ["@tokenizer/inflate@0.4.1", "", { "dependencies": { "debug": "^4.4.3", "token-types": "^6.1.1" } }, "sha512-2mAv+8pkG6GIZiF1kNg1jAjh27IDxEPKwdGul3snfztFerfPGI1LjDezZp3i7BElXompqEtPmoPx6c2wgtWsOA=="],
 

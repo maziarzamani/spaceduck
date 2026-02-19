@@ -6,6 +6,7 @@
   "workspaces": [
     "packages/core",
     "packages/gateway",
+    "packages/ui",
     "packages/channels/*",
     "packages/providers/*",
     "packages/memory/*",
@@ -14,6 +15,7 @@
   ],
   "scripts": {
     "dev": "bun --watch run packages/gateway/src/index.ts",
+    "dev:desktop": "cd apps/desktop && cargo tauri dev",
     "dev:mock": "bun --watch run packages/gateway/src/dev-mock.ts",
     "build": "bun build --target=bun --production --outdir=dist --external=playwright-core --external=electron --external=chromium-bidi packages/gateway/src/index.ts",
     "typecheck": "tsc --noEmit",

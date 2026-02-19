@@ -6,6 +6,14 @@ import type {
   Message,
 } from "@spaceduck/core";
 
+function getWsUrl(): string {
+  if (typeof window !== "undefined" && "__TAURI__" in window) {
+    return "ws://localhost:3000/ws";
+  }
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws`;
+}
+
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 export interface PendingStream {
@@ -45,8 +53,7 @@ export function useSpaceduckWs(): UseSpaceduckWs {
 
   // Connect on mount
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const wsUrl = getWsUrl();
 
     setStatus("connecting");
     const ws = new WebSocket(wsUrl);

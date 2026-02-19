@@ -39,28 +39,26 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
   return (
     <div className="border-t border-border bg-card/50 backdrop-blur-sm px-4 py-3">
       <div className="max-w-3xl mx-auto flex items-end gap-2">
-        <div className="flex-1 relative">
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isStreaming ? "Waiting for response..." : "Type a message..."}
-            disabled={disabled}
-            rows={1}
-            className={cn(
-              "w-full resize-none rounded-xl border border-input bg-background px-4 py-3 text-sm",
-              "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-              "transition-colors",
-            )}
-          />
-        </div>
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={isStreaming ? "Waiting for response..." : "Type a message..."}
+          disabled={disabled}
+          rows={1}
+          className={cn(
+            "flex-1 min-w-0 resize-none rounded-xl border border-input bg-background px-4 py-3 text-sm leading-[1.375rem]",
+            "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            "transition-colors",
+          )}
+        />
         <button
           onClick={handleSubmit}
           disabled={!canSend}
           className={cn(
-            "shrink-0 p-3 rounded-xl transition-all",
+            "shrink-0 self-end h-[44px] w-[44px] flex items-center justify-center rounded-xl transition-all",
             canSend
               ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25"
               : "bg-muted text-muted-foreground cursor-not-allowed",

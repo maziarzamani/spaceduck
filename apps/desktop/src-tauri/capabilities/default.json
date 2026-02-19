@@ -15,6 +15,15 @@
       ]
     },
     {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "binaries/spaceduck-server",
+          "sidecar": true
+        }
+      ]
+    },
+    {
       "identifier": "shell:allow-stdin-write"
     }
   ]
