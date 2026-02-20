@@ -293,15 +293,18 @@ To enable voice input via the mic button in the web UI, install [OpenAI Whisper]
 pip install openai-whisper   # requires Python 3.9+, ffmpeg
 ```
 
-When `whisper` is on your PATH, the gateway detects it at startup and enables the mic button in the chat UI. Click the mic to record, click stop to transcribe. The transcript appears in the text input for review before sending — no audio is stored, no agent loop is involved.
+When `whisper` is on your PATH, the gateway detects it at startup and enables the mic button in the chat UI. Hold the mic button to record — a live waveform visualizes audio input in real-time. Release to transcribe. The transcript appears in the text input for review before sending — no audio is stored, no agent loop is involved.
 
-Configure the model and limits in `.env`:
+Configure the model, language, and limits in `.env`:
 
 ```env
-SPACEDUCK_STT_MODEL=small          # tiny | base | small | medium | large
+SPACEDUCK_STT_MODEL=small          # tiny | base | small | medium | large | turbo (see Whisper docs)
+SPACEDUCK_STT_LANGUAGE=            # ISO 639-1 code (en, da, de, …) — empty = auto-detect
 SPACEDUCK_STT_MAX_SECONDS=120      # UI auto-stop (seconds)
 SPACEDUCK_STT_MAX_BYTES=15728640   # max upload (bytes, default 15MB)
 ```
+
+See the [Whisper README](https://github.com/openai/whisper#available-models-and-languages) for available models, sizes, and supported languages.
 
 ### Embedding Setup
 
