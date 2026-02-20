@@ -75,6 +75,7 @@
         "@spaceduck/provider-gemini": "workspace:*",
         "@spaceduck/provider-lmstudio": "workspace:*",
         "@spaceduck/provider-openrouter": "workspace:*",
+        "@spaceduck/stt-whisper": "workspace:*",
         "@spaceduck/tool-browser": "workspace:*",
         "@spaceduck/tool-marker": "workspace:*",
         "@spaceduck/tool-web-fetch": "workspace:*",
@@ -135,6 +136,13 @@
         "@openrouter/sdk": "latest",
         "@spaceduck/core": "workspace:*",
       },
+      "devDependencies": {
+        "bun-types": "latest",
+      },
+    },
+    "packages/stt/whisper": {
+      "name": "@spaceduck/stt-whisper",
+      "version": "0.1.0",
       "devDependencies": {
         "bun-types": "latest",
       },
@@ -413,6 +421,8 @@
     "@spaceduck/provider-lmstudio": ["@spaceduck/provider-lmstudio@workspace:packages/providers/lmstudio"],
 
     "@spaceduck/provider-openrouter": ["@spaceduck/provider-openrouter@workspace:packages/providers/openrouter"],
+
+    "@spaceduck/stt-whisper": ["@spaceduck/stt-whisper@workspace:packages/stt/whisper"],
 
     "@spaceduck/tool-browser": ["@spaceduck/tool-browser@workspace:packages/tools/browser"],
 

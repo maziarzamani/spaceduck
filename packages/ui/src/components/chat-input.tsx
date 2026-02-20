@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, FileText } from "lucide-react";
+import { Send, Paperclip, X, FileText, Mic, Square, Loader2, Check } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import type { Attachment } from "@spaceduck/core";
+import { useVoiceRecorder } from "../hooks/use-voice-recorder";
 
 function getUploadUrl(): string {
   if (typeof window !== "undefined" && "__TAURI__" in window) {
@@ -16,15 +17,34 @@ interface ChatInputProps {
   onSend: (content: string, attachments?: Attachment[]) => void;
   disabled?: boolean;
   isStreaming?: boolean;
+  sttAvailable?: boolean;
+  sttMaxSeconds?: number;
 }
 
-export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
+function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttMaxSeconds }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const recorder = useVoiceRecorder({
+    languageHint: "da",
+    maxSeconds: sttMaxSeconds,
+    onTranscript: (text) => {
+      setValue((prev) => (prev ? prev + "\n" + text : text));
+      setTimeout(() => textareaRef.current?.focus(), 0);
+    },
+    onError: (err) => console.error("[stt]", err),
+  });
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -106,6 +126,11 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
   }
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled && !isStreaming && !uploading;
+  const showMic = sttAvailable && !canSend && !isStreaming && recorder.state === "idle";
+  const isRecording = recorder.state === "recording";
+  const isProcessing = recorder.state === "processing";
+  const isSuccess = recorder.state === "success";
+  const isError = recorder.state === "error";
 
   return (
     <div
@@ -186,25 +211,92 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
               "transition-colors",
             )}
           />
-          <Tooltip>
-            <TooltipTrigger asChild>
+          {isRecording ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {formatDuration(recorder.durationMs)}
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={recorder.toggle}
+                    size="icon"
+                    variant="destructive"
+                    className="h-[44px] w-[44px] rounded-xl"
+                  >
+                    <Square size={18} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Stop recording</TooltipContent>
+              </Tooltip>
+            </div>
+          ) : isProcessing ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-muted-foreground">Transcribing...</span>
               <Button
-                onClick={handleSubmit}
-                disabled={!canSend}
                 size="icon"
-                variant={canSend ? "default" : "secondary"}
-                className="h-[44px] w-[44px] shrink-0 rounded-xl"
+                variant="secondary"
+                disabled
+                className="h-[44px] w-[44px] rounded-xl"
               >
-                <Send size={18} />
+                <Loader2 size={18} className="animate-spin" />
               </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {canSend ? "Send message" : "Type a message to send"}
-            </TooltipContent>
-          </Tooltip>
+            </div>
+          ) : isSuccess ? (
+            <Button
+              size="icon"
+              variant="secondary"
+              disabled
+              className="h-[44px] w-[44px] shrink-0 rounded-xl"
+            >
+              <Check size={18} className="text-green-500" />
+            </Button>
+          ) : isError ? (
+            <Button
+              size="icon"
+              variant="secondary"
+              disabled
+              className="h-[44px] w-[44px] shrink-0 rounded-xl"
+            >
+              <X size={18} className="text-destructive" />
+            </Button>
+          ) : showMic ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={recorder.toggle}
+                  size="icon"
+                  variant="ghost"
+                  className="h-[44px] w-[44px] shrink-0 rounded-xl"
+                >
+                  <Mic size={18} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Dictate</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={!canSend}
+                  size="icon"
+                  variant={canSend ? "default" : "secondary"}
+                  className="h-[44px] w-[44px] shrink-0 rounded-xl"
+                >
+                  <Send size={18} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {canSend ? "Send message" : "Type a message to send"}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
         <p className="text-center text-xs text-muted-foreground mt-2 max-w-3xl mx-auto">
-          Shift+Enter for new line. Enter to send. Drop a PDF to attach.
+          {sttAvailable
+            ? "Shift+Enter for new line. Enter to send. Drop a PDF to attach. Click mic to dictate."
+            : "Shift+Enter for new line. Enter to send. Drop a PDF to attach."}
         </p>
       </div>
     </div>

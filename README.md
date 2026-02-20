@@ -35,7 +35,7 @@ It remembers what you've said across conversations, acts on your behalf with rea
 - **Recency decay + expiry** — older facts fade gracefully; stale facts are filtered at the SQL level
 
 ### Multi-Channel
-- **Web UI** — React chat with streaming deltas, conversations sidebar, Tailwind CSS
+- **Web UI** — React chat with streaming deltas, conversations sidebar, voice dictation, Tailwind CSS
 - **WhatsApp** — Baileys (WhatsApp Web protocol), QR pairing, typing indicators
 - **Desktop app** — Tauri v2 shell with Bun gateway sidecar — macOS, Linux, Windows
 - Discord, Telegram, and CLI planned
@@ -117,9 +117,10 @@ Regex extraction (same-turn, deterministic) currently covers English and Danish.
 
 | Component | | Details | Tested |
 |-----------|---|---------|--------|
-| Web UI | ✅ | React chat with streaming, conversations sidebar, file upload (drag-drop + paperclip), attachment chips, Tailwind CSS | — |
-| Gateway | ✅ | Bun HTTP + WebSocket server, session management, run locking, `POST /api/upload` with magic-byte validation | E2E |
+| Web UI | ✅ | React chat with streaming, conversations sidebar, file upload (drag-drop + paperclip), voice dictation (mic button), attachment chips, Tailwind CSS | — |
+| Gateway | ✅ | Bun HTTP + WebSocket server, session management, run locking, `POST /api/upload` with magic-byte validation, `POST /api/stt/transcribe` + `GET /api/stt/status` | E2E |
 | File uploads | ✅ | Multipart upload, PDF magic-byte validation, opaque attachment IDs, server-side `AttachmentStore` with TTL sweeper | Unit |
+| Voice dictation | ✅ | Speech-to-text via local [Whisper](https://github.com/openai/whisper) (optional, user-installed) | Unit |
 | WhatsApp | ✅ | Baileys (WhatsApp Web protocol), QR pairing, typing indicators | — |
 | Discord | 🔜 | Discord bot channel | — |
 | Telegram | 🔜 | Telegram bot channel | — |
@@ -145,7 +146,7 @@ Regex extraction (same-turn, deterministic) currently covers English and Danish.
 graph TD
     UI["Web UI (React)<br/>WebSocket + streaming deltas<br/>file upload (drag-drop / picker)"]
     WA["WhatsApp (Baileys)<br/>QR pairing · typing indicators"]
-    GW["Gateway (Bun)<br/>HTTP server · WS handler · sessions<br/>POST /api/upload"]
+    GW["Gateway (Bun)<br/>HTTP server · WS handler · sessions<br/>POST /api/upload · POST /api/stt/transcribe"]
     AS["Attachment Store<br/>opaque IDs · file sweeper"]
     AL["Agent Loop<br/>+ tool cycles"]
     CB["Context Builder<br/>+ budget · compact<br/>+ attachment hints"]
@@ -242,6 +243,8 @@ spaceduck/
 │       ├── web-fetch/         # HTTP fetch + HTML-to-text
 │       ├── web-search/        # Brave / Perplexity Sonar / SearXNG search + answers
 │       └── marker/            # PDF-to-markdown via Marker (optional, user-installed)
+│   └── stt/
+│       └── whisper/           # Speech-to-text via local Whisper (optional, user-installed)
 └── package.json               # Bun workspace root
 ```
 
@@ -282,6 +285,24 @@ When `marker_single` is on your PATH, the tool is automatically registered at st
 
 > **License note:** Marker is GPL-3.0 with Open Rail model weight restrictions. Spaceduck never bundles Marker — it calls `marker_single` as an external process.
 
+### Optional: Voice Dictation (Whisper)
+
+To enable voice input via the mic button in the web UI, install [OpenAI Whisper](https://github.com/openai/whisper) separately:
+
+```bash
+pip install openai-whisper   # requires Python 3.9+, ffmpeg
+```
+
+When `whisper` is on your PATH, the gateway detects it at startup and enables the mic button in the chat UI. Click the mic to record, click stop to transcribe. The transcript appears in the text input for review before sending — no audio is stored, no agent loop is involved.
+
+Configure the model and limits in `.env`:
+
+```env
+SPACEDUCK_STT_MODEL=small          # tiny | base | small | medium | large
+SPACEDUCK_STT_MAX_SECONDS=120      # UI auto-stop (seconds)
+SPACEDUCK_STT_MAX_BYTES=15728640   # max upload (bytes, default 15MB)
+```
+
 ### Embedding Setup
 
 Vector memory requires an embedding model. The default `.env.example` is configured for Amazon Bedrock (Titan V2):
@@ -309,6 +330,7 @@ bun test packages/tools/browser/     # Browser tool tests
 bun test packages/tools/web-fetch/   # Web-fetch tests
 bun test packages/tools/web-search/  # Web search + answer tests
 bun test packages/tools/marker/      # Marker document scanner tests
+bun test packages/stt/whisper/       # Whisper STT tests
 bun test packages/gateway/src/__tests__/attachment-store.test.ts  # Attachment store tests
 
 # Live E2E tests against Bedrock (requires AWS_BEARER_TOKEN_BEDROCK)
