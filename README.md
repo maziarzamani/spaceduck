@@ -293,15 +293,27 @@ To enable voice input via the mic button in the web UI, install [OpenAI Whisper]
 pip install openai-whisper   # requires Python 3.9+, ffmpeg
 ```
 
-When `whisper` is on your PATH, the gateway detects it at startup and enables the mic button in the chat UI. Click the mic to record, click stop to transcribe. The transcript appears in the text input for review before sending — no audio is stored, no agent loop is involved.
+When `whisper` is on your PATH, the gateway detects it at startup and enables the mic button in the chat UI. Hold the mic button to record — a live waveform visualizes audio input in real-time. Release to transcribe. The transcript appears in the text input for review before sending — no audio is stored, no agent loop is involved.
 
-Configure the model and limits in `.env`:
+Configure the model, language, and limits in `.env`:
 
 ```env
-SPACEDUCK_STT_MODEL=small          # tiny | base | small | medium | large
+SPACEDUCK_STT_MODEL=small          # see model table below
+SPACEDUCK_STT_LANGUAGE=            # ISO 639-1 code (en, da, de, …) — empty = auto-detect
 SPACEDUCK_STT_MAX_SECONDS=120      # UI auto-stop (seconds)
 SPACEDUCK_STT_MAX_BYTES=15728640   # max upload (bytes, default 15MB)
 ```
+
+| Model | Params | English-only | Multilingual | VRAM | Relative speed |
+|-------|--------|--------------|--------------|------|----------------|
+| tiny | 39 M | tiny.en | tiny | ~1 GB | ~10x |
+| base | 74 M | base.en | base | ~1 GB | ~7x |
+| small | 244 M | small.en | small | ~2 GB | ~4x |
+| medium | 769 M | medium.en | medium | ~5 GB | ~2x |
+| large | 1550 M | — | large | ~10 GB | 1x |
+| turbo | 809 M | — | turbo | ~6 GB | ~8x |
+
+Use `.en` variants (e.g. `small.en`) for English-only — they're faster and more accurate for English.
 
 ### Embedding Setup
 
