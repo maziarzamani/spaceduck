@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Sidebar } from "./sidebar";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
@@ -5,12 +6,52 @@ import { StatusBar } from "./status-bar";
 import { Separator } from "../ui/separator";
 import type { UseSpaceduckWs } from "../hooks/use-spaceduck-ws";
 
+function getSttStatusUrl(): string {
+  const stored = localStorage.getItem("spaceduck.gatewayUrl");
+  if (stored) return `${stored}/api/stt/status`;
+  if (typeof window !== "undefined" && "__TAURI__" in window) {
+    return "http://localhost:3000/api/stt/status";
+  }
+  return `${window.location.origin}/api/stt/status`;
+}
+
+interface SttStatus {
+  available: boolean;
+  language?: string;
+  maxSeconds?: number;
+  maxBytes?: number;
+  timeoutMs?: number;
+}
+
 interface ChatViewProps {
   ws: UseSpaceduckWs;
   onOpenSettings: () => void;
 }
 
 export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
+  const [stt, setStt] = useState<SttStatus>({ available: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(getSttStatusUrl())
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) {
+          setStt({
+            available: !!data.available,
+            language: data.language,
+            maxSeconds: data.maxSeconds,
+            maxBytes: data.maxBytes,
+            timeoutMs: data.timeoutMs,
+          });
+        }
+      })
+      .catch(() => {
+        // STT not available — leave default
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       <Sidebar
@@ -43,6 +84,9 @@ export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
           onSend={(content, attachments) => ws.sendMessage(content, ws.activeConversationId ?? undefined, attachments)}
           disabled={ws.status !== "connected"}
           isStreaming={ws.pendingStream !== null}
+          sttAvailable={stt.available}
+          sttLanguage={stt.language}
+          sttMaxSeconds={stt.maxSeconds}
         />
       </main>
     </div>

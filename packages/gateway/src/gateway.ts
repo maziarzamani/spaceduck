@@ -38,6 +38,14 @@ import { createWsHandler, type WsConnectionData } from "./ws-handler";
 import { createToolRegistry } from "./tool-registrations";
 import { createEmbeddingProvider } from "./embedding-factory";
 import { AttachmentStore } from "./attachment-store";
+import { WhisperStt, SttError } from "@spaceduck/stt-whisper";
+import { createWriteStream } from "node:fs";
+import { unlink } from "node:fs/promises";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 import {
   ensureGatewaySettings,
   getGatewayInfo,
@@ -73,6 +81,25 @@ export class Gateway implements Lifecycle {
   private db: Database | null = null;
   private authRequired: boolean;
   private gatewayInfo: GatewayInfo | null = null;
+  private whisperStt: WhisperStt | null = null;
+  private stt: {
+    available: boolean;
+    reason?: string;
+    backend: string;
+    model: string;
+    language: string;
+    maxSeconds: number;
+    maxBytes: number;
+    timeoutMs: number;
+  } = {
+    available: false,
+    backend: "whisper",
+    model: "small",
+    language: Bun.env.SPACEDUCK_STT_LANGUAGE ?? "",
+    maxSeconds: 120,
+    maxBytes: 15 * 1024 * 1024,
+    timeoutMs: 300_000,
+  };
 
   readonly deps: GatewayDeps;
 
@@ -115,7 +142,14 @@ export class Gateway implements Lifecycle {
         "/": homepage,
       },
       development: config.logLevel === "debug",
-      fetch: (req, server) => this.handleRequest(req, server),
+      fetch: async (req, server) => {
+        const resp = await this.handleRequest(req, server);
+        if (resp) {
+          const cors = this.corsHeaders(req);
+          for (const [k, v] of Object.entries(cors)) resp.headers.set(k, v);
+        }
+        return resp;
+      },
       websocket: {
         message: wsHandler.message,
         open: wsHandler.open,
@@ -261,8 +295,22 @@ export class Gateway implements Lifecycle {
     }
   }
 
+  private corsHeaders(req: Request): Record<string, string> {
+    return {
+      "Access-Control-Allow-Origin": req.headers.get("origin") || "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-STT-Language",
+      "Access-Control-Max-Age": "86400",
+    };
+  }
+
   private async handleRequest(req: Request, server: Bun.Server<WsConnectionData>): Promise<Response> {
     const url = new URL(req.url);
+
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: this.corsHeaders(req) });
+    }
 
     // ── Unauthenticated routes ───────────────────────────────────────
 
@@ -296,6 +344,25 @@ export class Gateway implements Lifecycle {
         memory: this.deps.config.memory.backend,
         embedding: this.deps.embeddingProvider?.name ?? "disabled",
       });
+    }
+
+    // STT status (unauthenticated — no secrets exposed)
+    if (req.method === "GET" && url.pathname === "/api/stt/status") {
+      return Response.json(this.stt.available
+        ? {
+            available: true,
+            backend: this.stt.backend,
+            model: this.stt.model,
+            language: this.stt.language || undefined,
+            maxSeconds: this.stt.maxSeconds,
+            maxBytes: this.stt.maxBytes,
+            timeoutMs: this.stt.timeoutMs,
+          }
+        : {
+            available: false,
+            reason: this.stt.reason,
+          },
+      );
     }
 
     // Public gateway info (no auth — used by onboarding to validate URL)
@@ -410,6 +477,12 @@ export class Gateway implements Lifecycle {
         if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
         return this.handleUpload(req);
       }
+
+      // STT transcribe
+      if (req.method === "POST" && url.pathname === "/api/stt/transcribe") {
+        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        return this.handleTranscribe(req);
+      }
     }
 
     // 404
@@ -515,6 +588,172 @@ export class Gateway implements Lifecycle {
       });
       return Response.json({ error: "Upload failed" }, { status: 500 });
     }
+  }
+
+  async initStt(): Promise<void> {
+    const model = Bun.env.SPACEDUCK_STT_MODEL ?? "small";
+    const maxSeconds = Number(Bun.env.SPACEDUCK_STT_MAX_SECONDS ?? "120");
+    const maxBytes = Number(Bun.env.SPACEDUCK_STT_MAX_BYTES ?? String(15 * 1024 * 1024));
+    const timeoutMs = Number(Bun.env.SPACEDUCK_STT_TIMEOUT_MS ?? "300000");
+
+    const availability = await WhisperStt.isAvailable();
+
+    this.stt = {
+      available: availability.ok,
+      reason: availability.reason,
+      backend: "whisper",
+      model,
+      maxSeconds,
+      maxBytes,
+      timeoutMs,
+    };
+
+    if (availability.ok) {
+      this.whisperStt = new WhisperStt({ model, timeoutMs });
+      this.deps.logger.info("STT enabled", { backend: "whisper", model });
+    } else {
+      this.deps.logger.warn("STT unavailable", { reason: availability.reason });
+    }
+  }
+
+  private async handleTranscribe(req: Request): Promise<Response> {
+    const { logger } = this.deps;
+    const requestId = `stt_${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+
+    if (!this.stt.available || !this.whisperStt) {
+      return Response.json(
+        { requestId, error: "STT_UNAVAILABLE", message: "whisper is not installed" },
+        { status: 503 },
+      );
+    }
+
+    // MIME check (cheap, header-only — do before touching the body)
+    const contentType = (req.headers.get("content-type") ?? "").split(";")[0].trim();
+    let mimeType = contentType;
+    if (contentType === "application/octet-stream") {
+      const sttMime = req.headers.get("x-stt-mime") ?? "";
+      if (sttMime.startsWith("audio/")) {
+        mimeType = sttMime;
+      } else {
+        return Response.json(
+          { requestId, error: "UNSUPPORTED_TYPE", message: "Expected audio/* Content-Type" },
+          { status: 415 },
+        );
+      }
+    } else if (!contentType.startsWith("audio/")) {
+      return Response.json(
+        { requestId, error: "UNSUPPORTED_TYPE", message: "Expected audio/* Content-Type" },
+        { status: 415 },
+      );
+    }
+
+    const languageHint = req.headers.get("x-stt-language") ?? undefined;
+    const ext = mimeToExt(mimeType);
+    const filename = `spaceduck-stt-${Date.now()}-${randomBytes(6).toString("hex")}${ext}`;
+    const tempPath = join(tmpdir(), filename);
+
+    try {
+      // Stream body to temp file with byte counting (no full buffering)
+      if (!req.body) {
+        return Response.json(
+          { requestId, error: "UNSUPPORTED_TYPE", message: "Request has no body" },
+          { status: 400 },
+        );
+      }
+
+      let bytes = 0;
+      const maxBytes = this.stt.maxBytes;
+      const countingTransform = new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          bytes += chunk.byteLength;
+          if (bytes > maxBytes) {
+            controller.error(new Error("TOO_LARGE"));
+            return;
+          }
+          controller.enqueue(chunk);
+        },
+      });
+
+      const counted = req.body.pipeThrough(countingTransform);
+      const out = createWriteStream(tempPath, { flags: "wx" });
+
+      try {
+        await pipeline(Readable.fromWeb(counted as any), out);
+      } catch (err: any) {
+        if (err?.message === "TOO_LARGE" || (err?.cause && String(err.cause).includes("TOO_LARGE"))) {
+          return Response.json(
+            { requestId, error: "TOO_LARGE", message: `File too large (max ${Math.round(maxBytes / 1024 / 1024)}MB)` },
+            { status: 413 },
+          );
+        }
+        throw err;
+      }
+
+      const startTime = Date.now();
+      const result = await this.whisperStt.transcribeFile(tempPath, { languageHint });
+      const durationMs = Date.now() - startTime;
+
+      logger.info("STT transcribed", { requestId, durationMs, language: result.language, bytes });
+
+      return Response.json({
+        requestId,
+        text: result.text,
+        language: result.language,
+        segments: result.segments,
+        durationMs,
+      });
+    } catch (err) {
+      if (err instanceof SttError) {
+        const status = sttErrorToStatus(err.code);
+        return Response.json(
+          { requestId, error: err.code, message: err.message },
+          { status },
+        );
+      }
+      logger.error("STT failed", {
+        requestId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return Response.json(
+        { requestId, error: "UNKNOWN", message: "Transcription failed" },
+        { status: 500 },
+      );
+    } finally {
+      try {
+        await unlink(tempPath);
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+  }
+}
+
+const MIME_EXT_MAP: Record<string, string> = {
+  "audio/webm": ".webm",
+  "audio/ogg": ".ogg",
+  "audio/mpeg": ".mp3",
+  "audio/mp4": ".m4a",
+  "audio/mp3": ".mp3",
+  "audio/wav": ".wav",
+  "audio/x-wav": ".wav",
+  "audio/flac": ".flac",
+};
+
+function mimeToExt(mime: string): string {
+  return MIME_EXT_MAP[mime] ?? ".bin";
+}
+
+function sttErrorToStatus(code: string): number {
+  switch (code) {
+    case "STT_UNAVAILABLE": return 503;
+    case "TOO_LARGE": return 413;
+    case "UNSUPPORTED_TYPE": return 415;
+    case "INVALID_AUDIO": return 400;
+    case "TIMEOUT": return 504;
+    case "MODEL_NOT_FOUND": return 503;
+    case "BINARY_NOT_FOUND": return 503;
+    case "PARSE_ERROR": return 500;
+    default: return 500;
   }
 }
 
@@ -648,7 +887,7 @@ export async function createGateway(overrides?: {
     );
   }
 
-  return new Gateway({
+  const gateway = new Gateway({
     config,
     logger,
     eventBus,
@@ -662,4 +901,8 @@ export async function createGateway(overrides?: {
     channels,
     attachmentStore,
   }, db);
+
+  await gateway.initStt();
+
+  return gateway;
 }

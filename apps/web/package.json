@@ -11,10 +11,13 @@
     "react-dom": "^19"
   },
   "devDependencies": {
-    "bun-types": "latest",
+    "@tailwindcss/vite": "^4.2.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.1.4",
+    "bun-plugin-tailwind": "latest",
+    "bun-types": "latest",
     "tailwindcss": "^4",
-    "bun-plugin-tailwind": "latest"
+    "vite": "^7.3.1"
   }
 }

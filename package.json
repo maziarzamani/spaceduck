@@ -11,6 +11,7 @@
     "packages/providers/*",
     "packages/memory/*",
     "packages/tools/*",
+    "packages/stt/*",
     "apps/*"
   ],
   "scripts": {
