@@ -6,6 +6,14 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.10.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.9.0...spaceduck-v0.10.0) (2026-02-20)
+
+
+### Features
+
+* add voice dictation via local Whisper STT ([e590081](https://github.com/maziarzamani/spaceduck/commit/e590081616993a1a56f9fd7e1a1f339e0e34cf14))
+* improve voice dictation UX with live waveform and web app support ([18665a4](https://github.com/maziarzamani/spaceduck/commit/18665a45849131c2d5dd4e5d2d9e42e7b30eb34e))
+
 ## [0.9.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.8.1...spaceduck-v0.9.0) (2026-02-19)
 
 
