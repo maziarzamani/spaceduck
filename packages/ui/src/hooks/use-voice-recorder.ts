@@ -12,11 +12,14 @@ export interface UseVoiceRecorderOptions {
 export interface UseVoiceRecorderReturn {
   state: RecorderState;
   durationMs: number;
+  stream: MediaStream | null;
   toggle: () => void;
   cancel: () => void;
 }
 
 function getTranscribeUrl(): string {
+  const stored = localStorage.getItem("spaceduck.gatewayUrl");
+  if (stored) return `${stored}/api/stt/transcribe`;
   if (typeof window !== "undefined" && "__TAURI__" in window) {
     return "http://localhost:3000/api/stt/transcribe";
   }
@@ -46,6 +49,7 @@ const AUTO_RESET_MS = 1500;
 export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRecorderReturn {
   const [state, setState] = useState<RecorderState>("idle");
   const [durationMs, setDurationMs] = useState(0);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -59,6 +63,7 @@ export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRe
   const stopMediaTracks = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    setStream(null);
   }, []);
 
   const clearTimer = useCallback(() => {
@@ -152,6 +157,7 @@ export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRe
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      setStream(stream);
 
       const recorder = new MediaRecorder(stream, { mimeType: mimeTypeRef.current });
       mediaRecorderRef.current = recorder;
@@ -226,5 +232,5 @@ export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRe
     };
   }, [clearTimer, clearResetTimer, stopMediaTracks]);
 
-  return { state, durationMs, toggle, cancel };
+  return { state, durationMs, stream, toggle, cancel };
 }

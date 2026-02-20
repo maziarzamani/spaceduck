@@ -87,6 +87,7 @@ export class Gateway implements Lifecycle {
     reason?: string;
     backend: string;
     model: string;
+    language: string;
     maxSeconds: number;
     maxBytes: number;
     timeoutMs: number;
@@ -94,6 +95,7 @@ export class Gateway implements Lifecycle {
     available: false,
     backend: "whisper",
     model: "small",
+    language: Bun.env.SPACEDUCK_STT_LANGUAGE ?? "",
     maxSeconds: 120,
     maxBytes: 15 * 1024 * 1024,
     timeoutMs: 300_000,
@@ -140,7 +142,14 @@ export class Gateway implements Lifecycle {
         "/": homepage,
       },
       development: config.logLevel === "debug",
-      fetch: (req, server) => this.handleRequest(req, server),
+      fetch: async (req, server) => {
+        const resp = await this.handleRequest(req, server);
+        if (resp) {
+          const cors = this.corsHeaders(req);
+          for (const [k, v] of Object.entries(cors)) resp.headers.set(k, v);
+        }
+        return resp;
+      },
       websocket: {
         message: wsHandler.message,
         open: wsHandler.open,
@@ -286,8 +295,22 @@ export class Gateway implements Lifecycle {
     }
   }
 
+  private corsHeaders(req: Request): Record<string, string> {
+    return {
+      "Access-Control-Allow-Origin": req.headers.get("origin") || "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-STT-Language",
+      "Access-Control-Max-Age": "86400",
+    };
+  }
+
   private async handleRequest(req: Request, server: Bun.Server<WsConnectionData>): Promise<Response> {
     const url = new URL(req.url);
+
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: this.corsHeaders(req) });
+    }
 
     // ── Unauthenticated routes ───────────────────────────────────────
 
@@ -330,6 +353,7 @@ export class Gateway implements Lifecycle {
             available: true,
             backend: this.stt.backend,
             model: this.stt.model,
+            language: this.stt.language || undefined,
             maxSeconds: this.stt.maxSeconds,
             maxBytes: this.stt.maxBytes,
             timeoutMs: this.stt.timeoutMs,

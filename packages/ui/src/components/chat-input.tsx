@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, FileText, Mic, Square, Loader2, Check } from "lucide-react";
+import { ArrowUp, Paperclip, X, FileText, Mic, Check, Loader2 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { LiveWaveform } from "../ui/live-waveform";
 import type { Attachment } from "@spaceduck/core";
 import { useVoiceRecorder } from "../hooks/use-voice-recorder";
 
 function getUploadUrl(): string {
+  const stored = localStorage.getItem("spaceduck.gatewayUrl");
+  if (stored) return `${stored}/api/upload`;
   if (typeof window !== "undefined" && "__TAURI__" in window) {
     return "http://localhost:3000/api/upload";
   }
@@ -18,6 +21,7 @@ interface ChatInputProps {
   disabled?: boolean;
   isStreaming?: boolean;
   sttAvailable?: boolean;
+  sttLanguage?: string;
   sttMaxSeconds?: number;
 }
 
@@ -28,7 +32,7 @@ function formatDuration(ms: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttMaxSeconds }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttLanguage, sttMaxSeconds }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -37,7 +41,7 @@ export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttMaxS
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const recorder = useVoiceRecorder({
-    languageHint: "da",
+    languageHint: sttLanguage,
     maxSeconds: sttMaxSeconds,
     onTranscript: (text) => {
       setValue((prev) => (prev ? prev + "\n" + text : text));
@@ -126,11 +130,9 @@ export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttMaxS
   }
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled && !isStreaming && !uploading;
-  const showMic = sttAvailable && !canSend && !isStreaming && recorder.state === "idle";
   const isRecording = recorder.state === "recording";
   const isProcessing = recorder.state === "processing";
-  const isSuccess = recorder.state === "success";
-  const isError = recorder.state === "error";
+  const showMic = sttAvailable && !isStreaming;
 
   return (
     <div
@@ -142,9 +144,10 @@ export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttMaxS
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
     >
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto flex flex-col gap-2">
+        {/* Attachment pills */}
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
+          <div className="flex flex-wrap gap-2">
             {attachments.map((att) => (
               <div
                 key={att.id}
@@ -164,140 +167,179 @@ export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttMaxS
           </div>
         )}
 
-        <div className="flex items-end gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,application/pdf"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files?.length) {
-                handleFiles(e.target.files);
-                e.target.value = "";
-              }
-            }}
-          />
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) {
+              handleFiles(e.target.files);
+              e.target.value = "";
+            }
+          }}
+        />
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={disabled || uploading}
-                size="icon"
-                variant="ghost"
-                className="h-[44px] w-[44px] shrink-0 rounded-xl"
-              >
-                <Paperclip size={18} className={uploading ? "animate-pulse" : ""} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {uploading ? "Uploading..." : "Attach PDF"}
-            </TooltipContent>
-          </Tooltip>
+        {/* Row 1: Textarea */}
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={isStreaming ? "Waiting for response..." : "Type a message..."}
+          disabled={disabled || isRecording || isProcessing}
+          rows={1}
+          className={cn(
+            "w-full min-h-[44px] resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-sm",
+            "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            "transition-colors",
+          )}
+        />
 
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isStreaming ? "Waiting for response..." : "Type a message..."}
-            disabled={disabled}
-            rows={1}
-            className={cn(
-              "flex-1 min-w-0 min-h-[44px] resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-sm",
-              "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              "transition-colors",
-            )}
-          />
-          {isRecording ? (
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-muted-foreground tabular-nums">
+        {/* Row 2: Action bar */}
+        {isRecording ? (
+          /* ── Recording mode: [X cancel] [waveform + duration] [■ stop] ── */
+          <div className="flex items-center gap-2 h-[40px]">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={recorder.cancel}
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:text-destructive"
+                >
+                  <X size={18} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Cancel</TooltipContent>
+            </Tooltip>
+
+            <div className="flex-1 flex items-center gap-2 min-w-0">
+              <div className="relative flex-1 min-w-0 h-7 rounded-lg bg-muted/40 overflow-hidden flex items-center px-2">
+                <div className="absolute inset-0 bg-destructive/10 animate-pulse rounded-lg" />
+                <LiveWaveform
+                  mediaStream={recorder.stream}
+                  active={isRecording}
+                  mode="scrolling"
+                  barWidth={3}
+                  barGap={1}
+                  barRadius={4}
+                  fadeEdges={true}
+                  fadeWidth={24}
+                  sensitivity={1.8}
+                  smoothingTimeConstant={0.85}
+                  height={28}
+                  historySize={120}
+                  className="relative z-10 flex-1"
+                />
+              </div>
+              <span className="text-xs font-medium text-muted-foreground tabular-nums shrink-0">
                 {formatDuration(recorder.durationMs)}
               </span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={recorder.toggle}
-                    size="icon"
-                    variant="destructive"
-                    className="h-[44px] w-[44px] rounded-xl"
-                  >
-                    <Square size={18} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Stop recording</TooltipContent>
-              </Tooltip>
             </div>
-          ) : isProcessing ? (
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-muted-foreground">Transcribing...</span>
-              <Button
-                size="icon"
-                variant="secondary"
-                disabled
-                className="h-[44px] w-[44px] rounded-xl"
-              >
-                <Loader2 size={18} className="animate-spin" />
-              </Button>
-            </div>
-          ) : isSuccess ? (
-            <Button
-              size="icon"
-              variant="secondary"
-              disabled
-              className="h-[44px] w-[44px] shrink-0 rounded-xl"
-            >
-              <Check size={18} className="text-green-500" />
-            </Button>
-          ) : isError ? (
-            <Button
-              size="icon"
-              variant="secondary"
-              disabled
-              className="h-[44px] w-[44px] shrink-0 rounded-xl"
-            >
-              <X size={18} className="text-destructive" />
-            </Button>
-          ) : showMic ? (
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   onClick={recorder.toggle}
                   size="icon"
                   variant="ghost"
-                  className="h-[44px] w-[44px] shrink-0 rounded-xl"
+                  className="h-9 w-9 shrink-0 rounded-xl bg-foreground text-background hover:bg-foreground/90"
                 >
-                  <Mic size={18} />
+                  <Check size={18} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Dictate</TooltipContent>
+              <TooltipContent>Stop & transcribe</TooltipContent>
             </Tooltip>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={!canSend}
-                  size="icon"
-                  variant={canSend ? "default" : "secondary"}
-                  className="h-[44px] w-[44px] shrink-0 rounded-xl"
-                >
-                  <Send size={18} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {canSend ? "Send message" : "Type a message to send"}
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-        <p className="text-center text-xs text-muted-foreground mt-2 max-w-3xl mx-auto">
-          {sttAvailable
-            ? "Shift+Enter for new line. Enter to send. Drop a PDF to attach. Click mic to dictate."
-            : "Shift+Enter for new line. Enter to send. Drop a PDF to attach."}
-        </p>
+          </div>
+        ) : isProcessing ? (
+          /* ── Processing mode: [waveform processing animation + "Transcribing..."] ── */
+          <div className="flex items-center gap-2 h-[40px]">
+            <div className="flex-1 min-w-0 h-7 rounded-lg bg-muted/40 overflow-hidden flex items-center px-2">
+              <LiveWaveform
+                active={false}
+                processing={true}
+                mode="scrolling"
+                barWidth={3}
+                barGap={1}
+                barRadius={4}
+                fadeEdges={true}
+                fadeWidth={24}
+                height={28}
+                className="flex-1"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Loader2 size={14} className="animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Transcribing…</span>
+            </div>
+          </div>
+        ) : (
+          /* ── Idle mode: [Paperclip] ... [Mic] [Send] ── */
+          <div className="flex items-center h-[40px]">
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={disabled || uploading}
+                    size="icon"
+                    variant="ghost"
+                    className="h-9 w-9 shrink-0 rounded-xl"
+                  >
+                    <Paperclip size={18} className={uploading ? "animate-pulse" : ""} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {uploading ? "Uploading…" : "Attach PDF"}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
+            <div className="flex-1" />
+
+            <div className="flex items-center gap-1">
+              {showMic && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={recorder.toggle}
+                      size="icon"
+                      variant="ghost"
+                      className="h-9 w-9 shrink-0 rounded-xl"
+                    >
+                      <Mic size={18} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Dictate</TooltipContent>
+                </Tooltip>
+              )}
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={!canSend}
+                    size="icon"
+                    variant="ghost"
+                    className={cn(
+                      "h-9 w-9 shrink-0 rounded-xl transition-colors",
+                      canSend && "bg-foreground text-background hover:bg-foreground/90",
+                    )}
+                  >
+                    <ArrowUp size={18} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {canSend ? "Send message" : "Type a message to send"}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

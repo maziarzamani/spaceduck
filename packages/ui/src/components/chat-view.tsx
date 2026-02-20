@@ -7,16 +7,17 @@ import { Separator } from "../ui/separator";
 import type { UseSpaceduckWs } from "../hooks/use-spaceduck-ws";
 
 function getSttStatusUrl(): string {
+  const stored = localStorage.getItem("spaceduck.gatewayUrl");
+  if (stored) return `${stored}/api/stt/status`;
   if (typeof window !== "undefined" && "__TAURI__" in window) {
     return "http://localhost:3000/api/stt/status";
   }
-  const stored = localStorage.getItem("spaceduck.gatewayUrl");
-  if (stored) return `${stored}/api/stt/status`;
   return `${window.location.origin}/api/stt/status`;
 }
 
 interface SttStatus {
   available: boolean;
+  language?: string;
   maxSeconds?: number;
   maxBytes?: number;
   timeoutMs?: number;
@@ -38,6 +39,7 @@ export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
         if (!cancelled) {
           setStt({
             available: !!data.available,
+            language: data.language,
             maxSeconds: data.maxSeconds,
             maxBytes: data.maxBytes,
             timeoutMs: data.timeoutMs,
@@ -83,6 +85,7 @@ export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
           disabled={ws.status !== "connected"}
           isStreaming={ws.pendingStream !== null}
           sttAvailable={stt.available}
+          sttLanguage={stt.language}
           sttMaxSeconds={stt.maxSeconds}
         />
       </main>

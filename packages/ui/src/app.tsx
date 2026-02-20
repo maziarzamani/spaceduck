@@ -8,6 +8,12 @@ import { TooltipProvider } from "./ui/tooltip";
 export type AppView = "onboarding" | "chat" | "settings";
 
 function resolveInitialView(): AppView {
+  if (typeof window !== "undefined" && "__TAURI__" in window) {
+    if (!localStorage.getItem("spaceduck.gatewayUrl")) {
+      localStorage.setItem("spaceduck.gatewayUrl", "http://localhost:3000");
+      localStorage.setItem("spaceduck.gatewayName", "Local Gateway");
+    }
+  }
   const url = localStorage.getItem("spaceduck.gatewayUrl");
   return url ? "chat" : "onboarding";
 }

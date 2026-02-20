@@ -5,8 +5,8 @@
   "identifier": "ai.spaceduck.desktop",
   "build": {
     "beforeBuildCommand": "bun run build:all",
-    "beforeDevCommand": "",
-    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "cd ../web && bunx vite --port 1420",
+    "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
   "app": {
