@@ -6,6 +6,13 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.13.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.12.0...spaceduck-v0.13.0) (2026-02-21)
+
+
+### Features
+
+* harden memory pipeline — slot deactivation, contamination guard, multilingual extraction ([9ce9940](https://github.com/maziarzamani/spaceduck/commit/9ce99405d5b46a869941e7eb35457faddd9ffe75))
+
 ## [0.12.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.11.0...spaceduck-v0.12.0) (2026-02-21)
 
 
