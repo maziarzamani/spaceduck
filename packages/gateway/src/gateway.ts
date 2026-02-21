@@ -59,6 +59,13 @@ import {
   revokeToken,
   type GatewayInfo,
 } from "./auth";
+import {
+  ConfigStore,
+  getCapabilities,
+  getConfiguredStatus,
+} from "./config";
+import type { ConfigPatchOp } from "@spaceduck/config";
+import { isSecretPath } from "@spaceduck/config";
 
 export interface GatewayDeps {
   readonly config: SpaceduckConfig;
@@ -73,6 +80,7 @@ export interface GatewayDeps {
   readonly embeddingProvider?: EmbeddingProvider;
   readonly channels?: Channel[];
   readonly attachmentStore: AttachmentStore;
+  readonly configStore?: ConfigStore;
 }
 
 export class Gateway implements Lifecycle {
@@ -365,6 +373,12 @@ export class Gateway implements Lifecycle {
       );
     }
 
+    // Capabilities (unauthenticated — binary/env availability only)
+    if (req.method === "GET" && url.pathname === "/api/capabilities") {
+      const capabilities = await getCapabilities();
+      return Response.json(capabilities);
+    }
+
     // Public gateway info (no auth — used by onboarding to validate URL)
     if (req.method === "GET" && url.pathname === "/api/gateway/public-info") {
       const info = this.gatewayInfo ?? { gatewayId: "unknown", gatewayName: "unknown" };
@@ -482,6 +496,124 @@ export class Gateway implements Lifecycle {
       if (req.method === "POST" && url.pathname === "/api/stt/transcribe") {
         if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
         return this.handleTranscribe(req);
+      }
+
+      // ── Config API routes ──────────────────────────────────────
+
+      const configStore = this.deps.configStore;
+      if (configStore) {
+        // GET /api/config (authenticated)
+        if (req.method === "GET" && url.pathname === "/api/config") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          const { config, rev, secrets } = configStore.getRedacted();
+          const envCaps = await getCapabilities();
+          const configured = getConfiguredStatus(configStore.current);
+          return Response.json(
+            { config, rev, secrets, capabilities: { ...envCaps, configured } },
+            { headers: { ETag: rev } },
+          );
+        }
+
+        // PATCH /api/config (authenticated, requires If-Match)
+        if (req.method === "PATCH" && url.pathname === "/api/config") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          const ifMatch = req.headers.get("If-Match");
+          if (!ifMatch) {
+            return Response.json(
+              { error: "MISSING_IF_MATCH", message: "If-Match header required" },
+              { status: 428 },
+            );
+          }
+          try {
+            const ops = (await req.json()) as ConfigPatchOp[];
+            if (!Array.isArray(ops)) {
+              return Response.json(
+                { error: "INVALID_BODY", message: "Expected JSON array of patch ops" },
+                { status: 400 },
+              );
+            }
+            const result = await configStore.patch(ops, ifMatch);
+            if (!result.ok) {
+              if (result.error === "CONFLICT") {
+                return Response.json(
+                  { error: "CONFLICT", rev: result.rev },
+                  { status: 409, headers: { ETag: result.rev } },
+                );
+              }
+              if (result.error === "VALIDATION") {
+                return Response.json(
+                  { error: "VALIDATION", issues: result.issues },
+                  { status: 400 },
+                );
+              }
+              return Response.json(
+                { error: "PATCH_ERROR", message: result.message },
+                { status: 400 },
+              );
+            }
+            const response: Record<string, unknown> = {
+              config: result.config,
+              rev: result.rev,
+            };
+            if (result.needsRestart) {
+              response.needsRestart = result.needsRestart;
+            }
+            return Response.json(response, {
+              headers: { ETag: result.rev },
+            });
+          } catch {
+            return Response.json(
+              { error: "INVALID_BODY", message: "Invalid JSON body" },
+              { status: 400 },
+            );
+          }
+        }
+
+        // POST /api/config/secrets (authenticated)
+        if (req.method === "POST" && url.pathname === "/api/config/secrets") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          try {
+            const body = (await req.json()) as {
+              op?: string;
+              path?: string;
+              value?: string;
+            };
+            if (!body.op || !body.path) {
+              return Response.json(
+                { error: "INVALID_BODY", message: "Missing op or path" },
+                { status: 400 },
+              );
+            }
+            if (!isSecretPath(body.path)) {
+              return Response.json(
+                { error: "INVALID_PATH", message: `"${body.path}" is not a known secret path` },
+                { status: 400 },
+              );
+            }
+            if (body.op === "set") {
+              if (!body.value || typeof body.value !== "string") {
+                return Response.json(
+                  { error: "INVALID_BODY", message: "Missing value for set op" },
+                  { status: 400 },
+                );
+              }
+              await configStore.setSecret(body.path, body.value);
+            } else if (body.op === "unset") {
+              await configStore.unsetSecret(body.path);
+            } else {
+              return Response.json(
+                { error: "INVALID_OP", message: `Unknown op "${body.op}" — use "set" or "unset"` },
+                { status: 400 },
+              );
+            }
+            return Response.json({ ok: true });
+          } catch {
+            return Response.json(
+              { error: "INVALID_BODY", message: "Invalid JSON body" },
+              { status: 400 },
+            );
+          }
+        }
       }
     }
 
