@@ -15,15 +15,14 @@
 
 > [!WARNING]
 > **This project is experimental and under active development.**
-> The API, configuration format, database schema, and memory architecture may change without notice between versions.
-> Breaking changes are expected before v1.0 — including a planned replacement of the current `.env` configuration
-> with a structured config file. Use in production at your own risk.
+> The API, database schema, and memory architecture may change without notice between versions.
+> Breaking changes are expected before v1.0. Use in production at your own risk.
 
 ---
 
 **Spaceduck** is a local-first AI assistant with persistent memory.
 
-It remembers what you've said across conversations, acts on your behalf with real tools, and runs entirely on your machine. No agent frameworks, no orchestration wrappers — every layer (context management, vector memory, fact extraction, provider abstraction, streaming protocol) is "handwritten" TypeScript on Bun.
+It remembers what you've said across conversations, acts on your behalf with real tools, and runs entirely on your machine. No agent frameworks, no orchestration wrappers — every layer (context management, vector memory, fact extraction, provider abstraction, streaming protocol) is handwritten TypeScript.
 
 ## Features
 
@@ -37,8 +36,9 @@ It remembers what you've said across conversations, acts on your behalf with rea
 ### Multi-Channel
 - **Web UI** — React chat with streaming deltas, conversations sidebar, voice dictation, Tailwind CSS
 - **WhatsApp** — Baileys (WhatsApp Web protocol), QR pairing, typing indicators
-- **Desktop app** — Tauri v2 shell with Bun gateway sidecar — macOS, Linux, Windows
-- Discord, Telegram, and CLI planned
+- **Desktop app** — Tauri v2 shell with gateway sidecar — macOS, Linux, Windows
+- **CLI** — gateway status, config management, secret management
+- Discord and Telegram planned
 
 ### Agentic Tools
 - **Web search** — Brave, Perplexity Sonar, or SearXNG — structured results plus AI-synthesized answers
@@ -52,7 +52,13 @@ It remembers what you've said across conversations, acts on your behalf with rea
 - **AWS Bedrock** — native Converse API, Titan Text Embeddings V2, Bearer token auth
 - **OpenRouter** — access to hundreds of models through a single key
 - **LM Studio** — any local model via OpenAI-compatible API
-- Swap chat or embedding provider with a single env var; bring your own by implementing the `Provider` interface
+- Hot-swap providers at runtime from the Settings UI or CLI — no restart required
+
+### Configuration
+- **Settings UI** — sidebar-driven preference pane (Chat, Memory, Tools, Speech, Channels, Connection)
+- **CLI** — `spaceduck status`, `spaceduck config get/set/paths`, `spaceduck config secret set/unset`
+- **Chat tools** — ask the assistant to read or change config via `config_get` / `config_set`
+- **Single source of truth** — `spaceduck.config.json5` with Zod validation, optimistic concurrency, and hot-apply
 
 ### Built for Developers
 - Zero framework dependencies — no LangChain, no LlamaIndex, no hidden abstractions
@@ -77,7 +83,7 @@ It remembers what you've said across conversations, acts on your behalf with rea
 | Context builder | ✅ | Token budgeting, system prompt injection, LTM fact recall, auto-compaction, afterTurn eager flush, attachment hints for tool invocation | Unit |
 | Agent loop | ✅ | Multi-round tool execution with automatic tool → result → LLM cycles | Unit |
 | Event bus | ✅ | Typed fire-and-forget + async emit, powers the fact extraction pipeline | Unit |
-| Configuration system | 🔜 | Structured config file replacing `.env` — type-safe, nestable, multi-environment | — |
+| Configuration system | ✅ | JSON5 config file (`spaceduck.config.json5`) with Zod schema, JSON Patch API, optimistic concurrency (rev/ETag), secrets redaction, hot-swap for AI provider/model/region/system prompt, Settings UI, CLI (`spaceduck config`), and chat tools (`config_get`/`config_set`) | Unit, E2E |
 | Plugin lifecycle | 🔜 | Standardized init/shutdown hooks for providers, channels, and tools | — |
 | Streaming protocol v2 | 🔜 | Structured envelopes for tool progress, memory events, and error recovery | — |
 
@@ -108,7 +114,7 @@ Regex extraction (same-turn, deterministic) currently covers English and Danish.
 | LM Studio | ✅ | Chat streaming + embeddings via OpenAI-compatible API (any local model) | — |
 | OpenRouter | ✅ | Multi-model chat streaming (access to hundreds of models) | — |
 | AWS Bedrock | ✅ | Native Converse API (required for Nova), Titan Text Embeddings V2, Bearer token auth | E2E |
-| Embedding factory | ✅ | Provider-agnostic creation from env config, fail-fast dimension validation | Unit |
+| Embedding factory | ✅ | Provider-agnostic creation from product config (with env overrides), fail-fast dimension validation | Unit |
 | Ollama | 🔜 | Local models via Ollama API | — |
 | Anthropic (direct) | 🔜 | Claude via Anthropic API (non-Bedrock) | — |
 | Provider fallback chain | 🔜 | Auto-retry with secondary provider on failure or timeout | — |
@@ -117,15 +123,15 @@ Regex extraction (same-turn, deterministic) currently covers English and Danish.
 
 | Component | | Details | Tested |
 |-----------|---|---------|--------|
-| Web UI | ✅ | React chat with streaming, conversations sidebar, file upload (drag-drop + paperclip), voice dictation (mic button), attachment chips, Tailwind CSS | — |
-| Gateway | ✅ | Bun HTTP + WebSocket server, session management, run locking, `POST /api/upload` with magic-byte validation, `POST /api/stt/transcribe` + `GET /api/stt/status` | E2E |
+| Web UI | ✅ | React chat with streaming, conversations sidebar, file upload (drag-drop + paperclip), voice dictation (mic button), attachment chips, Settings preference pane (Chat, Memory, Tools, Speech, Channels, Connection), Tailwind CSS | — |
+| Gateway | ✅ | HTTP + WebSocket server, config API, session management, run locking, file upload with magic-byte validation, STT transcription | E2E |
 | File uploads | ✅ | Multipart upload, PDF magic-byte validation, opaque attachment IDs, server-side `AttachmentStore` with TTL sweeper | Unit |
 | Voice dictation | ✅ | Speech-to-text via local [Whisper](https://github.com/openai/whisper) (optional, user-installed) | Unit |
 | WhatsApp | ✅ | Baileys (WhatsApp Web protocol), QR pairing, typing indicators | — |
 | Discord | 🔜 | Discord bot channel | — |
 | Telegram | 🔜 | Telegram bot channel | — |
-| Desktop app | ✅ | Tauri v2 shell + Bun gateway sidecar — macOS, Linux, Windows | — |
-| CLI | 🔜 | Terminal-based chat interface | — |
+| Desktop app | ✅ | Tauri v2 shell + gateway sidecar — macOS, Linux, Windows | — |
+| CLI | ✅ | `spaceduck status`, `config get/set/paths`, `config secret set/unset` — thin HTTP client against the gateway API | E2E |
 | Multi-user auth | 🔜 | Token-based auth for Web UI, per-user sessions | — |
 
 ### Tools
@@ -144,27 +150,39 @@ Regex extraction (same-turn, deterministic) currently covers English and Danish.
 
 ```mermaid
 graph TD
-    UI["Web UI (React)<br/>WebSocket + streaming deltas<br/>file upload (drag-drop / picker)"]
+    UI["Web UI (React)<br/>Chat + Settings pane<br/>WebSocket streaming"]
+    DESK["Desktop (Tauri v2)<br/>macOS · Linux · Windows"]
     WA["WhatsApp (Baileys)<br/>QR pairing · typing indicators"]
-    GW["Gateway (Bun)<br/>HTTP server · WS handler · sessions<br/>POST /api/upload · POST /api/stt/transcribe"]
+    CLI["CLI (@spaceduck/cli)<br/>status · config get/set · secrets"]
+
+    GW["Gateway<br/>HTTP/WS server · config API<br/>upload · STT · sessions"]
+    CS["ConfigStore<br/>spaceduck.config.json5<br/>atomic writes · rev hashing"]
+    SW["SwappableProvider<br/>hot-swap without restart"]
     AS["Attachment Store<br/>opaque IDs · file sweeper"]
     AL["Agent Loop<br/>+ tool cycles"]
     CB["Context Builder<br/>+ budget · compact<br/>+ attachment hints"]
     MEM["Memory (SQLite)<br/>conversations · facts<br/>vector embeddings (vec0)<br/>FTS5 search · SHA-256 dedup"]
     CP["Chat Provider<br/>(pluggable)<br/>streaming chunks"]
     EP["Embedding Provider<br/>(pluggable)<br/>configurable dimensions"]
-    TOOLS["Tools<br/>browser · fetch · search<br/>marker_scan · (extensible)"]
+    TOOLS["Tools<br/>browser · fetch · search<br/>marker_scan · config_get/set"]
 
-    UI --> GW
+    UI --> DESK
+    DESK --> GW
+    UI -->|"direct (web)"| GW
     WA --> GW
+    CLI -->|"HTTP"| GW
+
+    GW --> CS
     GW --> AS
     GW --> AL
     GW --> CB
     GW --> MEM
-    AL --> CP
+    AL --> SW
+    SW --> CP
     AL --> TOOLS
     TOOLS -->|"resolve attachmentId"| AS
     MEM --> EP
+    CS -->|"provider change"| SW
 ```
 
 ## Memory System
@@ -198,26 +216,40 @@ flowchart TD
 ```
 spaceduck/
 ├── apps/
-│   ├── web/                   # Web deployment entry point (served by gateway)
-│   │   ├── index.html         # HTML entry + font preloads
-│   │   └── src/client.tsx     # React mount (imports @spaceduck/ui)
-│   └── desktop/               # Tauri v2 desktop app (macOS, Linux, Windows)
-│       ├── src-tauri/         # Rust shell, sidecar config, capabilities
-│       └── tooling/           # Build scripts (sidecar + frontend)
+│   ├── cli/                    # CLI for config management (spaceduck status/config)
+│   │   └── src/
+│   │       ├── index.ts            # Entrypoint + arg parsing
+│   │       ├── lib/api.ts          # Shared gateway HTTP client
+│   │       └── commands/           # config-get, config-set, config-secret, config-paths, status
+│   ├── web/                    # Web deployment entry point (served by gateway)
+│   │   ├── index.html          # HTML entry + font preloads
+│   │   └── src/client.tsx      # React mount (imports @spaceduck/ui)
+│   └── desktop/                # Tauri v2 desktop app (macOS, Linux, Windows)
+│       ├── src-tauri/          # Rust shell, sidecar config, capabilities
+│       └── tooling/            # Build scripts (sidecar + frontend)
 ├── packages/
-│   ├── core/                  # Zero-dep contracts + logic
+│   ├── config/                 # Shared config schema + utilities (@spaceduck/config)
+│   │   └── src/
+│   │       ├── schema.ts          # Zod schema (SpaceduckConfigSchema)
+│   │       ├── patch.ts           # JSON Patch (replace + add) with schema validation
+│   │       ├── pointer.ts         # RFC 6901 JSON Pointer decode + validate
+│   │       ├── secrets.ts         # SECRET_PATHS, isSecretPath, getSecretStatus
+│   │       ├── redact.ts          # Redact secrets from config for API responses
+│   │       ├── hot-apply.ts       # HOT_APPLY_PATHS + classifyOps
+│   │       └── canonicalize.ts    # Stable JSON stringify for rev hashing
+│   ├── core/                   # Zero-dep contracts + logic
 │   │   └── src/
 │   │       ├── types/         # Message, Attachment, Provider, EmbeddingProvider, Memory, Errors
 │   │       ├── agent.ts       # AgentLoop orchestrator with multi-round tool calling
 │   │       ├── context-builder.ts  # Token budget, compaction, afterTurn eager flush, attachment hints
 │   │       ├── fact-extractor.ts   # Regex-first + LLM fact extraction with slot conflict resolution
 │   │       ├── events.ts      # Typed EventBus (fire-and-forget + async)
-│   │       └── config.ts
+│   │       └── config.ts      # Deployment config (ports, log level — env vars only)
 │   ├── ui/                    # Shared React components, hooks, and styles
 │   │   └── src/
 │   │       ├── app.tsx            # Root App component
-│   │       ├── components/        # Sidebar, MessageList, ChatInput (file attach + drag-drop), StatusBar
-│   │       ├── hooks/             # useSpaceduckWs (auto-detects Tauri vs web, supports attachments)
+│   │       ├── components/        # Chat, Settings (sidebar pane), MessageList, ChatInput
+│   │       ├── hooks/             # useSpaceduckWs, useConfig (config state + patch + secrets)
 │   │       └── styles.css         # Tailwind CSS
 │   ├── providers/             # Pluggable — add your own by implementing Provider interface
 │   │   ├── gemini/            # Google AI (chat + embeddings)
@@ -234,18 +266,22 @@ spaceduck/
 │   │   └── whatsapp/          # WhatsApp via Baileys (QR pairing)
 │   ├── gateway/               # Composition root — wires everything
 │   │   └── src/
-│   │       ├── gateway.ts         # HTTP/WS server + upload endpoint + dependency injection
-│   │       ├── attachment-store.ts   # Server-side Map<attachmentId, localPath> with TTL sweeper
-│   │       ├── tool-registrations.ts # Registers all built-in tools (including conditional marker_scan)
-│   │       └── embedding-factory.ts  # Provider-agnostic embedding creation
-│   └── tools/
-│       ├── browser/           # Playwright headless browser
-│       ├── web-fetch/         # HTTP fetch + HTML-to-text
-│       ├── web-search/        # Brave / Perplexity Sonar / SearXNG search + answers
-│       └── marker/            # PDF-to-markdown via Marker (optional, user-installed)
+│   │       ├── gateway.ts              # HTTP/WS server + config API + dependency injection
+│   │       ├── swappable-provider.ts   # Proxy for hot-swapping AI provider at runtime
+│   │       ├── config/config-store.ts  # Atomic JSON5 read/write + rev hashing
+│   │       ├── config/capabilities.ts  # Binary detection (cached) + configured status
+│   │       ├── attachment-store.ts     # Server-side Map<attachmentId, localPath> with TTL sweeper
+│   │       ├── tool-registrations.ts   # Built-in tools (including config_get/config_set)
+│   │       └── embedding-factory.ts    # Provider-agnostic embedding creation
+│   ├── tools/
+│   │   ├── browser/           # Playwright headless browser
+│   │   ├── web-fetch/         # HTTP fetch + HTML-to-text
+│   │   ├── web-search/        # Brave / Perplexity Sonar / SearXNG search + answers
+│   │   └── marker/            # PDF-to-markdown via Marker (optional, user-installed)
 │   └── stt/
 │       └── whisper/           # Speech-to-text via local Whisper (optional, user-installed)
-└── package.json               # Bun workspace root
+├── data/                      # Runtime data (gitignored): config, SQLite, uploads
+└── package.json               # Workspace root
 ```
 
 ## Quick Start
@@ -266,11 +302,12 @@ brew install sqlite
 
 # Configure
 cp .env.example .env
-# Edit .env — set your provider and API keys (see .env.example for all options)
+# Edit .env for deployment settings (port, log level, auth)
+# Product settings (provider, model, API keys) are managed via the Settings UI or CLI
 
 # Run
 bun run dev
-# Open http://localhost:3000
+# Open http://localhost:3000 → Settings to configure your AI provider
 ```
 
 ### Optional: Document Scanning (Marker)
@@ -295,30 +332,33 @@ pip install openai-whisper   # requires Python 3.9+, ffmpeg
 
 When `whisper` is on your PATH, the gateway detects it at startup and enables the mic button in the chat UI. Hold the mic button to record — a live waveform visualizes audio input in real-time. Release to transcribe. The transcript appears in the text input for review before sending — no audio is stored, no agent loop is involved.
 
-Configure the model, language, and limits in `.env`:
+Configure the model and language in the Settings UI under **Speech**, or via the CLI:
 
-```env
-SPACEDUCK_STT_MODEL=small          # tiny | base | small | medium | large | turbo (see Whisper docs)
-SPACEDUCK_STT_LANGUAGE=            # ISO 639-1 code (en, da, de, …) — empty = auto-detect
-SPACEDUCK_STT_MAX_SECONDS=120      # UI auto-stop (seconds)
-SPACEDUCK_STT_MAX_BYTES=15728640   # max upload (bytes, default 15MB)
+```bash
+spaceduck config set /stt/model small
+spaceduck config set /stt/languageHint da
 ```
 
 See the [Whisper README](https://github.com/openai/whisper#available-models-and-languages) for available models, sizes, and supported languages.
 
 ### Embedding Setup
 
-Vector memory requires an embedding model. The default `.env.example` is configured for Amazon Bedrock (Titan V2):
+Vector memory requires an embedding model. Configure it in the Settings UI under **Memory** (toggle "Semantic recall"), or via the CLI:
 
-```env
-EMBEDDING_PROVIDER=bedrock                         # or gemini, lmstudio
-EMBEDDING_MODEL=amazon.titan-embed-text-v2:0       # Titan V2: 100+ languages
-EMBEDDING_DIMENSIONS=1024                          # Titan V2 supports 256 | 512 | 1024
+```bash
+spaceduck config set /embedding/enabled true
+spaceduck config set /embedding/provider bedrock
+spaceduck config set /embedding/model amazon.titan-embed-text-v2:0
+spaceduck config set /embedding/dimensions 1024
 ```
 
-To disable vector search entirely and use FTS5 keyword search only: `EMBEDDING_ENABLED=false`
+To disable vector search entirely and use FTS5 keyword search only, toggle off "Semantic recall" in Settings → Memory, or:
 
-See `.env.example` for all available configuration options.
+```bash
+spaceduck config set /embedding/enabled false
+```
+
+Environment variables (`EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, etc.) still work as overrides for deployment.
 
 ## Development
 
@@ -327,14 +367,16 @@ See `.env.example` for all available configuration options.
 bun test --recursive
 
 # Run specific test suites
-bun test packages/core/              # Unit tests (agent, context, events, facts)
-bun test packages/memory/            # Memory + vector embedding tests
-bun test packages/tools/browser/     # Browser tool tests
-bun test packages/tools/web-fetch/   # Web-fetch tests
-bun test packages/tools/web-search/  # Web search + answer tests
-bun test packages/tools/marker/      # Marker document scanner tests
-bun test packages/stt/whisper/       # Whisper STT tests
-bun test packages/gateway/src/__tests__/attachment-store.test.ts  # Attachment store tests
+bun test packages/config/             # Config schema, patch, pointer, secrets, hot-apply
+bun test packages/gateway/src/config/ # ConfigStore + capabilities
+bun test apps/cli/                    # CLI e2e tests (requires running gateway)
+bun test packages/core/               # Unit tests (agent, context, events, facts)
+bun test packages/memory/             # Memory + vector embedding tests
+bun test packages/tools/browser/      # Browser tool tests
+bun test packages/tools/web-fetch/    # Web-fetch tests
+bun test packages/tools/web-search/   # Web search + answer tests
+bun test packages/tools/marker/       # Marker document scanner tests
+bun test packages/stt/whisper/        # Whisper STT tests
 
 # Live E2E tests against Bedrock (requires AWS_BEARER_TOKEN_BEDROCK)
 RUN_LIVE_TESTS=1 bun test packages/gateway/src/__tests__/e2e-bedrock.test.ts
@@ -354,16 +396,15 @@ bun run bench
 - **Memory is semantic.** Facts are embedded as vectors for meaning-based recall, with FTS5 keyword fallback.
 - **Extraction is eager.** Facts are persisted after every turn via `afterTurn()` — cross-conversation recall works even in short conversations.
 - **Tools return text.** Tool results are plain strings the LLM can read — including errors. No structured schemas, no silent failures.
-- **Provider-agnostic.** Swap chat models, embedding models, or providers via a single env var. Bring your own by implementing the `Provider` or `EmbeddingProvider` interface.
+- **Provider-agnostic.** Swap chat models, embedding models, or providers from the Settings UI, CLI, or chat tools — no restart required for AI changes. Bring your own by implementing the `Provider` or `EmbeddingProvider` interface.
 
 ## Roadmap
 
 All planned features are tracked inline in the [Status](#status) tables above (marked 🔜). The highest-priority items right now:
 
-1. **Configuration system** — replace flat `.env` with a structured config file. The current approach does not scale: no nesting, no type safety, no multi-environment support.
-2. **Per-user isolation** — scope facts by user identity so multi-user setups don't leak memory across people.
-3. **Provider fallback chain** — auto-retry with a secondary provider on failure or timeout.
-4. **Memory inspector** — Web UI panel to browse, edit, and delete stored facts.
+1. **Per-user isolation** — scope facts by user identity so multi-user setups don't leak memory across people.
+2. **Provider fallback chain** — auto-retry with a secondary provider on failure or timeout.
+3. **Memory inspector** — Web UI panel to browse, edit, and delete stored facts.
 
 ---
 

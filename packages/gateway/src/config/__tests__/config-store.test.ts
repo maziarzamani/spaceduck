@@ -104,12 +104,12 @@ describe("ConfigStore", () => {
     await store.load();
     const rev = store.rev();
     const result = await store.patch(
-      [{ op: "replace", path: "/ai/provider", value: "bedrock" }],
+      [{ op: "replace", path: "/embedding/provider", value: "gemini" }],
       rev,
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.needsRestart?.fields).toContain("/ai/provider");
+      expect(result.needsRestart?.fields).toContain("/embedding/provider");
     }
   });
 
