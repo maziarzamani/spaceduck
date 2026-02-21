@@ -6,6 +6,31 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.11.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.10.0...spaceduck-v0.11.0) (2026-02-21)
+
+
+### Features
+
+* add embedding settings to UI and wire factory to product config ([093ae73](https://github.com/maziarzamani/spaceduck/commit/093ae73f97a8b8c24d5a2785e04d772d3a087abb))
+* **config:** add @spaceduck/config package with Zod schema and defaults ([3d17d68](https://github.com/maziarzamani/spaceduck/commit/3d17d6828d5b16b078eebd74e21c9cc5ac4aad15))
+* **config:** add 4 config API routes with ETag plumbing ([2b038fc](https://github.com/maziarzamani/spaceduck/commit/2b038fc183dbac08f947c47d4c81e2f80a41a465))
+* **config:** add canonicalize for stable JSON stringify ([07af4f0](https://github.com/maziarzamani/spaceduck/commit/07af4f0f1c2b691ea1fca56b9d2a938ae36c7688))
+* **config:** add capabilities module (env detection + configured status) ([bdfeb0c](https://github.com/maziarzamani/spaceduck/commit/bdfeb0cabb59dbad65b4afc9c761ca09dc3554a3))
+* **config:** add config_get and config_set chat tools ([46dad2d](https://github.com/maziarzamani/spaceduck/commit/46dad2d53d6cbca3e7bb552a1100269980c5647b))
+* **config:** add HOT_APPLY_PATHS and classifyOps for restart detection ([95c81ec](https://github.com/maziarzamani/spaceduck/commit/95c81ecce4e9d5c2692336714bcf4d727e3a8235))
+* **config:** add JSON Pointer validation and decoding (RFC 6901) ([8255f09](https://github.com/maziarzamani/spaceduck/commit/8255f0993d9b8deaa54080549debc5e2c84ce3f2))
+* **config:** implement applyPatch with replace and add ops ([67599bd](https://github.com/maziarzamani/spaceduck/commit/67599bd602ca8aa6867d67d81519619604dc86b6))
+* **config:** implement ConfigStore with atomic writes and rev hashing ([196e97e](https://github.com/maziarzamani/spaceduck/commit/196e97e0f95b878dff6c559c6fbe4028adab6ea1))
+* **config:** implement SECRET_PATHS, isSecretPath, getSecretStatus, redactConfig ([b35d4e9](https://github.com/maziarzamani/spaceduck/commit/b35d4e95a1c7188484809bd9f5714d3b3aad1f28))
+* **config:** wire ConfigStore into createGateway ([b64244e](https://github.com/maziarzamani/spaceduck/commit/b64244e0f1c86c162106f250138648375cdd4eb9))
+* **gateway:** hot-swap AI provider on config change without restart ([4865b39](https://github.com/maziarzamani/spaceduck/commit/4865b398461f19f918f9ea942679bf040d35ac9b))
+* **ui:** add Settings preference pane with sidebar navigation ([31feec5](https://github.com/maziarzamani/spaceduck/commit/31feec5c0a6cf21a1149ceba0fa7bd4d450ffde9))
+
+
+### Bug Fixes
+
+* **config:** remove env fallbacks for API keys, add requireKey guard ([455ca2d](https://github.com/maziarzamani/spaceduck/commit/455ca2da50bd528576b3f0a939341f8f2ddfc712))
+
 ## [0.10.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.9.0...spaceduck-v0.10.0) (2026-02-20)
 
 
