@@ -945,29 +945,38 @@ export async function createGateway(overrides?: {
   const longTermMemory = new SqliteLongTermMemory(db, logger, embeddingProvider);
   const sessionManager = new SqliteSessionManager(db, logger);
 
-  // Resolve API keys: product config secrets take priority, fall back to env vars
+  // Resolve API keys from product config (single source of truth)
   const aiSecrets = productConfig.ai.secrets;
-  const geminiApiKey = aiSecrets.geminiApiKey ?? Bun.env.GEMINI_API_KEY;
-  const openrouterApiKey = aiSecrets.openrouterApiKey ?? Bun.env.OPENROUTER_API_KEY;
-  const lmstudioApiKey = aiSecrets.lmstudioApiKey ?? Bun.env.LMSTUDIO_API_KEY;
-  const bedrockApiKey = aiSecrets.bedrockApiKey ?? Bun.env.AWS_BEARER_TOKEN_BEDROCK;
+  const geminiApiKey = aiSecrets.geminiApiKey;
+  const openrouterApiKey = aiSecrets.openrouterApiKey;
+  const lmstudioApiKey = aiSecrets.lmstudioApiKey;
+  const bedrockApiKey = aiSecrets.bedrockApiKey;
 
   // Create provider (use product config for provider/model selection)
   let provider: Provider;
   const providerName = productConfig.ai.provider;
   const modelName = productConfig.ai.model;
+
+  const requireKey = (name: string, key: string | null): string => {
+    if (!key) {
+      logger.error(`${name} API key not configured. Set it via POST /api/config/secrets or in spaceduck.config.json5`, { provider: providerName });
+      process.exit(1);
+    }
+    return key;
+  };
+
   if (overrides?.provider) {
     provider = overrides.provider;
   } else if (providerName === "gemini") {
     const { GeminiProvider } = require("@spaceduck/provider-gemini");
     provider = new GeminiProvider({
-      apiKey: geminiApiKey!,
+      apiKey: requireKey("Gemini", geminiApiKey),
       model: modelName,
     });
   } else if (providerName === "openrouter") {
     const { OpenRouterProvider } = require("@spaceduck/provider-openrouter");
     provider = new OpenRouterProvider({
-      apiKey: openrouterApiKey!,
+      apiKey: requireKey("OpenRouter", openrouterApiKey),
       model: modelName,
     });
   } else if (providerName === "lmstudio") {
@@ -982,6 +991,7 @@ export async function createGateway(overrides?: {
     provider = new BedrockProvider({
       model: modelName,
       region: productConfig.ai.region ?? Bun.env.AWS_REGION,
+      apiKey: bedrockApiKey ?? undefined,
     });
   } else {
     logger.error("Unknown provider", { name: providerName });
