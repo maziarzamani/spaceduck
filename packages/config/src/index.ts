@@ -9,6 +9,6 @@ export {
   isSecretPath,
   getSecretStatus,
 } from "./secrets";
-export { validatePointer, decodePointer } from "./pointer";
+export { validatePointer, decodePointer, PointerError } from "./pointer";
 export { canonicalize } from "./canonicalize";
 export { HOT_APPLY_PATHS, classifyOps } from "./hot-apply";
