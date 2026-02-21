@@ -1003,7 +1003,7 @@ export async function createGateway(overrides?: {
   const attachmentStore = new AttachmentStore();
 
   // Create tool registry with built-in tools
-  const toolRegistry = createToolRegistry(logger, attachmentStore);
+  const toolRegistry = createToolRegistry(logger, attachmentStore, configStore);
 
   // Wire fact extractor to extract durable facts from assistant responses
   // Uses the LLM provider for intelligent extraction (falls back to regex if unavailable)
