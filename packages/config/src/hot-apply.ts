@@ -7,6 +7,9 @@ import type { ConfigPatchOp } from "./types";
 export const HOT_APPLY_PATHS: ReadonlySet<string> = new Set([
   "/ai/temperature",
   "/ai/systemPrompt",
+  "/ai/provider",
+  "/ai/model",
+  "/ai/region",
   "/gateway/name",
   "/stt/languageHint",
   "/stt/model",

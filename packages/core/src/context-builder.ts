@@ -75,8 +75,12 @@ export class DefaultContextBuilder implements ContextWindowManager {
     private readonly store: ConversationStore,
     private readonly ltm: LongTermMemory | undefined,
     private readonly logger: Logger,
-    private readonly systemPrompt?: string,
+    private systemPrompt?: string,
   ) {}
+
+  setSystemPrompt(prompt: string | undefined): void {
+    this.systemPrompt = prompt;
+  }
 
   async buildContext(
     conversationId: string,
