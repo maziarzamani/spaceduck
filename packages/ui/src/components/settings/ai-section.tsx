@@ -6,6 +6,7 @@ import { Textarea } from "../../ui/textarea";
 import { Button } from "../../ui/button";
 import { Slider } from "../../ui/slider";
 import { Separator } from "../../ui/separator";
+import { Switch } from "../../ui/switch";
 import {
   Select,
   SelectTrigger,
@@ -15,7 +16,7 @@ import {
   SelectGroup,
   SelectLabel,
 } from "../../ui/select";
-import { Loader2, Eye, EyeOff, Check, X, RefreshCw } from "lucide-react";
+import { Loader2, Eye, EyeOff, Check, X, RefreshCw, AlertTriangle } from "lucide-react";
 import type { SectionProps } from "./shared";
 import { isSecretSet } from "./shared";
 
@@ -236,6 +237,12 @@ export function AiSection({ cfg }: SectionProps) {
   const temperature = (ai.temperature as number) ?? 0.7;
   const systemPrompt = (ai.systemPrompt as string | null) ?? "";
   const region = (ai.region as string | null) ?? "";
+
+  const embedding = (cfg.config?.embedding ?? {}) as Record<string, unknown>;
+  const embeddingEnabled = (embedding.enabled as boolean) ?? true;
+  const embeddingProvider = (embedding.provider as string | null) ?? null;
+  const embeddingModel = (embedding.model as string | null) ?? "";
+  const embeddingDimensions = (embedding.dimensions as number | null) ?? null;
 
   const secretInfo = SECRET_LABELS[provider];
   const hasKey = secretInfo ? isSecretSet(cfg.secrets, secretInfo.path) : false;
@@ -481,6 +488,94 @@ export function AiSection({ cfg }: SectionProps) {
             />
           </div>
         </CardContent>
+      </Card>
+
+      {/* Embedding / Vector Memory */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Embedding</CardTitle>
+              <CardDescription>
+                Vector memory for semantic recall across conversations.
+              </CardDescription>
+            </div>
+            <Switch
+              checked={embeddingEnabled}
+              onCheckedChange={(v) => patch("/embedding/enabled", v)}
+            />
+          </div>
+        </CardHeader>
+        {embeddingEnabled && (
+          <CardContent className="flex flex-col gap-5">
+            <div className="grid gap-2">
+              <Label>Provider</Label>
+              <Select
+                value={embeddingProvider ?? "auto"}
+                onValueChange={(v) =>
+                  patch("/embedding/provider", v === "auto" ? null : v)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">
+                    Same as AI provider ({provider})
+                  </SelectItem>
+                  <SelectItem value="bedrock">Amazon Bedrock</SelectItem>
+                  <SelectItem value="gemini">Google Gemini</SelectItem>
+                  <SelectItem value="lmstudio">LM Studio</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Model</Label>
+              <DebouncedInput
+                value={embeddingModel ?? ""}
+                placeholder={
+                  (embeddingProvider ?? provider) === "bedrock"
+                    ? "amazon.nova-2-multimodal-embeddings-v1:0"
+                    : (embeddingProvider ?? provider) === "gemini"
+                      ? "text-embedding-004"
+                      : "text-embedding-qwen3-embedding-8b"
+                }
+                onCommit={async (v) =>
+                  cfg.patchConfig([
+                    { op: "replace", path: "/embedding/model", value: v || null },
+                  ])
+                }
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Dimensions</Label>
+              <DebouncedInput
+                value={embeddingDimensions?.toString() ?? ""}
+                placeholder="e.g. 1024"
+                onCommit={async (v) => {
+                  const num = v ? parseInt(v, 10) : null;
+                  if (v && (isNaN(num!) || num! < 1)) return false;
+                  return cfg.patchConfig([
+                    { op: "replace", path: "/embedding/dimensions", value: num },
+                  ]);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Must match the model. Leave empty for the provider default.
+              </p>
+            </div>
+
+            <div className="flex items-start gap-2 rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3">
+              <AlertTriangle size={14} className="text-yellow-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                Changing embedding provider, model, or dimensions requires a gateway
+                restart and may invalidate existing vector memory.
+              </p>
+            </div>
+          </CardContent>
+        )}
       </Card>
     </div>
   );

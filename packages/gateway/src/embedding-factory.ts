@@ -16,23 +16,36 @@ export function createEmbeddingProvider(
   logger: Logger,
   productConfig?: SpaceduckProductConfig,
 ): EmbeddingProvider | undefined {
-  const enabled = Bun.env.EMBEDDING_ENABLED !== "false";
+  const pc = productConfig?.embedding;
+
+  // Enabled: product config > env > default true
+  const enabled = pc?.enabled ?? (Bun.env.EMBEDDING_ENABLED !== "false");
   if (!enabled) {
-    logger.info("Embeddings disabled via EMBEDDING_ENABLED=false");
+    logger.info("Embeddings disabled");
     return undefined;
   }
 
-  const providerName = Bun.env.EMBEDDING_PROVIDER ?? config.provider.name;
-  const model = Bun.env.EMBEDDING_MODEL;
-  const dimensions = Bun.env.EMBEDDING_DIMENSIONS
-    ? parseInt(Bun.env.EMBEDDING_DIMENSIONS, 10)
-    : undefined;
+  // Provider: env override > product config > fallback to AI provider
+  const providerName =
+    Bun.env.EMBEDDING_PROVIDER ??
+    pc?.provider ??
+    productConfig?.ai.provider ??
+    config.provider.name;
 
-  if (dimensions !== undefined && (isNaN(dimensions) || dimensions < 1)) {
+  // Model: env override > product config > per-provider defaults below
+  const model = Bun.env.EMBEDDING_MODEL ?? pc?.model ?? undefined;
+
+  // Dimensions: env override > product config > per-provider defaults below
+  const rawDims = Bun.env.EMBEDDING_DIMENSIONS
+    ? parseInt(Bun.env.EMBEDDING_DIMENSIONS, 10)
+    : pc?.dimensions ?? undefined;
+
+  if (rawDims !== undefined && (isNaN(rawDims) || rawDims < 1)) {
     throw new ConfigError(
-      `Invalid EMBEDDING_DIMENSIONS: "${Bun.env.EMBEDDING_DIMENSIONS}" (must be a positive integer)`,
+      `Invalid embedding dimensions: ${rawDims} (must be a positive integer)`,
     );
   }
+  const dimensions = rawDims ?? undefined;
 
   let provider: EmbeddingProvider;
 
@@ -104,6 +117,7 @@ export function createEmbeddingProvider(
     provider: provider.name,
     model: model ?? "(default)",
     dimensions: provider.dimensions,
+    source: Bun.env.EMBEDDING_PROVIDER ? "env" : pc?.provider ? "config" : "auto",
   });
 
   return provider;
