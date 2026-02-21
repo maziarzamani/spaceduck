@@ -898,7 +898,7 @@ export async function createGateway(overrides?: {
   embeddingProvider?: EmbeddingProvider;
   config?: SpaceduckConfig;
 }): Promise<Gateway> {
-  // Load config
+  // Load deployment config (port, logLevel, etc.) from env
   const configResult = overrides?.config
     ? { ok: true as const, value: overrides.config }
     : loadConfig();
@@ -912,6 +912,14 @@ export async function createGateway(overrides?: {
 
   // Create logger
   const logger = new ConsoleLogger(config.logLevel);
+
+  // Load product config from JSON5 file via ConfigStore
+  const configStore = new ConfigStore();
+  const productConfig = await configStore.load();
+  logger.info("Product config loaded", {
+    provider: productConfig.ai.provider,
+    model: productConfig.ai.model,
+  });
 
   // Create event bus
   const eventBus = new SimpleEventBus(logger);
@@ -937,37 +945,46 @@ export async function createGateway(overrides?: {
   const longTermMemory = new SqliteLongTermMemory(db, logger, embeddingProvider);
   const sessionManager = new SqliteSessionManager(db, logger);
 
-  // Create provider
+  // Resolve API keys: product config secrets take priority, fall back to env vars
+  const aiSecrets = productConfig.ai.secrets;
+  const geminiApiKey = aiSecrets.geminiApiKey ?? Bun.env.GEMINI_API_KEY;
+  const openrouterApiKey = aiSecrets.openrouterApiKey ?? Bun.env.OPENROUTER_API_KEY;
+  const lmstudioApiKey = aiSecrets.lmstudioApiKey ?? Bun.env.LMSTUDIO_API_KEY;
+  const bedrockApiKey = aiSecrets.bedrockApiKey ?? Bun.env.AWS_BEARER_TOKEN_BEDROCK;
+
+  // Create provider (use product config for provider/model selection)
   let provider: Provider;
+  const providerName = productConfig.ai.provider;
+  const modelName = productConfig.ai.model;
   if (overrides?.provider) {
     provider = overrides.provider;
-  } else if (config.provider.name === "gemini") {
+  } else if (providerName === "gemini") {
     const { GeminiProvider } = require("@spaceduck/provider-gemini");
     provider = new GeminiProvider({
-      apiKey: Bun.env.GEMINI_API_KEY!,
-      model: config.provider.model,
+      apiKey: geminiApiKey!,
+      model: modelName,
     });
-  } else if (config.provider.name === "openrouter") {
+  } else if (providerName === "openrouter") {
     const { OpenRouterProvider } = require("@spaceduck/provider-openrouter");
     provider = new OpenRouterProvider({
-      apiKey: Bun.env.OPENROUTER_API_KEY!,
-      model: config.provider.model,
+      apiKey: openrouterApiKey!,
+      model: modelName,
     });
-  } else if (config.provider.name === "lmstudio") {
+  } else if (providerName === "lmstudio") {
     const { LMStudioProvider } = require("@spaceduck/provider-lmstudio");
     provider = new LMStudioProvider({
-      model: config.provider.model!,
+      model: modelName,
       baseUrl: Bun.env.LMSTUDIO_BASE_URL,
-      apiKey: Bun.env.LMSTUDIO_API_KEY,
+      apiKey: lmstudioApiKey,
     });
-  } else if (config.provider.name === "bedrock") {
+  } else if (providerName === "bedrock") {
     const { BedrockProvider } = require("@spaceduck/provider-bedrock");
     provider = new BedrockProvider({
-      model: config.provider.model,
-      region: Bun.env.AWS_REGION,
+      model: modelName,
+      region: productConfig.ai.region ?? Bun.env.AWS_REGION,
     });
   } else {
-    logger.error("Unknown provider", { name: config.provider.name });
+    logger.error("Unknown provider", { name: providerName });
     process.exit(1);
   }
 
@@ -976,7 +993,7 @@ export async function createGateway(overrides?: {
     conversationStore,
     longTermMemory,
     logger,
-    config.systemPrompt,
+    productConfig.ai.systemPrompt ?? config.systemPrompt,
   );
 
   // Create run lock
@@ -1006,10 +1023,10 @@ export async function createGateway(overrides?: {
     toolRegistry,
   });
 
-  // Create external channels (opt-in via env vars)
+  // Create external channels (opt-in via product config)
   const channels: Channel[] = [];
 
-  if (Bun.env.WHATSAPP_ENABLED === "true") {
+  if (productConfig.channels.whatsapp.enabled) {
     const { WhatsAppChannel } = require("@spaceduck/channel-whatsapp");
     channels.push(
       new WhatsAppChannel({
@@ -1032,6 +1049,7 @@ export async function createGateway(overrides?: {
     embeddingProvider,
     channels,
     attachmentStore,
+    configStore,
   }, db);
 
   await gateway.initStt();
