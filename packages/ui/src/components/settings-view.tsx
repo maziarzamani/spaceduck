@@ -13,8 +13,10 @@ import {
   Wifi,
   Monitor,
   Info,
+  Radio,
 } from "lucide-react";
 import { AiSection } from "./settings/ai-section";
+import { MemorySection } from "./settings/memory-section";
 import { ToolsSection } from "./settings/tools-section";
 import { SpeechSection } from "./settings/speech-section";
 import { ChannelsSection } from "./settings/channels-section";
@@ -28,7 +30,8 @@ interface SettingsViewProps {
 }
 
 type SettingsSection =
-  | "ai"
+  | "chat"
+  | "memory"
   | "tools"
   | "speech"
   | "channels"
@@ -38,30 +41,23 @@ type SettingsSection =
 
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: typeof Brain }[] = [
   { id: "connection", label: "Connection", icon: Wifi },
-  { id: "ai", label: "AI Provider", icon: Brain },
+  { id: "chat", label: "Chat", icon: MessageSquare },
+  { id: "memory", label: "Memory", icon: Brain },
   { id: "tools", label: "Tools", icon: Wrench },
   { id: "speech", label: "Speech", icon: Mic },
-  { id: "channels", label: "Channels", icon: MessageSquare },
+  { id: "channels", label: "Channels", icon: Radio },
   { id: "devices", label: "Devices", icon: Monitor },
   { id: "about", label: "About", icon: Info },
 ];
 
 function resolveDefaultSection(): SettingsSection {
   const token = localStorage.getItem("spaceduck.token");
-  return token ? "ai" : "connection";
+  return token ? "chat" : "connection";
 }
 
 export function SettingsView({ onBack, onDisconnect }: SettingsViewProps) {
   const [section, setSection] = useState<SettingsSection>(resolveDefaultSection);
   const cfg = useConfig();
-
-  if (cfg.loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 size={24} className="animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -118,13 +114,22 @@ export function SettingsView({ onBack, onDisconnect }: SettingsViewProps) {
             </div>
           )}
 
-          {section === "ai" && <AiSection cfg={cfg} />}
-          {section === "tools" && <ToolsSection cfg={cfg} />}
-          {section === "speech" && <SpeechSection cfg={cfg} />}
-          {section === "channels" && <ChannelsSection cfg={cfg} />}
-          {section === "connection" && <ConnectionSection onDisconnect={onDisconnect} />}
-          {section === "devices" && <DevicesSection onDisconnect={onDisconnect} />}
-          {section === "about" && <AboutSection />}
+          {cfg.loading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 size={24} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {section === "chat" && <AiSection cfg={cfg} />}
+              {section === "memory" && <MemorySection cfg={cfg} />}
+              {section === "tools" && <ToolsSection cfg={cfg} />}
+              {section === "speech" && <SpeechSection cfg={cfg} />}
+              {section === "channels" && <ChannelsSection cfg={cfg} />}
+              {section === "connection" && <ConnectionSection onDisconnect={onDisconnect} />}
+              {section === "devices" && <DevicesSection onDisconnect={onDisconnect} />}
+              {section === "about" && <AboutSection />}
+            </>
+          )}
         </div>
       </ScrollArea>
     </div>

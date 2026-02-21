@@ -16,6 +16,7 @@ export function ConnectionSection({ onDisconnect }: ConnectionSectionProps) {
   const token = localStorage.getItem("spaceduck.token");
   const [status, setStatus] = useState<ConnectionStatus>("checking");
   const [gatewayInfo, setGatewayInfo] = useState<{ uptime?: number; provider?: string; model?: string }>({});
+  const [providerOk, setProviderOk] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!gatewayUrl) {
@@ -34,6 +35,19 @@ export function ConnectionSection({ onDisconnect }: ConnectionSectionProps) {
       })
       .catch(() => setStatus("unreachable"));
   }, [gatewayUrl]);
+
+  useEffect(() => {
+    if (status !== "connected" || !gatewayUrl) return;
+    const headers: Record<string, string> = {};
+    if (token) headers["authorization"] = `Bearer ${token}`;
+    fetch(`${gatewayUrl}/api/config/provider-status`, {
+      headers,
+      signal: AbortSignal.timeout(15_000),
+    })
+      .then((r) => r.json() as Promise<{ ok: boolean }>)
+      .then((data) => setProviderOk(data.ok))
+      .catch(() => setProviderOk(false));
+  }, [status, token, gatewayUrl]);
 
   const statusIcon = {
     checking: <Loader2 size={14} className="animate-spin text-muted-foreground" />,
@@ -95,8 +109,12 @@ export function ConnectionSection({ onDisconnect }: ConnectionSectionProps) {
           )}
           {gatewayInfo.provider && (
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Active provider</span>
-              <span>{gatewayInfo.provider} / {gatewayInfo.model}</span>
+              <span className="text-muted-foreground">Chat model</span>
+              <span className="flex items-center gap-1.5">
+                {providerOk === true && <span className="inline-block h-2 w-2 rounded-full bg-green-500" />}
+                {providerOk === false && <span className="inline-block h-2 w-2 rounded-full bg-destructive" />}
+                {gatewayInfo.provider} / {gatewayInfo.model}
+              </span>
             </div>
           )}
           <Separator />

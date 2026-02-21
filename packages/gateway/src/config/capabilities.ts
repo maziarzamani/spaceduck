@@ -12,18 +12,28 @@ export interface EnvCapabilities {
 /**
  * Detect binary/environment availability (safe for unauthenticated access).
  * Does NOT reveal whether API keys are configured.
+ *
+ * Results are cached for the lifetime of the process since binary
+ * availability doesn't change without a restart.
  */
-export async function getCapabilities(): Promise<EnvCapabilities> {
-  const [stt, marker] = await Promise.all([
-    detectStt(),
-    detectMarker(),
-  ]);
+let cachedCapabilities: EnvCapabilities | null = null;
+let capabilitiesPromise: Promise<EnvCapabilities> | null = null;
 
-  return {
-    stt,
-    marker,
-    embedding: { available: true },
-  };
+export function getCapabilities(): Promise<EnvCapabilities> {
+  if (cachedCapabilities) return Promise.resolve(cachedCapabilities);
+  if (capabilitiesPromise) return capabilitiesPromise;
+
+  capabilitiesPromise = (async () => {
+    const [stt, marker] = await Promise.all([
+      detectStt(),
+      detectMarker(),
+    ]);
+    cachedCapabilities = { stt, marker, embedding: { available: true } };
+    capabilitiesPromise = null;
+    return cachedCapabilities;
+  })();
+
+  return capabilitiesPromise;
 }
 
 async function detectStt(): Promise<{ available: boolean; reason?: string }> {
