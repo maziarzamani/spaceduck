@@ -11,6 +11,16 @@
         "typescript": "^5",
       },
     },
+    "apps/cli": {
+      "name": "@spaceduck/cli",
+      "version": "0.1.0",
+      "bin": {
+        "spaceduck": "./src/index.ts",
+      },
+      "dependencies": {
+        "@spaceduck/config": "workspace:*",
+      },
+    },
     "apps/desktop": {
       "name": "@spaceduck/desktop",
       "version": "0.1.0",
@@ -591,6 +601,8 @@
     "@selderee/plugin-htmlparser2": ["@selderee/plugin-htmlparser2@0.11.0", "", { "dependencies": { "domhandler": "^5.0.3", "selderee": "^0.11.0" } }, "sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ=="],
 
     "@spaceduck/channel-whatsapp": ["@spaceduck/channel-whatsapp@workspace:packages/channels/whatsapp"],
+
+    "@spaceduck/cli": ["@spaceduck/cli@workspace:apps/cli"],
 
     "@spaceduck/config": ["@spaceduck/config@workspace:packages/config"],
 

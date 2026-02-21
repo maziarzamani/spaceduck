@@ -1,0 +1,15 @@
+{
+  "name": "@spaceduck/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "spaceduck": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@spaceduck/config": "workspace:*"
+  }
+}
