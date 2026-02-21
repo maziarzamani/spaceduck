@@ -19,20 +19,13 @@ export interface SpaceduckConfig {
   readonly systemPrompt?: string;
 }
 
-function requireEnv(key: string): Result<string, ConfigError> {
-  const value = Bun.env[key];
-  if (value === undefined || value === "") {
-    return err(new ConfigError(`Missing required env var: ${key}`));
-  }
-  return ok(value);
-}
-
 function optionalEnv(key: string, defaultValue: string): string {
   return Bun.env[key] || defaultValue;
 }
 
 /**
- * Load and validate configuration from environment variables.
+ * Load and validate deployment configuration from environment variables.
+ * Product config (provider, model, keys, etc.) lives in spaceduck.config.json5.
  * Returns Result — never throws.
  */
 export function loadConfig(): Result<SpaceduckConfig, ConfigError> {
@@ -48,33 +41,13 @@ export function loadConfig(): Result<SpaceduckConfig, ConfigError> {
     return err(new ConfigError(`Invalid LOG_LEVEL: ${logLevel} (must be one of: ${validLogLevels.join(", ")})`));
   }
 
-  const providerName = optionalEnv("PROVIDER_NAME", "gemini");
-
-  // Provider-specific validation
-  if (providerName === "gemini") {
-    const apiKey = requireEnv("GEMINI_API_KEY");
-    if (!apiKey.ok) return apiKey;
-  } else if (providerName === "bedrock") {
-    const region = requireEnv("AWS_REGION");
-    if (!region.ok) return region;
-  } else if (providerName === "openrouter") {
-    const apiKey = requireEnv("OPENROUTER_API_KEY");
-    if (!apiKey.ok) return apiKey;
-  } else if (providerName === "lmstudio") {
-    // No required env vars — LM Studio runs locally without auth
-  }
-
   const config: SpaceduckConfig = {
     port,
     logLevel,
     provider: {
-      name: providerName,
-      model: optionalEnv("PROVIDER_MODEL",
-        providerName === "gemini" ? "gemini-2.5-flash"
-        : providerName === "openrouter" ? "nvidia/nemotron-3-nano-30b-a3b:free"
-        : providerName === "lmstudio" ? "qwen/qwen3-4b-thinking-2507"
-        : "us.anthropic.claude-sonnet-4-20250514:0"),
-      region: providerName === "bedrock" ? optionalEnv("AWS_REGION", "us-east-1") : undefined,
+      name: optionalEnv("PROVIDER_NAME", "gemini"),
+      model: Bun.env.PROVIDER_MODEL || undefined,
+      region: Bun.env.AWS_REGION || undefined,
     },
     memory: {
       backend: optionalEnv("MEMORY_BACKEND", "sqlite"),

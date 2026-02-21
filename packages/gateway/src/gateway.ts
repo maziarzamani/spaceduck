@@ -372,11 +372,12 @@ export class Gateway implements Lifecycle {
 
     // Health endpoint
     if (req.method === "GET" && url.pathname === "/api/health") {
+      const productConfig = this.deps.configStore?.current;
       return Response.json({
         status: "ok",
         uptime: process.uptime(),
-        provider: this.deps.config.provider.name,
-        model: this.deps.config.provider.model,
+        provider: productConfig?.ai.provider ?? this.deps.config.provider.name,
+        model: productConfig?.ai.model ?? this.deps.config.provider.model,
         memory: this.deps.config.memory.backend,
         embedding: this.deps.embeddingProvider?.name ?? "disabled",
       });
@@ -1163,7 +1164,7 @@ export async function createGateway(overrides?: {
   await schema.migrate();
 
   // Create embedding provider (optional — disabled if EMBEDDING_ENABLED=false)
-  const embeddingProvider = overrides?.embeddingProvider ?? createEmbeddingProvider(config, logger);
+  const embeddingProvider = overrides?.embeddingProvider ?? createEmbeddingProvider(config, logger, productConfig);
 
   // Create memory layer — pass embedding provider for vector search
   const conversationStore = new SqliteConversationStore(db, logger);

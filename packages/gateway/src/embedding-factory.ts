@@ -3,15 +3,18 @@
 
 import type { SpaceduckConfig, Logger, EmbeddingProvider } from "@spaceduck/core";
 import { ConfigError } from "@spaceduck/core";
+import type { SpaceduckProductConfig } from "@spaceduck/config";
 
 /**
- * Create an EmbeddingProvider from config + environment.
+ * Create an EmbeddingProvider from env + product config.
+ * API keys are resolved from env first, then from product config secrets.
  * Returns undefined if embeddings are disabled.
  * Throws ConfigError on misconfiguration (fail-fast at startup).
  */
 export function createEmbeddingProvider(
   config: SpaceduckConfig,
   logger: Logger,
+  productConfig?: SpaceduckProductConfig,
 ): EmbeddingProvider | undefined {
   const enabled = Bun.env.EMBEDDING_ENABLED !== "false";
   if (!enabled) {
@@ -39,7 +42,7 @@ export function createEmbeddingProvider(
       provider = new LMStudioEmbeddingProvider({
         model: model ?? "text-embedding-qwen3-embedding-8b",
         baseUrl: Bun.env.LMSTUDIO_BASE_URL,
-        apiKey: Bun.env.LMSTUDIO_API_KEY,
+        apiKey: Bun.env.LMSTUDIO_API_KEY ?? productConfig?.ai.secrets.lmstudioApiKey,
         dimensions: dimensions ?? 4096,
         instruction: Bun.env.EMBEDDING_INSTRUCTION,
       });
@@ -47,10 +50,10 @@ export function createEmbeddingProvider(
     }
     case "gemini": {
       const { GeminiEmbeddingProvider } = require("@spaceduck/provider-gemini");
-      const apiKey = Bun.env.GEMINI_API_KEY;
+      const apiKey = Bun.env.GEMINI_API_KEY ?? productConfig?.ai.secrets.geminiApiKey;
       if (!apiKey) {
         throw new ConfigError(
-          "GEMINI_API_KEY is required when EMBEDDING_PROVIDER=gemini",
+          "Gemini API key is required for embedding. Set it in Settings or via GEMINI_API_KEY env var.",
         );
       }
       provider = new GeminiEmbeddingProvider({
@@ -74,8 +77,12 @@ export function createEmbeddingProvider(
       provider = new BedrockEmbeddingProvider({
         model: effectiveModel,
         dimensions: dims,
-        region: Bun.env.AWS_REGION,
-        apiKey: Bun.env.AWS_BEARER_TOKEN_BEDROCK ?? Bun.env.BEDROCK_API_KEY,
+        region: Bun.env.AWS_REGION ?? productConfig?.ai.region,
+        apiKey:
+          Bun.env.AWS_BEARER_TOKEN_BEDROCK ??
+          Bun.env.BEDROCK_API_KEY ??
+          productConfig?.ai.secrets.bedrockApiKey ??
+          undefined,
       });
       break;
     }
