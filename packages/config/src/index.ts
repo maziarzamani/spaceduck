@@ -2,7 +2,7 @@ export { SpaceduckConfigSchema } from "./schema";
 export type { SpaceduckProductConfig } from "./types";
 export type { ConfigPatchOp } from "./types";
 export { defaultConfig } from "./defaults";
-export { applyPatch } from "./patch";
+export { applyPatch, PatchError } from "./patch";
 export { redactConfig } from "./redact";
 export {
   SECRET_PATHS,
