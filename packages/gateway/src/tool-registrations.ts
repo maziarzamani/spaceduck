@@ -418,6 +418,7 @@ export function createToolRegistry(
               description: 'JSON Pointer to the field to change (e.g. "/ai/model", "/ai/temperature").',
             },
             value: {
+              type: ["string", "number", "boolean", "null", "array", "object"],
               description: "The new value to set at the given path.",
             },
           },

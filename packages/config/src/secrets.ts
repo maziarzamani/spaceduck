@@ -5,6 +5,7 @@ export const SECRET_PATHS: readonly string[] = [
   "/ai/secrets/bedrockApiKey",
   "/ai/secrets/openrouterApiKey",
   "/ai/secrets/lmstudioApiKey",
+  "/ai/secrets/llamacppApiKey",
   "/tools/webSearch/secrets/braveApiKey",
   "/tools/webAnswer/secrets/perplexityApiKey",
 ] as const;

@@ -8,8 +8,10 @@
 // Reference: https://github.com/asg017/sqlite-vec/blob/main/examples/simple-bun/demo.ts
 
 import { Database } from "bun:sqlite";
-import type { Logger } from "@spaceduck/core";
+import type { Logger, EmbeddingProvider } from "@spaceduck/core";
 import { platform } from "node:process";
+import { copyFileSync, readdirSync, unlinkSync } from "node:fs";
+import { dirname, join, basename } from "node:path";
 
 const MIGRATIONS_DIR = new URL("./migrations", import.meta.url).pathname;
 
@@ -196,4 +198,145 @@ export class SchemaManager {
 
     return migrations;
   }
+}
+
+// ── Embedding fingerprint reconciliation ──────────────────────────────
+
+interface VecFingerprint {
+  provider: string;
+  model: string;
+  dimensions: string;
+}
+
+const MAX_BACKUPS = 3;
+
+function readVecMeta(db: Database): VecFingerprint | null {
+  try {
+    const rows = db
+      .query("SELECT key, value FROM vec_meta WHERE key IN ('provider', 'model', 'dimensions')")
+      .all() as Array<{ key: string; value: string }>;
+
+    if (rows.length === 0) return null;
+
+    const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    if (!map.provider || !map.model || !map.dimensions) return null;
+    return { provider: map.provider, model: map.model, dimensions: map.dimensions };
+  } catch {
+    return null;
+  }
+}
+
+function writeVecMeta(db: Database, fp: VecFingerprint): void {
+  const stmt = db.query(
+    "INSERT OR REPLACE INTO vec_meta (key, value) VALUES (?1, ?2)",
+  );
+  stmt.run("provider", fp.provider);
+  stmt.run("model", fp.model);
+  stmt.run("dimensions", fp.dimensions);
+}
+
+function backupDb(dbPath: string, logger: Logger): string | null {
+  if (dbPath === ":memory:") return null;
+
+  try {
+    const dir = dirname(dbPath);
+    const base = basename(dbPath);
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupName = `${base}.bak-${ts}`;
+    const backupPath = join(dir, backupName);
+
+    copyFileSync(dbPath, backupPath);
+    logger.info("Database backed up", { path: backupPath });
+
+    pruneBackups(dir, base, logger);
+    return backupPath;
+  } catch (err) {
+    logger.warn("Failed to back up database before vec_facts rebuild", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+function pruneBackups(dir: string, dbBase: string, logger: Logger): void {
+  try {
+    const prefix = `${dbBase}.bak-`;
+    const backups = readdirSync(dir)
+      .filter((f) => f.startsWith(prefix))
+      .sort()
+      .reverse();
+
+    for (const old of backups.slice(MAX_BACKUPS)) {
+      unlinkSync(join(dir, old));
+      logger.info("Pruned old database backup", { file: old });
+    }
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+/**
+ * Ensure the vec_facts virtual table matches the active embedding provider.
+ *
+ * Compares the provider's identity (name, model, dimensions) against the
+ * stored fingerprint in vec_meta. If anything differs — or vec_meta is
+ * empty — drops and recreates vec_facts with the correct dimensions.
+ *
+ * Before dropping, backs up the DB file (keeps 3 most recent).
+ *
+ * @param dbPath - filesystem path to the SQLite file (for backup); ":memory:" skips backup
+ */
+export function reconcileVecFacts(
+  db: Database,
+  embedding: EmbeddingProvider | undefined,
+  logger: Logger,
+  dbPath: string = ":memory:",
+): void {
+  if (!embedding) {
+    logger.info("Embeddings disabled — skipping vec_facts reconciliation");
+    return;
+  }
+
+  const current: VecFingerprint = {
+    provider: embedding.name,
+    model: embedding.model,
+    dimensions: String(embedding.dimensions),
+  };
+
+  const stored = readVecMeta(db);
+
+  if (
+    stored &&
+    stored.provider === current.provider &&
+    stored.model === current.model &&
+    stored.dimensions === current.dimensions
+  ) {
+    logger.info("vec_facts fingerprint matches — no rebuild needed");
+    return;
+  }
+
+  const reason = stored
+    ? `changed from ${stored.provider}/${stored.model}/${stored.dimensions} to ${current.provider}/${current.model}/${current.dimensions}`
+    : "no previous fingerprint recorded";
+
+  logger.warn("Embedding identity mismatch — rebuilding vec_facts", { reason });
+
+  const backupPath = backupDb(dbPath, logger);
+
+  db.exec("DROP TABLE IF EXISTS vec_facts");
+  db.exec(
+    `CREATE VIRTUAL TABLE vec_facts USING vec0(
+      fact_id TEXT PRIMARY KEY,
+      embedding float[${embedding.dimensions}]
+    )`,
+  );
+
+  writeVecMeta(db, current);
+
+  logger.warn("vec_facts rebuilt", {
+    provider: current.provider,
+    model: current.model,
+    dimensions: current.dimensions,
+    backup: backupPath ?? "none (in-memory DB)",
+  });
 }

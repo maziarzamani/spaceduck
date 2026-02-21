@@ -98,6 +98,7 @@
         "@spaceduck/memory-sqlite": "workspace:*",
         "@spaceduck/provider-bedrock": "workspace:*",
         "@spaceduck/provider-gemini": "workspace:*",
+        "@spaceduck/provider-llamacpp": "workspace:*",
         "@spaceduck/provider-lmstudio": "workspace:*",
         "@spaceduck/provider-openrouter": "workspace:*",
         "@spaceduck/stt-whisper": "workspace:*",
@@ -145,8 +146,30 @@
         "bun-types": "latest",
       },
     },
+    "packages/providers/llamacpp": {
+      "name": "@spaceduck/provider-llamacpp",
+      "version": "0.1.0",
+      "dependencies": {
+        "@spaceduck/core": "workspace:*",
+        "@spaceduck/provider-openai-compat": "workspace:*",
+      },
+      "devDependencies": {
+        "bun-types": "latest",
+      },
+    },
     "packages/providers/lmstudio": {
       "name": "@spaceduck/provider-lmstudio",
+      "version": "0.1.0",
+      "dependencies": {
+        "@spaceduck/core": "workspace:*",
+        "@spaceduck/provider-openai-compat": "workspace:*",
+      },
+      "devDependencies": {
+        "bun-types": "latest",
+      },
+    },
+    "packages/providers/openai-compat": {
+      "name": "@spaceduck/provider-openai-compat",
       "version": "0.1.0",
       "dependencies": {
         "@spaceduck/core": "workspace:*",
@@ -618,7 +641,11 @@
 
     "@spaceduck/provider-gemini": ["@spaceduck/provider-gemini@workspace:packages/providers/gemini"],
 
+    "@spaceduck/provider-llamacpp": ["@spaceduck/provider-llamacpp@workspace:packages/providers/llamacpp"],
+
     "@spaceduck/provider-lmstudio": ["@spaceduck/provider-lmstudio@workspace:packages/providers/lmstudio"],
+
+    "@spaceduck/provider-openai-compat": ["@spaceduck/provider-openai-compat@workspace:packages/providers/openai-compat"],
 
     "@spaceduck/provider-openrouter": ["@spaceduck/provider-openrouter@workspace:packages/providers/openrouter"],
 

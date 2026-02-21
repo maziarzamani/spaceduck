@@ -58,7 +58,7 @@ describe("SchemaManager", () => {
     db.close();
   });
 
-  it("should be idempotent and reach version 11", async () => {
+  it("should be idempotent and reach version 12", async () => {
     const db = createTestDb();
     const schema = new SchemaManager(db, logger);
     schema.loadExtensions();
@@ -68,7 +68,7 @@ describe("SchemaManager", () => {
     const row = db.query("SELECT MAX(version) as version FROM schema_version").get() as {
       version: number;
     };
-    expect(row.version).toBe(11);
+    expect(row.version).toBe(12);
 
     db.close();
   });
@@ -805,5 +805,404 @@ describe("hybrid recall — RRF + decay + expiry", () => {
     }
     // The high-confidence fact should be present
     expect(result.value.some((f) => f.content.includes("professionally"))).toBe(true);
+  });
+});
+
+// ── Slot vs turn-flush deactivation E2E ─────────────────────────────
+
+describe("Slot deactivation of turn-flush facts", () => {
+  let db: Database;
+  let ltm: SqliteLongTermMemory;
+
+  beforeEach(async () => {
+    db = await setupDb();
+    ltm = new SqliteLongTermMemory(db, logger);
+  });
+
+  afterEach(() => db.close());
+
+  it("deactivates slot-less turn-flush facts when a slot fact is upserted", async () => {
+    // 1. Store a slot fact: "User's name is John"
+    await ltm.upsertSlotFact({
+      conversationId: "conv-1",
+      content: "User's name is John",
+      slot: "name",
+      slotValue: "John",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "en",
+      derivedFromMessageId: "msg-1",
+    });
+
+    // 2. Turn-flush stores raw assistant response (no slot)
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "Your name is John.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+
+    // Both should be active at this point
+    const allActive = db
+      .query("SELECT content, is_active FROM facts WHERE is_active = 1")
+      .all() as Array<{ content: string; is_active: number }>;
+    expect(allActive.length).toBe(2);
+
+    // 3. In a new conversation, user corrects: "My name is Peter"
+    await ltm.upsertSlotFact({
+      conversationId: "conv-2",
+      content: "User's name is Peter",
+      slot: "name",
+      slotValue: "Peter",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "en",
+      derivedFromMessageId: "msg-2",
+    });
+
+    // 4. Verify: only the Peter fact should be active
+    const activeAfter = db
+      .query("SELECT content, slot, is_active FROM facts WHERE is_active = 1")
+      .all() as Array<{ content: string; slot: string | null; is_active: number }>;
+
+    expect(activeAfter.length).toBe(1);
+    expect(activeAfter[0].content).toBe("User's name is Peter");
+
+    // The turn-flush "Your name is John." should be deactivated
+    const johnFact = db
+      .query("SELECT is_active FROM facts WHERE content = 'Your name is John.'")
+      .get() as { is_active: number };
+    expect(johnFact.is_active).toBe(0);
+  });
+
+  it("deactivates slot-less facts via remember() with slot conflict resolution", async () => {
+    // 1. Seed a slot fact with slotValue="Alice" so remember() has old values to match
+    await ltm.remember({
+      conversationId: "conv-0",
+      content: "User's name is Alice",
+      slot: "name",
+      slotValue: "Alice",
+      source: "pre_regex",
+      confidence: 0.55,
+    });
+
+    // 2. Turn-flush stores "Your name is Alice." (no slot)
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "Your name is Alice.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+
+    // Both should be active
+    const before = db
+      .query("SELECT is_active FROM facts WHERE content = 'Your name is Alice.'")
+      .get() as { is_active: number };
+    expect(before.is_active).toBe(1);
+
+    // 3. Slot-based remember stores a new name — old "Alice" turn-flush should be deactivated
+    await ltm.remember({
+      conversationId: "conv-2",
+      content: "User's name is Bob",
+      slot: "name",
+      slotValue: "Bob",
+      source: "pre_regex",
+      confidence: 0.55,
+    });
+
+    const after = db
+      .query("SELECT is_active FROM facts WHERE content = 'Your name is Alice.'")
+      .get() as { is_active: number };
+    expect(after.is_active).toBe(0);
+
+    const active = db
+      .query("SELECT content FROM facts WHERE is_active = 1 AND content LIKE '%name%'")
+      .all() as Array<{ content: string }>;
+    expect(active.length).toBe(1);
+    expect(active[0].content).toBe("User's name is Bob");
+  });
+
+  it("recall only returns the latest slot value, not stale turn-flush facts", async () => {
+    // Full pipeline: John stored → turn-flush "John" → Peter stored → recall
+    await ltm.upsertSlotFact({
+      conversationId: "conv-1",
+      content: "User's name is John",
+      slot: "name",
+      slotValue: "John",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "en",
+      derivedFromMessageId: "msg-1",
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "Your name is John.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+    await ltm.upsertSlotFact({
+      conversationId: "conv-2",
+      content: "User's name is Peter",
+      slot: "name",
+      slotValue: "Peter",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "en",
+      derivedFromMessageId: "msg-2",
+    });
+
+    // Recall for "name"
+    const result = await ltm.recall("name", 10);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // Should NOT contain any John reference
+    const contents = result.value.map((f) => f.content);
+    expect(contents.some((c) => c.includes("John"))).toBe(false);
+    expect(contents.some((c) => c.includes("Peter"))).toBe(true);
+  });
+
+  // ── Age slot (value-based: "25" appears in turn-flush) ──────────────
+
+  it("deactivates turn-flush containing old age value when age slot changes", async () => {
+    // First set age=25 via slot
+    await ltm.upsertSlotFact({
+      conversationId: "conv-1",
+      content: "User is 25 years old",
+      slot: "age",
+      slotValue: "25",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "en",
+      derivedFromMessageId: "msg-1",
+    });
+    // Turn-flush echoes "25"
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "You are 25 years old.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+
+    // Now correct to age=30 — old "25" turn-flush should be deactivated
+    await ltm.upsertSlotFact({
+      conversationId: "conv-2",
+      content: "User is 30 years old",
+      slot: "age",
+      slotValue: "30",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "en",
+      derivedFromMessageId: "msg-2",
+    });
+
+    const old = db
+      .query("SELECT is_active FROM facts WHERE content = 'You are 25 years old.'")
+      .get() as { is_active: number };
+    expect(old.is_active).toBe(0);
+
+    const active = db
+      .query("SELECT content FROM facts WHERE is_active = 1")
+      .all() as Array<{ content: string }>;
+    expect(active.length).toBe(1);
+    expect(active[0].content).toBe("User is 30 years old");
+  });
+
+  it("deactivates turn-flush age via remember() slot conflict", async () => {
+    // Seed an old age slot fact so remember() has something to collect
+    await ltm.remember({
+      conversationId: "conv-0",
+      content: "User is 25 years old",
+      slot: "age",
+      slotValue: "25",
+      source: "pre_regex",
+      confidence: 0.55,
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "Your age is 25.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+
+    await ltm.remember({
+      conversationId: "conv-2",
+      content: "User is 30 years old",
+      slot: "age",
+      slotValue: "30",
+      source: "pre_regex",
+      confidence: 0.55,
+    });
+
+    const old = db
+      .query("SELECT is_active FROM facts WHERE content = 'Your age is 25.'")
+      .get() as { is_active: number };
+    expect(old.is_active).toBe(0);
+  });
+
+  // ── Location slot (language-agnostic via value match) ──────────────
+
+  it("deactivates turn-flush containing old city when location changes", async () => {
+    await ltm.upsertSlotFact({
+      conversationId: "conv-1",
+      content: "User lives in New York",
+      slot: "location",
+      slotValue: "New York",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "en",
+      derivedFromMessageId: "msg-1",
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "You live in New York.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+
+    await ltm.upsertSlotFact({
+      conversationId: "conv-2",
+      content: "User lives in Copenhagen",
+      slot: "location",
+      slotValue: "Copenhagen",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "en",
+      derivedFromMessageId: "msg-2",
+    });
+
+    const after = db
+      .query("SELECT is_active FROM facts WHERE content = 'You live in New York.'")
+      .get() as { is_active: number };
+    expect(after.is_active).toBe(0);
+  });
+
+  it("deactivates Danish turn-flush via old value when location changes", async () => {
+    await ltm.upsertSlotFact({
+      conversationId: "conv-1",
+      content: "User lives in København",
+      slot: "location",
+      slotValue: "København",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "da",
+      derivedFromMessageId: "msg-1",
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "Du bor i København.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+
+    await ltm.upsertSlotFact({
+      conversationId: "conv-2",
+      content: "User lives in Aarhus",
+      slot: "location",
+      slotValue: "Aarhus",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "da",
+      derivedFromMessageId: "msg-2",
+    });
+
+    const old = db
+      .query("SELECT is_active FROM facts WHERE content = 'Du bor i København.'")
+      .get() as { is_active: number };
+    expect(old.is_active).toBe(0);
+  });
+
+  it("deactivates turn-flush location via remember() slot conflict", async () => {
+    await ltm.remember({
+      conversationId: "conv-0",
+      content: "User lives in London",
+      slot: "location",
+      slotValue: "London",
+      source: "pre_regex",
+      confidence: 0.55,
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "You are based in London.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+
+    await ltm.remember({
+      conversationId: "conv-2",
+      content: "User lives in Copenhagen",
+      slot: "location",
+      slotValue: "Copenhagen",
+      source: "pre_regex",
+      confidence: 0.55,
+    });
+
+    const old = db
+      .query("SELECT is_active FROM facts WHERE content = 'You are based in London.'")
+      .get() as { is_active: number };
+    expect(old.is_active).toBe(0);
+  });
+
+  // ── Cross-slot isolation ───────────────────────────────────────────
+
+  it("does NOT deactivate turn-flush facts for unrelated slots", async () => {
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "You live in Berlin.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "You are 40 years old.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+
+    // First name upsert (no old value to match) — should NOT affect others
+    await ltm.upsertSlotFact({
+      conversationId: "conv-2",
+      content: "User's name is Alice",
+      slot: "name",
+      slotValue: "Alice",
+      source: "pre_regex",
+      confidence: 0.55,
+      lang: "en",
+      derivedFromMessageId: "msg-2",
+    });
+
+    const locationFact = db
+      .query("SELECT is_active FROM facts WHERE content = 'You live in Berlin.'")
+      .get() as { is_active: number };
+    expect(locationFact.is_active).toBe(1);
+
+    const ageFact = db
+      .query("SELECT is_active FROM facts WHERE content = 'You are 40 years old.'")
+      .get() as { is_active: number };
+    expect(ageFact.is_active).toBe(1);
+  });
+
+  // ── 'other' slot should not trigger deactivation ───────────────────
+
+  it("does NOT deactivate turn-flush facts when storing 'other' slot facts", async () => {
+    await ltm.remember({
+      conversationId: "conv-1",
+      content: "You prefer Python.",
+      source: "turn-flush",
+      confidence: 0.75,
+    });
+
+    await ltm.remember({
+      conversationId: "conv-2",
+      content: "User mentioned working on a project",
+      slot: "other",
+      source: "llm",
+      confidence: 0.55,
+    });
+
+    const prefFact = db
+      .query("SELECT is_active FROM facts WHERE content = 'You prefer Python.'")
+      .get() as { is_active: number };
+    expect(prefFact.is_active).toBe(1);
   });
 });

@@ -65,6 +65,11 @@ export function guardFact(content: string): GuardResult {
   if (content.trim().length < 8)    return { pass: false, confidence: 0 };
   if (content.split(" ").length < 3) return { pass: false, confidence: 0 };
 
+  // Reject "ignorance assertions" — facts that say we DON'T know something
+  if (/\b(is unknown|is not (set|provided|specified|given|mentioned|available))\b/i.test(content)) {
+    return { pass: false, confidence: 0 };
+  }
+
   // Tiered transients: store with expiry instead of discarding
   for (const { pattern, ttlMs } of TRANSIENT_TIERS) {
     if (pattern.test(content)) {
@@ -89,6 +94,16 @@ function normalizeText(text: string): string {
 // ── Negation detection ──────────────────────────────────────────────────
 
 const NEGATION_TOKENS = /\b(ikke|ikk|sgu\s+ikke|ikke\s+rigtig|hverken|not|don't|doesn't|isn't|wasn't|never|no\s+longer|ikke\s+l\S*ngere|not\s+really)\b/i;
+
+/**
+ * Slot values that indicate the LLM doesn't actually know the answer.
+ * These must never overwrite a real stored value.
+ */
+const NULL_SLOT_VALUES = new Set([
+  "unknown", "not set", "not provided", "not specified", "n/a", "none",
+  "unspecified", "not given", "not mentioned", "not available",
+  "ukendt", "ikke angivet", "ikke oplyst",
+]);
 
 function hasNegation(fullText: string, matchStart: number, matchEnd: number): boolean {
   const before = fullText.slice(Math.max(0, matchStart - 40), matchStart);
@@ -141,8 +156,17 @@ const IDENTITY_PATTERNS: IdentityPattern[] = [
   // Location (EN) — stops at conjunctions
   { pattern: /\bI live in\s+([\p{L}\s'-]+?)(?:\.|,|\band\b|\bbut\b|$)/iu,
     template: m => `User lives in ${m[1].trim()}`, lang: "en", slot: "location", valueIndex: 1 },
+  // Location (EN) — "I moved to X", "I relocated to X"
+  { pattern: /\bI\s+(?:moved|relocated)\s+to\s+([\p{L}\s'-]+?)(?:\s+(?:last|this|a\s+few|recently|now)|[.,!]|$)/iu,
+    template: m => `User lives in ${m[1].trim()}`, lang: "en", slot: "location", valueIndex: 1 },
+  // Location (EN) — "I moved from X to Y" (captures Y)
+  { pattern: /\bI\s+moved\s+from\s+[\p{L}\s'-]+?\s+to\s+([\p{L}\s'-]+?)(?:\s+(?:last|this|a\s+few|recently|now)|[.,!]|$)/iu,
+    template: m => `User lives in ${m[1].trim()}`, lang: "en", slot: "location", valueIndex: 1 },
   // Location (DA) — stops at conjunctions
   { pattern: /\bjeg bor i\s+([\p{L}\s'-]+?)(?:\.|,|\bog\b|\bmen\b|$)/iu,
+    template: m => `User lives in ${m[1].trim()}`, lang: "da", slot: "location", valueIndex: 1 },
+  // Location (DA) — "jeg er flyttet til X", "jeg flyttede til X"
+  { pattern: /\bjeg\s+(?:er\s+)?flytte(?:t|de)\s+til\s+([\p{L}\s'-]+?)(?:\.|,|\bog\b|\bmen\b|$)/iu,
     template: m => `User lives in ${m[1].trim()}`, lang: "da", slot: "location", valueIndex: 1 },
 ];
 
@@ -266,8 +290,13 @@ export class FactExtractor {
 
     const normalized = normalizeText(message.content);
 
-    // ── Step 1: Regex extraction (always runs) ────────────────────────
-    const regexCandidates = this.extractByRegexPipeline(normalized);
+    // ── Step 1: Regex extraction (user messages ONLY) ────────────────
+    // Identity regex patterns are first-person ("my name is", "I live in")
+    // and must NEVER run on assistant text — "I'm curious" would extract
+    // name=curious, corrupting user identity.
+    const regexCandidates = message.role === "user"
+      ? this.extractByRegexPipeline(normalized)
+      : [];
 
     // ── Step 2: LLM extraction (if provider available) ────────────────
     let llmCandidates: FactCandidate[] = [];
@@ -314,6 +343,18 @@ export class FactExtractor {
 
       // Identity slots use upsertSlotFact with write guards
       const isIdentitySlot = candidate.slot !== "other" && candidate.slot !== "preference" && candidate.slotValue;
+
+      // Belt+suspenders: NEVER let assistant-sourced text overwrite identity slots.
+      // Even if regex gating fails in the future, this blocks contamination.
+      if (isIdentitySlot && message.role !== "user") {
+        this.logger.debug("Identity slot from non-user message blocked", {
+          slot: candidate.slot,
+          role: message.role,
+          content: candidate.content.slice(0, 60),
+        });
+        continue;
+      }
+
       if (isIdentitySlot && this.ltm.upsertSlotFact) {
         const result = await this.ltm.upsertSlotFact({
           slot: candidate.slot,
@@ -482,6 +523,9 @@ export class FactExtractor {
 
         if (typeof sentence === "string" && sentence.length >= 5 && sentence.length <= this.config.maxFactLength) {
           const slot = LLM_TYPE_TO_SLOT[type] ?? "other";
+          const normalizedValue = typeof value === "string" ? value.trim().toLowerCase() : "";
+          // Reject placeholder values the LLM uses when it doesn't actually know
+          if (NULL_SLOT_VALUES.has(normalizedValue)) continue;
           candidates.push({
             content: sentence,
             slot,

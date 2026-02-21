@@ -29,8 +29,10 @@ It remembers what you've said across conversations, acts on your behalf with rea
 ### Persistent Memory
 - **Hybrid recall** (vector cosine + FTS5 BM25) — finds what you said even when you don't use the same words
 - **Eager extraction** — facts are persisted after every response via `afterTurn()`, not only at compaction
+- **Slot-based identity model** — `name`, `age`, `location`, `preference` slots with transactional upsert and value-based deactivation (language-agnostic)
+- **Contamination guard** — assistant-sourced text can never overwrite user identity slots (belt + suspenders)
 - **SHA-256 deduplication** — exact-duplicate facts are caught before they hit storage
-- **Memory firewall** (`guardFact`) — rejects questions, noisy content, and hallucinated facts
+- **Memory firewall** (`guardFact`) — rejects questions, noisy content, hallucinated facts, and "unknown"/"not set" poison values
 - **Recency decay + expiry** — older facts fade gracefully; stale facts are filtered at the SQL level
 
 ### Multi-Channel
@@ -52,6 +54,7 @@ It remembers what you've said across conversations, acts on your behalf with rea
 - **AWS Bedrock** — native Converse API, Titan Text Embeddings V2, Bearer token auth
 - **OpenRouter** — access to hundreds of models through a single key
 - **LM Studio** — any local model via OpenAI-compatible API
+- **llama.cpp** — local models via llama-server (OpenAI-compatible)
 - Hot-swap providers at runtime from the Settings UI or CLI — no restart required
 
 ### Configuration
@@ -94,10 +97,10 @@ It remembers what you've said across conversations, acts on your behalf with rea
 | Conversation store | ✅ | Full message history in SQLite with WAL mode | Unit |
 | Long-term facts | ✅ | Durable personal facts with FTS5 full-text search, identity slot model (`name`/`age`/`location`/`preference`) | Unit |
 | Vector embeddings | ✅ | sqlite-vec cosine similarity, configurable dimensions, `minScore` filtering, FTS5 fallback, purpose-aware embeddings (`index`/`retrieval`) | Unit |
-| Fact extraction | ✅ | Regex-first + LLM-second pipeline, pre-context extraction for same-turn updates, V2 Danish grammar support, symmetric negation detection | Unit |
+| Fact extraction | ✅ | Regex-first + LLM-second pipeline, pre-context extraction for same-turn updates, V2 Danish grammar support, symmetric negation detection, contamination guard (assistant text cannot write identity slots), NULL_SLOT_VALUES blocklist | Unit, E2E |
 | Deduplication | ✅ | SHA-256 content hashing with Unicode normalization for exact duplicates | Unit |
 | Hybrid recall | ✅ | RRF combining vector cosine + FTS5 BM25, recency decay, SQL expiry pushdown | Unit |
-| Fact conflict resolution | ✅ | Transactional `upsertSlotFact` with SQL write guards: `pre_regex` beats `post_llm` per message, time-ordering prevents stale overwrites | Unit |
+| Fact conflict resolution | ✅ | Transactional `upsertSlotFact` with SQL write guards: `pre_regex` beats `post_llm` per message, time-ordering prevents stale overwrites. Value-based slot deactivation: when a slot changes, old slot-less facts containing the previous value are also deactivated (language-agnostic) | Unit, E2E |
 | Backfill script | 🔜 | Resumable migration to embed existing unembedded facts | — |
 | Memory inspector | 🔜 | Web UI panel to browse, edit, and delete stored facts | — |
 | Per-user isolation | 🔜 | Scope facts by user identity across channels | — |
@@ -111,10 +114,12 @@ Regex extraction (same-turn, deterministic) currently covers English and Danish.
 |-----------|---|---------|--------|
 | Provider interface | ✅ | Pluggable `Provider` and `EmbeddingProvider` contracts — bring any model | Unit |
 | Gemini | ✅ | Chat streaming + embeddings via Google AI | E2E |
-| LM Studio | ✅ | Chat streaming + embeddings via OpenAI-compatible API (any local model) | — |
+| LM Studio | ✅ | Chat streaming + embeddings via OpenAI-compatible API (any local model) | Unit |
+| llama.cpp | ✅ | Chat streaming via OpenAI-compatible API (local models via llama-server) | Unit |
+| OpenAI-compat | ✅ | Shared provider layer for any OpenAI-compatible API (SSE streaming, think-tag stripping) | Unit |
 | OpenRouter | ✅ | Multi-model chat streaming (access to hundreds of models) | — |
 | AWS Bedrock | ✅ | Native Converse API (required for Nova), Titan Text Embeddings V2, Bearer token auth | E2E |
-| Embedding factory | ✅ | Provider-agnostic creation from product config (with env overrides), fail-fast dimension validation | Unit |
+| Embedding factory | ✅ | Provider-agnostic creation from product config (with env overrides), fail-fast dimension validation, swappable at runtime | Unit |
 | Ollama | 🔜 | Local models via Ollama API | — |
 | Anthropic (direct) | 🔜 | Claude via Anthropic API (non-Bedrock) | — |
 | Provider fallback chain | 🔜 | Auto-retry with secondary provider on failure or timeout | — |
@@ -191,7 +196,7 @@ Spaceduck has a three-tier memory architecture:
 
 1. **Short-term** — Full conversation message history in SQLite, with token-budgeted context windows and automatic compaction.
 
-2. **Long-term (facts)** — Durable personal facts extracted from conversations. Extracted eagerly after every turn via `afterTurn()` (not only at compaction), and stored with SHA-256 content hashes for exact deduplication. A memory firewall (`guardFact`) validates facts before storage, rejecting questions and noisy content.
+2. **Long-term (facts)** — Durable personal facts extracted from conversations. Extracted eagerly after every turn via `afterTurn()` (not only at compaction), and stored with SHA-256 content hashes for exact deduplication. A memory firewall (`guardFact`) validates facts before storage, rejecting questions, noisy content, and poison values. Identity slots (`name`, `age`, `location`) use transactional upsert with value-based deactivation — when a slot changes, stale slot-less facts referencing the old value are automatically deactivated (language-agnostic). A contamination guard ensures assistant-sourced text can never overwrite user identity.
 
 3. **Vector embeddings** — Every fact is embedded via a configurable `EmbeddingProvider` and stored in a sqlite-vec virtual table. Recall uses hybrid scoring: Reciprocal Rank Fusion (RRF) combining vector cosine similarity and FTS5 BM25, with exponential recency decay and SQL-level expiry filtering.
 
@@ -255,19 +260,22 @@ spaceduck/
 │   │   ├── gemini/            # Google AI (chat + embeddings)
 │   │   ├── bedrock/           # Amazon Bedrock (native Converse API + Titan V2 embeddings)
 │   │   ├── lmstudio/          # Local models via OpenAI-compatible API
+│   │   ├── llamacpp/          # llama.cpp via llama-server (OpenAI-compatible)
+│   │   ├── openai-compat/     # Shared OpenAI-compatible provider layer (SSE, think-stripping)
 │   │   └── openrouter/        # Multi-model gateway
 │   ├── memory/
 │   │   └── sqlite/            # SQLite + FTS5 + sqlite-vec vector storage
 │   │       └── src/
 │   │           ├── schema.ts      # Migrations + ensureCustomSQLite()
 │   │           ├── long-term.ts   # Hybrid recall (RRF) + vector + FTS + dedup
-│   │           └── migrations/    # 001–007 SQL migrations
+│   │           └── migrations/    # 001–012 SQL migrations
 │   ├── channels/
 │   │   └── whatsapp/          # WhatsApp via Baileys (QR pairing)
 │   ├── gateway/               # Composition root — wires everything
 │   │   └── src/
 │   │       ├── gateway.ts              # HTTP/WS server + config API + dependency injection
 │   │       ├── swappable-provider.ts   # Proxy for hot-swapping AI provider at runtime
+│   │       ├── swappable-embedding-provider.ts  # Proxy for hot-swapping embedding provider
 │   │       ├── config/config-store.ts  # Atomic JSON5 read/write + rev hashing
 │   │       ├── config/capabilities.ts  # Binary detection (cached) + configured status
 │   │       ├── attachment-store.ts     # Server-side Map<attachmentId, localPath> with TTL sweeper
@@ -380,6 +388,10 @@ bun test packages/stt/whisper/        # Whisper STT tests
 
 # Live E2E tests against Bedrock (requires AWS_BEARER_TOKEN_BEDROCK)
 RUN_LIVE_TESTS=1 bun test packages/gateway/src/__tests__/e2e-bedrock.test.ts
+
+# Live E2E memory tests (requires running gateway + embedding model)
+bun packages/memory/sqlite/src/__tests__/e2e-live.ts       # English suite
+bun packages/memory/sqlite/src/__tests__/e2e-live-da.ts    # Danish / multilingual suite
 
 # Dev server with hot reload
 bun run dev

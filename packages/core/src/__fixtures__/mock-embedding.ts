@@ -7,6 +7,7 @@ import type { EmbeddingProvider } from "../types/embedding";
 
 export class MockEmbeddingProvider implements EmbeddingProvider {
   readonly name = "mock";
+  readonly model = "mock-model";
   readonly dimensions: number;
 
   constructor(dimensions: number = 4) {
@@ -58,6 +59,7 @@ export class MockEmbeddingProvider implements EmbeddingProvider {
  */
 export class BadDimensionEmbeddingProvider implements EmbeddingProvider {
   readonly name = "bad-dims";
+  readonly model = "bad-dims-model";
   readonly dimensions: number;
   private readonly actualDimensions: number;
 

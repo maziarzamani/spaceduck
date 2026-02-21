@@ -54,8 +54,23 @@ export function createEmbeddingProvider(
       const { LMStudioEmbeddingProvider } = require("@spaceduck/provider-lmstudio");
       provider = new LMStudioEmbeddingProvider({
         model: model ?? "text-embedding-qwen3-embedding-8b",
-        baseUrl: Bun.env.LMSTUDIO_BASE_URL,
+        baseUrl: pc?.baseUrl ?? Bun.env.LMSTUDIO_BASE_URL,
         apiKey: Bun.env.LMSTUDIO_API_KEY ?? productConfig?.ai.secrets.lmstudioApiKey,
+        dimensions: dimensions ?? 4096,
+        instruction: Bun.env.EMBEDDING_INSTRUCTION,
+      });
+      break;
+    }
+    case "llamacpp": {
+      const { LMStudioEmbeddingProvider } = require("@spaceduck/provider-lmstudio");
+      provider = new LMStudioEmbeddingProvider({
+        name: "llamacpp",
+        model: model ?? "text-embedding-qwen3-embedding-8b",
+        baseUrl:
+          pc?.baseUrl ??
+          productConfig?.ai.baseUrl ??
+          Bun.env.LLAMACPP_BASE_URL ??
+          "http://127.0.0.1:8080/v1",
         dimensions: dimensions ?? 4096,
         instruction: Bun.env.EMBEDDING_INSTRUCTION,
       });
