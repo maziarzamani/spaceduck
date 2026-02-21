@@ -4,6 +4,7 @@
   "license": "MIT",
   "private": true,
   "workspaces": [
+    "packages/config",
     "packages/core",
     "packages/gateway",
     "packages/ui",
