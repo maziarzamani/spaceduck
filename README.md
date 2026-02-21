@@ -22,7 +22,7 @@
 
 **Spaceduck** is a local-first AI assistant with persistent memory.
 
-It remembers what you've said across conversations, acts on your behalf with real tools, and runs entirely on your machine. No agent frameworks, no orchestration wrappers — every layer (context management, vector memory, fact extraction, provider abstraction, streaming protocol) is "handwritten" TypeScript on Bun.
+It remembers what you've said across conversations, acts on your behalf with real tools, and runs entirely on your machine. No agent frameworks, no orchestration wrappers — every layer (context management, vector memory, fact extraction, provider abstraction, streaming protocol) is handwritten TypeScript.
 
 ## Features
 
@@ -36,7 +36,7 @@ It remembers what you've said across conversations, acts on your behalf with rea
 ### Multi-Channel
 - **Web UI** — React chat with streaming deltas, conversations sidebar, voice dictation, Tailwind CSS
 - **WhatsApp** — Baileys (WhatsApp Web protocol), QR pairing, typing indicators
-- **Desktop app** — Tauri v2 shell with Bun gateway sidecar — macOS, Linux, Windows
+- **Desktop app** — Tauri v2 shell with gateway sidecar — macOS, Linux, Windows
 - **CLI** — gateway status, config management, secret management
 - Discord and Telegram planned
 
@@ -124,13 +124,13 @@ Regex extraction (same-turn, deterministic) currently covers English and Danish.
 | Component | | Details | Tested |
 |-----------|---|---------|--------|
 | Web UI | ✅ | React chat with streaming, conversations sidebar, file upload (drag-drop + paperclip), voice dictation (mic button), attachment chips, Settings preference pane (Chat, Memory, Tools, Speech, Channels, Connection), Tailwind CSS | — |
-| Gateway | ✅ | Bun HTTP + WebSocket server, session management, run locking, `POST /api/upload` with magic-byte validation, `POST /api/stt/transcribe` + `GET /api/stt/status` | E2E |
+| Gateway | ✅ | HTTP + WebSocket server, config API, session management, run locking, file upload with magic-byte validation, STT transcription | E2E |
 | File uploads | ✅ | Multipart upload, PDF magic-byte validation, opaque attachment IDs, server-side `AttachmentStore` with TTL sweeper | Unit |
 | Voice dictation | ✅ | Speech-to-text via local [Whisper](https://github.com/openai/whisper) (optional, user-installed) | Unit |
 | WhatsApp | ✅ | Baileys (WhatsApp Web protocol), QR pairing, typing indicators | — |
 | Discord | 🔜 | Discord bot channel | — |
 | Telegram | 🔜 | Telegram bot channel | — |
-| Desktop app | ✅ | Tauri v2 shell + Bun gateway sidecar — macOS, Linux, Windows | — |
+| Desktop app | ✅ | Tauri v2 shell + gateway sidecar — macOS, Linux, Windows | — |
 | CLI | ✅ | `spaceduck status`, `config get/set/paths`, `config secret set/unset` — thin HTTP client against the gateway API | E2E |
 | Multi-user auth | 🔜 | Token-based auth for Web UI, per-user sessions | — |
 
@@ -150,27 +150,39 @@ Regex extraction (same-turn, deterministic) currently covers English and Danish.
 
 ```mermaid
 graph TD
-    UI["Web UI (React)<br/>WebSocket + streaming deltas<br/>file upload (drag-drop / picker)"]
+    UI["Web UI (React)<br/>Chat + Settings pane<br/>WebSocket streaming"]
+    DESK["Desktop (Tauri v2)<br/>macOS · Linux · Windows"]
     WA["WhatsApp (Baileys)<br/>QR pairing · typing indicators"]
-    GW["Gateway (Bun)<br/>HTTP server · WS handler · sessions<br/>POST /api/upload · POST /api/stt/transcribe"]
+    CLI["CLI (@spaceduck/cli)<br/>status · config get/set · secrets"]
+
+    GW["Gateway<br/>HTTP/WS server · config API<br/>upload · STT · sessions"]
+    CS["ConfigStore<br/>spaceduck.config.json5<br/>atomic writes · rev hashing"]
+    SW["SwappableProvider<br/>hot-swap without restart"]
     AS["Attachment Store<br/>opaque IDs · file sweeper"]
     AL["Agent Loop<br/>+ tool cycles"]
     CB["Context Builder<br/>+ budget · compact<br/>+ attachment hints"]
     MEM["Memory (SQLite)<br/>conversations · facts<br/>vector embeddings (vec0)<br/>FTS5 search · SHA-256 dedup"]
     CP["Chat Provider<br/>(pluggable)<br/>streaming chunks"]
     EP["Embedding Provider<br/>(pluggable)<br/>configurable dimensions"]
-    TOOLS["Tools<br/>browser · fetch · search<br/>marker_scan · (extensible)"]
+    TOOLS["Tools<br/>browser · fetch · search<br/>marker_scan · config_get/set"]
 
-    UI --> GW
+    UI --> DESK
+    DESK --> GW
+    UI -->|"direct (web)"| GW
     WA --> GW
+    CLI -->|"HTTP"| GW
+
+    GW --> CS
     GW --> AS
     GW --> AL
     GW --> CB
     GW --> MEM
-    AL --> CP
+    AL --> SW
+    SW --> CP
     AL --> TOOLS
     TOOLS -->|"resolve attachmentId"| AS
     MEM --> EP
+    CS -->|"provider change"| SW
 ```
 
 ## Memory System
@@ -269,7 +281,7 @@ spaceduck/
 │   └── stt/
 │       └── whisper/           # Speech-to-text via local Whisper (optional, user-installed)
 ├── data/                      # Runtime data (gitignored): config, SQLite, uploads
-└── package.json               # Bun workspace root
+└── package.json               # Workspace root
 ```
 
 ## Quick Start
