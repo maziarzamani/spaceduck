@@ -12,6 +12,7 @@ export interface EmbedOptions {
 
 export interface EmbeddingProvider {
   readonly name: string;
+  readonly model: string;
   readonly dimensions: number;
 
   /** Embed a single text string into a float vector. */

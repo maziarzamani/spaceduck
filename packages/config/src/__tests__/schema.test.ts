@@ -25,6 +25,7 @@ describe("SpaceduckConfigSchema", () => {
     expect(config.ai.secrets.bedrockApiKey).toBeNull();
     expect(config.ai.secrets.openrouterApiKey).toBeNull();
     expect(config.ai.secrets.lmstudioApiKey).toBeNull();
+    expect((config.ai.secrets as any).llamacppApiKey).toBeNull();
     expect(config.tools.webSearch.secrets.braveApiKey).toBeNull();
     expect(config.tools.webAnswer.secrets.perplexityApiKey).toBeNull();
   });
@@ -93,7 +94,7 @@ describe("defaultConfig", () => {
   test("every nested object is fully materialized", () => {
     const config = defaultConfig();
     // Every object key should exist (no undefined values that would need `add` ops)
-    expect(Object.keys(config.ai.secrets)).toHaveLength(4);
+    expect(Object.keys(config.ai.secrets)).toHaveLength(5);
     expect(Object.keys(config.tools.webSearch.secrets)).toHaveLength(1);
     expect(Object.keys(config.tools.webAnswer.secrets)).toHaveLength(1);
   });

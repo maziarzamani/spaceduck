@@ -1,18 +1,20 @@
 import { z } from "zod";
 import { hostname } from "node:os";
 
-const AiProviderEnum = z.enum(["gemini", "bedrock", "openrouter", "lmstudio"]);
+const AiProviderEnum = z.enum(["gemini", "bedrock", "openrouter", "lmstudio", "llamacpp"]);
 
 const AiSecretsSchema = z.object({
   geminiApiKey: z.string().nullable().default(null),
   bedrockApiKey: z.string().nullable().default(null),
   openrouterApiKey: z.string().nullable().default(null),
   lmstudioApiKey: z.string().nullable().default(null),
+  llamacppApiKey: z.string().nullable().default(null),
 });
 
 const AiSchema = z.object({
   provider: AiProviderEnum.default("gemini"),
-  model: z.string().default("gemini-2.5-flash"),
+  model: z.string().nullable().default("gemini-2.5-flash"),
+  baseUrl: z.string().nullable().default(null),
   temperature: z.number().min(0).max(2).default(0.7),
   systemPrompt: z.string().nullable().default(null),
   region: z.string().nullable().default(null),
@@ -27,12 +29,14 @@ const EmbeddingProviderEnum = z.enum([
   "gemini",
   "bedrock",
   "lmstudio",
+  "llamacpp",
 ]);
 
 const EmbeddingSchema = z.object({
   enabled: z.boolean().default(true),
   provider: EmbeddingProviderEnum.nullable().default(null),
   model: z.string().nullable().default(null),
+  baseUrl: z.string().nullable().default(null),
   dimensions: z.number().int().positive().nullable().default(null),
 });
 

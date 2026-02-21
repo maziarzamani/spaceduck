@@ -121,6 +121,7 @@ const PROVIDERS = [
   { value: "bedrock", label: "Amazon Bedrock" },
   { value: "openrouter", label: "OpenRouter" },
   { value: "lmstudio", label: "LM Studio" },
+  { value: "llamacpp", label: "llama.cpp" },
 ] as const;
 
 const SECRET_LABELS: Record<string, { path: string; label: string; placeholder: string }> = {
@@ -144,6 +145,18 @@ const SECRET_LABELS: Record<string, { path: string; label: string; placeholder: 
     label: "LM Studio API Key",
     placeholder: "Optional",
   },
+  llamacpp: {
+    path: "/ai/secrets/llamacppApiKey",
+    label: "llama-server API Key",
+    placeholder: "Optional",
+  },
+};
+
+const LOCAL_PROVIDERS = new Set(["lmstudio", "llamacpp"]);
+
+const BASE_URL_PLACEHOLDER: Record<string, string> = {
+  lmstudio: "http://localhost:1234/v1",
+  llamacpp: "http://127.0.0.1:8080/v1",
 };
 
 // ── Model catalog hook ──────────────────────────────────────────────
@@ -154,7 +167,7 @@ interface ModelEntry {
   context?: string;
 }
 
-function useModelCatalog(provider: string) {
+function useModelCatalog(provider: string, hasKey: boolean) {
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -166,13 +179,13 @@ function useModelCatalog(provider: string) {
     setLoading(true);
     fetch(`${gatewayUrl}/api/config/models`, {
       headers: token ? { authorization: `Bearer ${token}` } : {},
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(10000),
     })
       .then((r) => r.ok ? r.json() as Promise<{ models: ModelEntry[] }> : Promise.reject())
       .then((data) => setModels(data.models))
       .catch(() => setModels([]))
       .finally(() => setLoading(false));
-  }, [provider]);
+  }, [provider, hasKey]);
 
   return { models, loading };
 }
@@ -232,7 +245,8 @@ function useProviderStatus(provider: string, model: string, hasKey: boolean) {
 export function AiSection({ cfg }: SectionProps) {
   const ai = (cfg.config?.ai ?? {}) as Record<string, unknown>;
   const provider = (ai.provider as string) ?? "gemini";
-  const model = (ai.model as string) ?? "";
+  const model = (ai.model as string | null) ?? "";
+  const baseUrl = (ai.baseUrl as string | null) ?? "";
   const temperature = (ai.temperature as number) ?? 0.7;
   const systemPrompt = (ai.systemPrompt as string | null) ?? "";
   const region = (ai.region as string | null) ?? "";
@@ -240,8 +254,10 @@ export function AiSection({ cfg }: SectionProps) {
   const secretInfo = SECRET_LABELS[provider];
   const hasKey = secretInfo ? isSecretSet(cfg.secrets, secretInfo.path) : false;
 
-  const { models: catalog, loading: catalogLoading } = useModelCatalog(provider);
+  const { models: catalog, loading: catalogLoading } = useModelCatalog(provider, hasKey);
   const [manualMode, setManualMode] = useState(false);
+  const [localTemp, setLocalTemp] = useState(temperature);
+  useEffect(() => setLocalTemp(temperature), [temperature]);
 
   useEffect(() => {
     if (catalog.length === 0) {
@@ -274,7 +290,16 @@ export function AiSection({ cfg }: SectionProps) {
         <CardContent className="pt-6 flex flex-col gap-5">
           <div className="grid gap-2">
             <Label htmlFor="provider">Provider</Label>
-            <Select value={provider} onValueChange={(v) => patch("/ai/provider", v)}>
+            <Select
+              value={provider}
+              onValueChange={(v) =>
+                cfg.patchConfig([
+                  { op: "replace", path: "/ai/provider", value: v },
+                  { op: "replace", path: "/ai/model", value: null },
+                  { op: "replace", path: "/ai/baseUrl", value: null },
+                ])
+              }
+            >
               <SelectTrigger id="provider">
                 <SelectValue />
               </SelectTrigger>
@@ -299,7 +324,7 @@ export function AiSection({ cfg }: SectionProps) {
                 onClear={() => cfg.clearSecret(secretInfo.path)}
                 saving={cfg.saving}
               />
-              {!hasKey && provider !== "lmstudio" && (
+              {!hasKey && !LOCAL_PROVIDERS.has(provider) && (
                 <p className="text-xs text-yellow-500">
                   Required to use this provider.
                 </p>
@@ -307,78 +332,115 @@ export function AiSection({ cfg }: SectionProps) {
             </div>
           )}
 
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <Label>Model</Label>
-              <div className="inline-flex rounded-md border border-input text-xs">
-                <button
-                  type="button"
-                  onClick={() => setManualMode(false)}
-                  disabled={catalog.length === 0}
-                  className={`px-2.5 py-1 rounded-l-md transition-colors ${
-                    !manualMode
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  } ${catalog.length === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  {catalogLoading ? (
-                    <span className="inline-flex items-center gap-1">
-                      <RefreshCw size={10} className="animate-spin" /> Auto
-                    </span>
-                  ) : (
-                    "Auto"
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManualMode(true)}
-                  className={`px-2.5 py-1 rounded-r-md border-l border-input transition-colors ${
-                    manualMode
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Manual
-                </button>
-              </div>
-            </div>
-            {!manualMode && catalog.length > 0 ? (
-              <Select
-                value={model}
-                onValueChange={(v) => patch("/ai/model", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a model" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Available models</SelectLabel>
-                    {catalog.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        <span>{m.name}</span>
-                        {m.context && (
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            {m.context}
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            ) : (
+          {LOCAL_PROVIDERS.has(provider) && (
+            <div className="grid gap-2">
+              <Label htmlFor="base-url">Server URL</Label>
               <DebouncedInput
-                id="model"
-                value={model}
-                placeholder="Enter model identifier"
+                id="base-url"
+                value={baseUrl}
+                placeholder={BASE_URL_PLACEHOLDER[provider] ?? "http://localhost/v1"}
                 onCommit={async (v) =>
-                  cfg.patchConfig([
-                    { op: "replace", path: "/ai/model", value: v },
-                  ])
+                  cfg.patchConfig([{ op: "replace", path: "/ai/baseUrl", value: v || null }])
                 }
               />
-            )}
-          </div>
+            </div>
+          )}
+
+          {provider === "llamacpp" && (
+            <div className="rounded-md bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground space-y-1">
+              <p>
+                Start llama-server first:
+              </p>
+              <pre className="font-mono text-[11px] whitespace-pre-wrap break-all">
+                llama-server -m /path/to/model.gguf --host 127.0.0.1 --port 8080
+              </pre>
+              <p>
+                Endpoint: <span className="font-mono">http://localhost:8080/v1/chat/completions</span>
+              </p>
+              <p>
+                If responses look wrong, add{" "}
+                <span className="font-mono">--chat-template</span> to your command.
+              </p>
+              <p className="text-yellow-500/80">
+                Tool calling support varies by model and server configuration.
+              </p>
+            </div>
+          )}
+
+          {provider !== "llamacpp" && (
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Model</Label>
+                <div className="inline-flex rounded-md border border-input text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setManualMode(false)}
+                    disabled={catalog.length === 0}
+                    className={`px-2.5 py-1 rounded-l-md transition-colors ${
+                      !manualMode
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    } ${catalog.length === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    {catalogLoading ? (
+                      <span className="inline-flex items-center gap-1">
+                        <RefreshCw size={10} className="animate-spin" /> Auto
+                      </span>
+                    ) : (
+                      "Auto"
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManualMode(true)}
+                    className={`px-2.5 py-1 rounded-r-md border-l border-input transition-colors ${
+                      manualMode
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Manual
+                  </button>
+                </div>
+              </div>
+              {!manualMode && catalog.length > 0 ? (
+                <Select
+                  value={model}
+                  onValueChange={(v) => patch("/ai/model", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Available models</SelectLabel>
+                      {catalog.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          <span>{m.name}</span>
+                          {m.context && (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {m.context}
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <DebouncedInput
+                  id="model"
+                  value={model}
+                  placeholder="Enter model identifier"
+                  onCommit={async (v) =>
+                    cfg.patchConfig([
+                      { op: "replace", path: "/ai/model", value: v || null },
+                    ])
+                  }
+                />
+              )}
+            </div>
+          )}
 
           {provider === "bedrock" && (
             <div className="grid gap-2">
@@ -446,7 +508,7 @@ export function AiSection({ cfg }: SectionProps) {
               <span className="flex items-center gap-2">
                 <SavedBadge visible={tempSaved} />
                 <span className="text-xs font-mono text-muted-foreground">
-                  {temperature.toFixed(1)}
+                  {localTemp.toFixed(1)}
                 </span>
               </span>
             </div>
@@ -454,7 +516,8 @@ export function AiSection({ cfg }: SectionProps) {
               min={0}
               max={2}
               step={0.1}
-              value={[temperature]}
+              value={[localTemp]}
+              onValueChange={([v]) => setLocalTemp(v)}
               onValueCommit={async ([v]) => {
                 const ok = await cfg.patchConfig([
                   { op: "replace", path: "/ai/temperature", value: Math.round(v * 10) / 10 },

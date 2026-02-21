@@ -116,7 +116,7 @@ export class DefaultContextBuilder implements ContextWindowManager {
           context.push({
             id: `facts-${Date.now()}`,
             role: "system",
-            content: `Tidligere brugeroplysninger (kan være forældede). Hvis brugerens besked modsiger en lagret oplysning, antag den nye besked er korrekt. Stil kun afklarende spørgsmål hvis rettelsen er tvetydig.\n${factsText}`,
+            content: `Previously stored user information (may be outdated). If the user's message contradicts a stored fact, assume the new message is correct. Only ask a clarifying question if the correction is ambiguous.\n${factsText}`,
             timestamp: 0,
             source: "system",
           });

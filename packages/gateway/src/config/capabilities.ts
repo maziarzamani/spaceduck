@@ -81,9 +81,10 @@ export function getConfiguredStatus(
 
   const provider = config.ai.provider;
 
-  // lmstudio doesn't need an API key; others do
+  // lmstudio and llamacpp don't need an API key; others do
   const aiProviderReady =
     provider === "lmstudio" ||
+    provider === "llamacpp" ||
     (provider === "gemini" && secretIsSet("/ai/secrets/geminiApiKey")) ||
     (provider === "bedrock" && secretIsSet("/ai/secrets/bedrockApiKey")) ||
     (provider === "openrouter" && secretIsSet("/ai/secrets/openrouterApiKey"));

@@ -1,0 +1,17 @@
+{
+  "name": "@spaceduck/provider-llamacpp",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@spaceduck/core": "workspace:*",
+    "@spaceduck/provider-openai-compat": "workspace:*"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

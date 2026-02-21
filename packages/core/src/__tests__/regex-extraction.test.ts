@@ -287,4 +287,50 @@ describe("Regex-only fact extraction (deterministic)", () => {
     const name = candidates.find(c => c.slot === "name");
     expect(name).toBeUndefined();
   });
+
+  // ── "moved to" / "relocated to" location patterns ────────────────
+
+  it("extracts location from 'I moved to Tokyo'", () => {
+    const candidates = extractor.extractRegexFromText("I moved to Tokyo");
+    const loc = candidates.find(c => c.slot === "location");
+    expect(loc).toBeTruthy();
+    expect(loc!.slotValue).toBe("Tokyo");
+    expect(loc!.content).toBe("User lives in Tokyo");
+  });
+
+  it("extracts location from 'I moved to Tokyo last month'", () => {
+    const candidates = extractor.extractRegexFromText("I moved to Tokyo last month");
+    const loc = candidates.find(c => c.slot === "location");
+    expect(loc).toBeTruthy();
+    expect(loc!.slotValue).toBe("Tokyo");
+  });
+
+  it("extracts location from 'I relocated to New York'", () => {
+    const candidates = extractor.extractRegexFromText("I relocated to New York");
+    const loc = candidates.find(c => c.slot === "location");
+    expect(loc).toBeTruthy();
+    expect(loc!.slotValue).toBe("New York");
+  });
+
+  it("extracts destination from 'I moved from Copenhagen to Tokyo'", () => {
+    const candidates = extractor.extractRegexFromText("I moved from Copenhagen to Tokyo");
+    const loc = candidates.find(c => c.slot === "location");
+    expect(loc).toBeTruthy();
+    expect(loc!.slotValue).toBe("Tokyo");
+  });
+
+  it("extracts location from Danish 'Jeg er flyttet til Aarhus'", () => {
+    const candidates = extractor.extractRegexFromText("Jeg er flyttet til Aarhus");
+    const loc = candidates.find(c => c.slot === "location");
+    expect(loc).toBeTruthy();
+    expect(loc!.slotValue).toBe("Aarhus");
+    expect(loc!.lang).toBe("da");
+  });
+
+  it("extracts location from Danish 'Jeg flyttede til København'", () => {
+    const candidates = extractor.extractRegexFromText("Jeg flyttede til København");
+    const loc = candidates.find(c => c.slot === "location");
+    expect(loc).toBeTruthy();
+    expect(loc!.slotValue).toBe("København");
+  });
 });

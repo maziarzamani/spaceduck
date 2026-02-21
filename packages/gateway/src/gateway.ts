@@ -9,6 +9,7 @@ import {
   type SpaceduckConfig,
   type Logger,
   type Provider,
+  type ProviderChunk,
   type ConversationStore,
   type LongTermMemory,
   type SessionManager,
@@ -32,6 +33,7 @@ import {
   SqliteConversationStore,
   SqliteLongTermMemory,
   SqliteSessionManager,
+  reconcileVecFacts,
 } from "@spaceduck/memory-sqlite";
 import { RunLock } from "./run-lock";
 import { createWsHandler, type WsConnectionData } from "./ws-handler";
@@ -39,6 +41,7 @@ import { createToolRegistry } from "./tool-registrations";
 import { createEmbeddingProvider } from "./embedding-factory";
 import { AttachmentStore } from "./attachment-store";
 import { SwappableProvider } from "./swappable-provider";
+import { SwappableEmbeddingProvider } from "./swappable-embedding-provider";
 import { WhisperStt, SttError } from "@spaceduck/stt-whisper";
 import { createWriteStream } from "node:fs";
 import { unlink } from "node:fs/promises";
@@ -90,6 +93,7 @@ const MODEL_CATALOG: Record<string, { id: string; name: string; context?: string
     { id: "meta-llama/llama-4-scout", name: "Llama 4 Scout" },
   ],
   lmstudio: [],
+  llamacpp: [],
 };
 
 export interface GatewayDeps {
@@ -107,6 +111,7 @@ export interface GatewayDeps {
   readonly attachmentStore: AttachmentStore;
   readonly configStore?: ConfigStore;
   readonly swappableProvider?: SwappableProvider;
+  readonly swappableEmbeddingProvider?: SwappableEmbeddingProvider;
   readonly contextBuilder?: DefaultContextBuilder;
 }
 
@@ -197,12 +202,15 @@ export class Gateway implements Lifecycle {
     // Start external channels (WhatsApp, etc.)
     await this.startChannels();
 
+    const productCfg = this.deps.configStore?.current;
+    const embeddingRef =
+      this.deps.swappableEmbeddingProvider ?? this.deps.embeddingProvider;
     logger.info("Gateway started", {
       port: config.port,
-      provider: config.provider.name,
-      model: config.provider.model,
+      provider: this.deps.provider.name,
+      model: productCfg?.ai.model ?? config.provider.model,
       memory: config.memory.backend,
-      embedding: this.deps.embeddingProvider?.name ?? "disabled",
+      embedding: embeddingRef?.name ?? "disabled",
     });
   }
 
@@ -372,14 +380,15 @@ export class Gateway implements Lifecycle {
 
     // Health endpoint
     if (req.method === "GET" && url.pathname === "/api/health") {
-      const productConfig = this.deps.configStore?.current;
+      const embedRef =
+        this.deps.swappableEmbeddingProvider ?? this.deps.embeddingProvider;
       return Response.json({
         status: "ok",
         uptime: process.uptime(),
-        provider: productConfig?.ai.provider ?? this.deps.config.provider.name,
-        model: productConfig?.ai.model ?? this.deps.config.provider.model,
+        provider: this.deps.provider.name,
+        model: this.deps.configStore?.current?.ai.model ?? this.deps.config.provider.model,
         memory: this.deps.config.memory.backend,
-        embedding: this.deps.embeddingProvider?.name ?? "disabled",
+        embedding: embedRef?.name ?? "disabled",
       });
     }
 
@@ -586,6 +595,27 @@ export class Gateway implements Lifecycle {
           }
         }
 
+        // GET /api/config/embedding-status (authenticated) — lightweight embedding connectivity test
+        if (req.method === "GET" && url.pathname === "/api/config/embedding-status") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          const ep = this.deps.swappableEmbeddingProvider ?? this.deps.embeddingProvider;
+          if (!ep || (ep instanceof SwappableEmbeddingProvider && !ep.isConfigured)) {
+            return Response.json({ ok: false, error: "Embeddings disabled" });
+          }
+          try {
+            const timeout = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("Embedding test timed out")), 10_000),
+            );
+            await Promise.race([ep.embed("ping", { purpose: "index" }), timeout]);
+            return Response.json({ ok: true, provider: ep.name, dimensions: ep.dimensions });
+          } catch (err) {
+            return Response.json({
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
         // GET /api/config (authenticated)
         if (req.method === "GET" && url.pathname === "/api/config") {
           if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -652,7 +682,9 @@ export class Gateway implements Lifecycle {
                     model: configStore.current.ai.model,
                   });
                 } catch (err) {
-                  this.deps.logger.error("Provider hot-swap failed", { error: err });
+                  this.deps.logger.error("Provider hot-swap failed", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
                   warnings.push({
                     code: "PROVIDER_SWAP_FAILED",
                     message: err instanceof Error ? err.message : String(err),
@@ -665,6 +697,42 @@ export class Gateway implements Lifecycle {
                 ctxBuilder.setSystemPrompt(
                   configStore.current.ai.systemPrompt ?? undefined,
                 );
+              }
+
+              // Hot-swap embedding provider if embedding config changed
+              const swappableEmbed = this.deps.swappableEmbeddingProvider;
+              const needsEmbedRebuild = [...EMBEDDING_REBUILD_PATHS].some((p) =>
+                changedPaths.has(p),
+              );
+              if (needsEmbedRebuild && swappableEmbed) {
+                try {
+                  const next = createEmbeddingProvider(
+                    this.deps.config,
+                    this.deps.logger,
+                    configStore.current,
+                  );
+                  swappableEmbed.swap(next);
+                  if (this.db) {
+                    reconcileVecFacts(
+                      this.db,
+                      next,
+                      this.deps.logger,
+                      this.deps.config.memory.connectionString,
+                    );
+                  }
+                  this.deps.logger.info("Embedding provider hot-swapped", {
+                    provider: next?.name ?? "disabled",
+                  });
+                } catch (err) {
+                  this.deps.logger.warn("Embedding hot-swap failed, disabling embeddings", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  swappableEmbed.swap(undefined);
+                  warnings.push({
+                    code: "EMBEDDING_SWAP_FAILED",
+                    message: err instanceof Error ? err.message : String(err),
+                  });
+                }
               }
 
               const response: Record<string, unknown> = {
@@ -1039,12 +1107,23 @@ const AI_SECRET_PATHS = new Set([
   "/ai/secrets/bedrockApiKey",
   "/ai/secrets/openrouterApiKey",
   "/ai/secrets/lmstudioApiKey",
+  "/ai/secrets/llamacppApiKey",
 ]);
 
 const PROVIDER_REBUILD_PATHS = new Set([
   "/ai/provider",
   "/ai/model",
+  "/ai/baseUrl",
   "/ai/region",
+]);
+
+const EMBEDDING_REBUILD_PATHS = new Set([
+  "/ai/provider",
+  "/embedding/enabled",
+  "/embedding/provider",
+  "/embedding/model",
+  "/embedding/baseUrl",
+  "/embedding/dimensions",
 ]);
 
 // ── Provider factory ─────────────────────────────────────────────────
@@ -1053,6 +1132,21 @@ const PROVIDER_REBUILD_PATHS = new Set([
  * Build a Provider instance from product config.
  * Throws if the selected provider requires an API key that isn't set.
  */
+// ── Null provider (used when no provider is configured yet) ──────────
+
+class NullProvider implements Provider {
+  readonly name = "unconfigured";
+
+  async *chat(): AsyncIterable<ProviderChunk> {
+    yield {
+      type: "text",
+      text: "No AI provider is configured yet. Go to Settings → Chat to set one up.",
+    };
+  }
+}
+
+// ── Provider factory ─────────────────────────────────────────────────
+
 function buildProvider(
   productConfig: SpaceduckProductConfig,
   logger: Logger,
@@ -1088,8 +1182,16 @@ function buildProvider(
     const { LMStudioProvider } = require("@spaceduck/provider-lmstudio");
     return new LMStudioProvider({
       model: modelName,
-      baseUrl: Bun.env.LMSTUDIO_BASE_URL,
+      baseUrl: productConfig.ai.baseUrl ?? Bun.env.LMSTUDIO_BASE_URL,
       apiKey: aiSecrets.lmstudioApiKey,
+    });
+  }
+  if (providerName === "llamacpp") {
+    const { LlamaCppProvider } = require("@spaceduck/provider-llamacpp");
+    return new LlamaCppProvider({
+      model: modelName,
+      baseUrl: productConfig.ai.baseUrl ?? Bun.env.LLAMACPP_BASE_URL,
+      apiKey: aiSecrets.llamacppApiKey,
     });
   }
   if (providerName === "bedrock") {
@@ -1164,11 +1266,37 @@ export async function createGateway(overrides?: {
   await schema.migrate();
 
   // Create embedding provider (optional — disabled if EMBEDDING_ENABLED=false)
-  const embeddingProvider = overrides?.embeddingProvider ?? createEmbeddingProvider(config, logger, productConfig);
+  const swappableEmbeddingProvider = (() => {
+    if (overrides?.embeddingProvider) {
+      return new SwappableEmbeddingProvider(overrides.embeddingProvider);
+    }
+    try {
+      return new SwappableEmbeddingProvider(
+        createEmbeddingProvider(config, logger, productConfig),
+      );
+    } catch (err) {
+      logger.warn("Embedding provider not ready — starting without one", {
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      return new SwappableEmbeddingProvider(undefined);
+    }
+  })();
 
-  // Create memory layer — pass embedding provider for vector search
+  // Reconcile vec_facts virtual table dimensions with the active embedding provider
+  reconcileVecFacts(
+    db,
+    swappableEmbeddingProvider.current,
+    logger,
+    config.memory.connectionString,
+  );
+
+  // Create memory layer — pass swappable embedding provider for vector search
   const conversationStore = new SqliteConversationStore(db, logger);
-  const longTermMemory = new SqliteLongTermMemory(db, logger, embeddingProvider);
+  const longTermMemory = new SqliteLongTermMemory(
+    db,
+    logger,
+    swappableEmbeddingProvider,
+  );
   const sessionManager = new SqliteSessionManager(db, logger);
 
   // Build swappable AI provider (can be hot-swapped on config change)
@@ -1178,8 +1306,10 @@ export async function createGateway(overrides?: {
     try {
       return new SwappableProvider(buildProvider(productConfig, logger));
     } catch (err) {
-      logger.error("Failed to build initial provider", { error: err });
-      process.exit(1);
+      logger.warn("AI provider not ready — gateway starting without one", {
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      return new SwappableProvider(new NullProvider());
     }
   })();
   provider = swappableProvider;
@@ -1242,11 +1372,12 @@ export async function createGateway(overrides?: {
     sessionManager,
     agent,
     runLock,
-    embeddingProvider,
+    embeddingProvider: swappableEmbeddingProvider,
     channels,
     attachmentStore,
     configStore,
     swappableProvider,
+    swappableEmbeddingProvider,
     contextBuilder,
   }, db);
 

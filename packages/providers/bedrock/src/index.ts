@@ -342,9 +342,9 @@ export interface BedrockEmbeddingConfig {
  */
 export class BedrockEmbeddingProvider implements EmbeddingProvider {
   readonly name = "bedrock";
+  readonly model: string;
   readonly dimensions: number;
 
-  private readonly model: string;
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly isNova: boolean;

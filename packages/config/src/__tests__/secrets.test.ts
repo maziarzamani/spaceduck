@@ -5,12 +5,13 @@ import { defaultConfig } from "../defaults";
 import { SpaceduckConfigSchema } from "../schema";
 
 describe("SECRET_PATHS", () => {
-  test("contains exactly the 6 known secret paths", () => {
-    expect(SECRET_PATHS).toHaveLength(6);
+  test("contains exactly the 7 known secret paths", () => {
+    expect(SECRET_PATHS).toHaveLength(7);
     expect(SECRET_PATHS).toContain("/ai/secrets/geminiApiKey");
     expect(SECRET_PATHS).toContain("/ai/secrets/bedrockApiKey");
     expect(SECRET_PATHS).toContain("/ai/secrets/openrouterApiKey");
     expect(SECRET_PATHS).toContain("/ai/secrets/lmstudioApiKey");
+    expect(SECRET_PATHS).toContain("/ai/secrets/llamacppApiKey");
     expect(SECRET_PATHS).toContain("/tools/webSearch/secrets/braveApiKey");
     expect(SECRET_PATHS).toContain("/tools/webAnswer/secrets/perplexityApiKey");
   });
@@ -40,7 +41,7 @@ describe("getSecretStatus", () => {
   test("all secrets unset on default config", () => {
     const config = defaultConfig();
     const status = getSecretStatus(config);
-    expect(status).toHaveLength(6);
+    expect(status).toHaveLength(7);
     for (const entry of status) {
       expect(entry.isSet).toBe(false);
     }
