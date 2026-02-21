@@ -38,6 +38,7 @@ import { createWsHandler, type WsConnectionData } from "./ws-handler";
 import { createToolRegistry } from "./tool-registrations";
 import { createEmbeddingProvider } from "./embedding-factory";
 import { AttachmentStore } from "./attachment-store";
+import { SwappableProvider } from "./swappable-provider";
 import { WhisperStt, SttError } from "@spaceduck/stt-whisper";
 import { createWriteStream } from "node:fs";
 import { unlink } from "node:fs/promises";
@@ -59,6 +60,37 @@ import {
   revokeToken,
   type GatewayInfo,
 } from "./auth";
+import {
+  ConfigStore,
+  getCapabilities,
+  getConfiguredStatus,
+} from "./config";
+import type { ConfigPatchOp, SpaceduckProductConfig } from "@spaceduck/config";
+import { isSecretPath } from "@spaceduck/config";
+
+const MODEL_CATALOG: Record<string, { id: string; name: string; context?: string }[]> = {
+  bedrock: [
+    { id: "us.amazon.nova-2-lite-v1:0", name: "Amazon Nova 2 Lite", context: "300K" },
+    { id: "us.amazon.nova-2-pro-v1:0", name: "Amazon Nova 2 Pro", context: "300K" },
+    { id: "us.anthropic.claude-sonnet-4-20250514-v1:0", name: "Claude Sonnet 4", context: "200K" },
+    { id: "us.anthropic.claude-3-5-haiku-20241022-v1:0", name: "Claude 3.5 Haiku", context: "200K" },
+    { id: "us.meta.llama4-scout-17b-16e-instruct-v1:0", name: "Llama 4 Scout 17B", context: "512K" },
+    { id: "us.meta.llama4-maverick-17b-16e-instruct-v1:0", name: "Llama 4 Maverick 17B", context: "512K" },
+  ],
+  gemini: [
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", context: "1M" },
+    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", context: "1M" },
+    { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", context: "1M" },
+  ],
+  openrouter: [
+    { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4" },
+    { id: "openai/gpt-4.1", name: "GPT-4.1" },
+    { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+    { id: "deepseek/deepseek-r1", name: "DeepSeek R1" },
+    { id: "meta-llama/llama-4-scout", name: "Llama 4 Scout" },
+  ],
+  lmstudio: [],
+};
 
 export interface GatewayDeps {
   readonly config: SpaceduckConfig;
@@ -73,6 +105,9 @@ export interface GatewayDeps {
   readonly embeddingProvider?: EmbeddingProvider;
   readonly channels?: Channel[];
   readonly attachmentStore: AttachmentStore;
+  readonly configStore?: ConfigStore;
+  readonly swappableProvider?: SwappableProvider;
+  readonly contextBuilder?: DefaultContextBuilder;
 }
 
 export class Gateway implements Lifecycle {
@@ -298,8 +333,9 @@ export class Gateway implements Lifecycle {
   private corsHeaders(req: Request): Record<string, string> {
     return {
       "Access-Control-Allow-Origin": req.headers.get("origin") || "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-STT-Language",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, If-Match, X-STT-Language",
+      "Access-Control-Expose-Headers": "ETag",
       "Access-Control-Max-Age": "86400",
     };
   }
@@ -336,11 +372,12 @@ export class Gateway implements Lifecycle {
 
     // Health endpoint
     if (req.method === "GET" && url.pathname === "/api/health") {
+      const productConfig = this.deps.configStore?.current;
       return Response.json({
         status: "ok",
         uptime: process.uptime(),
-        provider: this.deps.config.provider.name,
-        model: this.deps.config.provider.model,
+        provider: productConfig?.ai.provider ?? this.deps.config.provider.name,
+        model: productConfig?.ai.model ?? this.deps.config.provider.model,
         memory: this.deps.config.memory.backend,
         embedding: this.deps.embeddingProvider?.name ?? "disabled",
       });
@@ -363,6 +400,12 @@ export class Gateway implements Lifecycle {
             reason: this.stt.reason,
           },
       );
+    }
+
+    // Capabilities (unauthenticated — binary/env availability only)
+    if (req.method === "GET" && url.pathname === "/api/capabilities") {
+      const capabilities = await getCapabilities();
+      return Response.json(capabilities);
     }
 
     // Public gateway info (no auth — used by onboarding to validate URL)
@@ -482,6 +525,234 @@ export class Gateway implements Lifecycle {
       if (req.method === "POST" && url.pathname === "/api/stt/transcribe") {
         if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
         return this.handleTranscribe(req);
+      }
+
+      // ── Config API routes ──────────────────────────────────────
+
+      const configStore = this.deps.configStore;
+      const swappable = this.deps.swappableProvider;
+      const ctxBuilder = this.deps.contextBuilder;
+      if (configStore) {
+        // GET /api/config/models (authenticated) — model catalog for current provider
+        if (req.method === "GET" && url.pathname === "/api/config/models") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          const config = configStore.current;
+          const provider = config.ai.provider;
+
+          if (provider === "bedrock") {
+            try {
+              const models = await fetchBedrockModels(config);
+              return Response.json({ provider, models });
+            } catch {
+              const models = MODEL_CATALOG.bedrock ?? [];
+              return Response.json({ provider, models, fallback: true });
+            }
+          }
+
+          const models = MODEL_CATALOG[provider] ?? [];
+          return Response.json({ provider, models });
+        }
+
+        // GET /api/config/provider-status (authenticated) — lightweight provider connectivity test
+        if (req.method === "GET" && url.pathname === "/api/config/provider-status") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          const swapRef = this.deps.swappableProvider;
+          if (!swapRef) {
+            return Response.json({ ok: false, error: "No provider configured" });
+          }
+          const currentProvider = swapRef.current;
+          const config = configStore.current;
+          try {
+            const chunks: string[] = [];
+            for await (const chunk of currentProvider.chat(
+              [{ id: "ping", role: "user", content: "Say OK", timestamp: Date.now(), source: "system" as const }],
+              { signal: AbortSignal.timeout(10_000) },
+            )) {
+              if (chunk.type === "text") chunks.push(chunk.text);
+              if (chunks.join("").length > 20) break;
+            }
+            return Response.json({
+              ok: true,
+              provider: config.ai.provider,
+              model: config.ai.model,
+            });
+          } catch (err) {
+            return Response.json({
+              ok: false,
+              provider: config.ai.provider,
+              model: config.ai.model,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        // GET /api/config (authenticated)
+        if (req.method === "GET" && url.pathname === "/api/config") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          const { config, rev, secrets } = configStore.getRedacted();
+          const envCaps = await getCapabilities();
+          const configured = getConfiguredStatus(configStore.current);
+          return Response.json(
+            { config, rev, secrets, capabilities: { ...envCaps, configured } },
+            { headers: { ETag: rev } },
+          );
+        }
+
+        // PATCH /api/config (authenticated, requires If-Match)
+        if (req.method === "PATCH" && url.pathname === "/api/config") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          const ifMatch = req.headers.get("If-Match");
+          if (!ifMatch) {
+            return Response.json(
+              { error: "MISSING_IF_MATCH", message: "If-Match header required" },
+              { status: 428 },
+            );
+          }
+          try {
+            const ops = (await req.json()) as ConfigPatchOp[];
+            if (!Array.isArray(ops)) {
+              return Response.json(
+                { error: "INVALID_BODY", message: "Expected JSON array of patch ops" },
+                { status: 400 },
+              );
+            }
+            return await withConfigLock(async () => {
+              const result = await configStore.patch(ops, ifMatch);
+              if (!result.ok) {
+                if (result.error === "CONFLICT") {
+                  return Response.json(
+                    { error: "CONFLICT", rev: result.rev },
+                    { status: 409, headers: { ETag: result.rev } },
+                  );
+                }
+                if (result.error === "VALIDATION") {
+                  return Response.json(
+                    { error: "VALIDATION", issues: result.issues },
+                    { status: 400 },
+                  );
+                }
+                return Response.json(
+                  { error: "PATCH_ERROR", message: result.message },
+                  { status: 400 },
+                );
+              }
+
+              // Hot-swap provider if AI config changed
+              const warnings: Array<{ code: string; message: string }> = [];
+              const changedPaths = new Set(ops.map((op) => op.path));
+              const needsRebuild = [...PROVIDER_REBUILD_PATHS].some((p) =>
+                changedPaths.has(p),
+              );
+              if (needsRebuild && swappable) {
+                try {
+                  const next = buildProvider(configStore.current, this.deps.logger);
+                  swappable.swap(next);
+                  this.deps.logger.info("Provider hot-swapped", {
+                    provider: configStore.current.ai.provider,
+                    model: configStore.current.ai.model,
+                  });
+                } catch (err) {
+                  this.deps.logger.error("Provider hot-swap failed", { error: err });
+                  warnings.push({
+                    code: "PROVIDER_SWAP_FAILED",
+                    message: err instanceof Error ? err.message : String(err),
+                  });
+                }
+              }
+
+              // Hot-swap system prompt
+              if (changedPaths.has("/ai/systemPrompt") && ctxBuilder) {
+                ctxBuilder.setSystemPrompt(
+                  configStore.current.ai.systemPrompt ?? undefined,
+                );
+              }
+
+              const response: Record<string, unknown> = {
+                config: result.config,
+                rev: result.rev,
+              };
+              if (result.needsRestart) {
+                response.needsRestart = result.needsRestart;
+              }
+              if (warnings.length > 0) {
+                response.warnings = warnings;
+              }
+              return Response.json(response, {
+                headers: { ETag: result.rev },
+              });
+            });
+          } catch {
+            return Response.json(
+              { error: "INVALID_BODY", message: "Invalid JSON body" },
+              { status: 400 },
+            );
+          }
+        }
+
+        // POST /api/config/secrets (authenticated)
+        if (req.method === "POST" && url.pathname === "/api/config/secrets") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          try {
+            const body = (await req.json()) as {
+              op?: string;
+              path?: string;
+              value?: string;
+            };
+            if (!body.op || !body.path) {
+              return Response.json(
+                { error: "INVALID_BODY", message: "Missing op or path" },
+                { status: 400 },
+              );
+            }
+            if (!isSecretPath(body.path)) {
+              return Response.json(
+                { error: "INVALID_PATH", message: `"${body.path}" is not a known secret path` },
+                { status: 400 },
+              );
+            }
+            return await withConfigLock(async () => {
+              if (body.op === "set") {
+                if (!body.value || typeof body.value !== "string") {
+                  return Response.json(
+                    { error: "INVALID_BODY", message: "Missing value for set op" },
+                    { status: 400 },
+                  );
+                }
+                await configStore.setSecret(body.path!, body.value);
+              } else if (body.op === "unset") {
+                await configStore.unsetSecret(body.path!);
+              } else {
+                return Response.json(
+                  { error: "INVALID_OP", message: `Unknown op "${body.op}" — use "set" or "unset"` },
+                  { status: 400 },
+                );
+              }
+
+              // Hot-swap provider if an AI secret changed
+              if (AI_SECRET_PATHS.has(body.path!) && swappable) {
+                try {
+                  const next = buildProvider(configStore.current, this.deps.logger);
+                  swappable.swap(next);
+                  this.deps.logger.info("Provider hot-swapped after secret change", {
+                    path: body.path,
+                    provider: configStore.current.ai.provider,
+                  });
+                } catch (err) {
+                  this.deps.logger.warn("Provider hot-swap failed after secret change (will use previous provider)", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                }
+              }
+
+              return Response.json({ ok: true });
+            });
+          } catch {
+            return Response.json(
+              { error: "INVALID_BODY", message: "Invalid JSON body" },
+              { status: 400 },
+            );
+          }
+        }
       }
     }
 
@@ -761,12 +1032,99 @@ function sttErrorToStatus(code: string): number {
  * Create a fully-wired Gateway from environment config.
  * This is the main factory function — call it from index.ts.
  */
+// ── AI secret paths that trigger provider rebuild ────────────────────
+
+const AI_SECRET_PATHS = new Set([
+  "/ai/secrets/geminiApiKey",
+  "/ai/secrets/bedrockApiKey",
+  "/ai/secrets/openrouterApiKey",
+  "/ai/secrets/lmstudioApiKey",
+]);
+
+const PROVIDER_REBUILD_PATHS = new Set([
+  "/ai/provider",
+  "/ai/model",
+  "/ai/region",
+]);
+
+// ── Provider factory ─────────────────────────────────────────────────
+
+/**
+ * Build a Provider instance from product config.
+ * Throws if the selected provider requires an API key that isn't set.
+ */
+function buildProvider(
+  productConfig: SpaceduckProductConfig,
+  logger: Logger,
+): Provider {
+  const providerName = productConfig.ai.provider;
+  const modelName = productConfig.ai.model;
+  const aiSecrets = productConfig.ai.secrets;
+
+  const requireKey = (name: string, key: string | null): string => {
+    if (!key) {
+      throw new Error(
+        `${name} API key not configured. Set it via Settings or spaceduck.config.json5`,
+      );
+    }
+    return key;
+  };
+
+  if (providerName === "gemini") {
+    const { GeminiProvider } = require("@spaceduck/provider-gemini");
+    return new GeminiProvider({
+      apiKey: requireKey("Gemini", aiSecrets.geminiApiKey),
+      model: modelName,
+    });
+  }
+  if (providerName === "openrouter") {
+    const { OpenRouterProvider } = require("@spaceduck/provider-openrouter");
+    return new OpenRouterProvider({
+      apiKey: requireKey("OpenRouter", aiSecrets.openrouterApiKey),
+      model: modelName,
+    });
+  }
+  if (providerName === "lmstudio") {
+    const { LMStudioProvider } = require("@spaceduck/provider-lmstudio");
+    return new LMStudioProvider({
+      model: modelName,
+      baseUrl: Bun.env.LMSTUDIO_BASE_URL,
+      apiKey: aiSecrets.lmstudioApiKey,
+    });
+  }
+  if (providerName === "bedrock") {
+    const { BedrockProvider } = require("@spaceduck/provider-bedrock");
+    return new BedrockProvider({
+      model: modelName,
+      region: productConfig.ai.region ?? Bun.env.AWS_REGION,
+      apiKey: aiSecrets.bedrockApiKey ?? undefined,
+    });
+  }
+
+  throw new Error(`Unknown provider: ${providerName}`);
+}
+
+// ── Config write serialisation ───────────────────────────────────────
+
+let configWriteChain: Promise<void> = Promise.resolve();
+
+function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = configWriteChain.then(fn, fn);
+  configWriteChain = next.then(
+    () => {},
+    () => {},
+  );
+  return next;
+}
+
+// ── Gateway factory ──────────────────────────────────────────────────
+
 export async function createGateway(overrides?: {
   provider?: Provider;
   embeddingProvider?: EmbeddingProvider;
   config?: SpaceduckConfig;
 }): Promise<Gateway> {
-  // Load config
+  // Load deployment config (port, logLevel, etc.) from env
   const configResult = overrides?.config
     ? { ok: true as const, value: overrides.config }
     : loadConfig();
@@ -780,6 +1138,14 @@ export async function createGateway(overrides?: {
 
   // Create logger
   const logger = new ConsoleLogger(config.logLevel);
+
+  // Load product config from JSON5 file via ConfigStore
+  const configStore = new ConfigStore();
+  const productConfig = await configStore.load();
+  logger.info("Product config loaded", {
+    provider: productConfig.ai.provider,
+    model: productConfig.ai.model,
+  });
 
   // Create event bus
   const eventBus = new SimpleEventBus(logger);
@@ -798,53 +1164,32 @@ export async function createGateway(overrides?: {
   await schema.migrate();
 
   // Create embedding provider (optional — disabled if EMBEDDING_ENABLED=false)
-  const embeddingProvider = overrides?.embeddingProvider ?? createEmbeddingProvider(config, logger);
+  const embeddingProvider = overrides?.embeddingProvider ?? createEmbeddingProvider(config, logger, productConfig);
 
   // Create memory layer — pass embedding provider for vector search
   const conversationStore = new SqliteConversationStore(db, logger);
   const longTermMemory = new SqliteLongTermMemory(db, logger, embeddingProvider);
   const sessionManager = new SqliteSessionManager(db, logger);
 
-  // Create provider
+  // Build swappable AI provider (can be hot-swapped on config change)
   let provider: Provider;
-  if (overrides?.provider) {
-    provider = overrides.provider;
-  } else if (config.provider.name === "gemini") {
-    const { GeminiProvider } = require("@spaceduck/provider-gemini");
-    provider = new GeminiProvider({
-      apiKey: Bun.env.GEMINI_API_KEY!,
-      model: config.provider.model,
-    });
-  } else if (config.provider.name === "openrouter") {
-    const { OpenRouterProvider } = require("@spaceduck/provider-openrouter");
-    provider = new OpenRouterProvider({
-      apiKey: Bun.env.OPENROUTER_API_KEY!,
-      model: config.provider.model,
-    });
-  } else if (config.provider.name === "lmstudio") {
-    const { LMStudioProvider } = require("@spaceduck/provider-lmstudio");
-    provider = new LMStudioProvider({
-      model: config.provider.model!,
-      baseUrl: Bun.env.LMSTUDIO_BASE_URL,
-      apiKey: Bun.env.LMSTUDIO_API_KEY,
-    });
-  } else if (config.provider.name === "bedrock") {
-    const { BedrockProvider } = require("@spaceduck/provider-bedrock");
-    provider = new BedrockProvider({
-      model: config.provider.model,
-      region: Bun.env.AWS_REGION,
-    });
-  } else {
-    logger.error("Unknown provider", { name: config.provider.name });
-    process.exit(1);
-  }
+  const swappableProvider = (() => {
+    if (overrides?.provider) return new SwappableProvider(overrides.provider);
+    try {
+      return new SwappableProvider(buildProvider(productConfig, logger));
+    } catch (err) {
+      logger.error("Failed to build initial provider", { error: err });
+      process.exit(1);
+    }
+  })();
+  provider = swappableProvider;
 
   // Create context builder
   const contextBuilder = new DefaultContextBuilder(
     conversationStore,
     longTermMemory,
     logger,
-    config.systemPrompt,
+    productConfig.ai.systemPrompt ?? undefined,
   );
 
   // Create run lock
@@ -854,7 +1199,7 @@ export async function createGateway(overrides?: {
   const attachmentStore = new AttachmentStore();
 
   // Create tool registry with built-in tools
-  const toolRegistry = createToolRegistry(logger, attachmentStore);
+  const toolRegistry = createToolRegistry(logger, attachmentStore, configStore);
 
   // Wire fact extractor to extract durable facts from assistant responses
   // Uses the LLM provider for intelligent extraction (falls back to regex if unavailable)
@@ -874,10 +1219,10 @@ export async function createGateway(overrides?: {
     toolRegistry,
   });
 
-  // Create external channels (opt-in via env vars)
+  // Create external channels (opt-in via product config)
   const channels: Channel[] = [];
 
-  if (Bun.env.WHATSAPP_ENABLED === "true") {
+  if (productConfig.channels.whatsapp.enabled) {
     const { WhatsAppChannel } = require("@spaceduck/channel-whatsapp");
     channels.push(
       new WhatsAppChannel({
@@ -900,9 +1245,62 @@ export async function createGateway(overrides?: {
     embeddingProvider,
     channels,
     attachmentStore,
+    configStore,
+    swappableProvider,
+    contextBuilder,
   }, db);
 
   await gateway.initStt();
 
   return gateway;
+}
+
+// ── Bedrock model discovery ─────────────────────────────────────────
+
+interface BedrockModelSummary {
+  modelId: string;
+  modelName: string;
+  providerName: string;
+  inputModalities: string[];
+  outputModalities: string[];
+  responseStreamingSupported: boolean;
+  modelLifecycle: { status: string };
+}
+
+async function fetchBedrockModels(
+  config: import("@spaceduck/config").SpaceduckProductConfig,
+): Promise<{ id: string; name: string; provider?: string }[]> {
+  const region = config.ai.region ?? Bun.env.AWS_REGION ?? "us-east-1";
+  const apiKey =
+    config.ai.secrets.bedrockApiKey ??
+    Bun.env.AWS_BEARER_TOKEN_BEDROCK ??
+    "";
+
+  const res = await fetch(
+    `https://bedrock.${region}.amazonaws.com/foundation-models`,
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(8000),
+    },
+  );
+
+  if (!res.ok) throw new Error(`Bedrock ${res.status}`);
+
+  const data = (await res.json()) as { modelSummaries: BedrockModelSummary[] };
+
+  return data.modelSummaries
+    .filter(
+      (m) =>
+        m.modelLifecycle.status === "ACTIVE" &&
+        m.inputModalities.includes("TEXT") &&
+        m.outputModalities.includes("TEXT"),
+    )
+    .map((m) => ({
+      id: m.modelId,
+      name: m.modelName,
+      provider: m.providerName,
+    }));
 }

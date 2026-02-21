@@ -8,6 +8,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@spaceduck/config": "workspace:*",
     "@spaceduck/core": "workspace:*",
     "@spaceduck/memory-sqlite": "workspace:*",
     "@spaceduck/provider-gemini": "workspace:*",
@@ -23,6 +24,7 @@
     "@spaceduck/stt-whisper": "workspace:*"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "bun-types": "latest",
+    "json5": "^2.2.3"
   }
 }

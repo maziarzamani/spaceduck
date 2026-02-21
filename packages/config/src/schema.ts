@@ -1,0 +1,97 @@
+import { z } from "zod";
+import { hostname } from "node:os";
+
+const AiProviderEnum = z.enum(["gemini", "bedrock", "openrouter", "lmstudio"]);
+
+const AiSecretsSchema = z.object({
+  geminiApiKey: z.string().nullable().default(null),
+  bedrockApiKey: z.string().nullable().default(null),
+  openrouterApiKey: z.string().nullable().default(null),
+  lmstudioApiKey: z.string().nullable().default(null),
+});
+
+const AiSchema = z.object({
+  provider: AiProviderEnum.default("gemini"),
+  model: z.string().default("gemini-2.5-flash"),
+  temperature: z.number().min(0).max(2).default(0.7),
+  systemPrompt: z.string().nullable().default(null),
+  region: z.string().nullable().default(null),
+  secrets: AiSecretsSchema.default({}),
+});
+
+const MemorySchema = z.object({
+  enabled: z.boolean().default(true),
+});
+
+const EmbeddingProviderEnum = z.enum([
+  "gemini",
+  "bedrock",
+  "lmstudio",
+]);
+
+const EmbeddingSchema = z.object({
+  enabled: z.boolean().default(true),
+  provider: EmbeddingProviderEnum.nullable().default(null),
+  model: z.string().nullable().default(null),
+  dimensions: z.number().int().positive().nullable().default(null),
+});
+
+const SttSchema = z.object({
+  enabled: z.boolean().default(true),
+  model: z.string().default("small"),
+  languageHint: z.string().nullable().default(null),
+});
+
+const WebSearchSecretsSchema = z.object({
+  braveApiKey: z.string().nullable().default(null),
+});
+
+const WebSearchProviderEnum = z.enum(["brave", "searxng"]);
+
+const WebSearchSchema = z.object({
+  provider: WebSearchProviderEnum.nullable().default(null),
+  searxngUrl: z.string().nullable().default(null),
+  secrets: WebSearchSecretsSchema.default({}),
+});
+
+const WebAnswerSecretsSchema = z.object({
+  perplexityApiKey: z.string().nullable().default(null),
+});
+
+const WebAnswerSchema = z.object({
+  enabled: z.boolean().default(true),
+  secrets: WebAnswerSecretsSchema.default({}),
+});
+
+const MarkerSchema = z.object({
+  enabled: z.boolean().default(true),
+});
+
+const ToolsSchema = z.object({
+  marker: MarkerSchema.default({}),
+  webSearch: WebSearchSchema.default({}),
+  webAnswer: WebAnswerSchema.default({}),
+});
+
+const WhatsAppSchema = z.object({
+  enabled: z.boolean().default(false),
+});
+
+const ChannelsSchema = z.object({
+  whatsapp: WhatsAppSchema.default({}),
+});
+
+const GatewaySchema = z.object({
+  name: z.string().default(hostname()),
+});
+
+export const SpaceduckConfigSchema = z.object({
+  version: z.literal(1).default(1),
+  gateway: GatewaySchema.default({}),
+  ai: AiSchema.default({}),
+  memory: MemorySchema.default({}),
+  embedding: EmbeddingSchema.default({}),
+  stt: SttSchema.default({}),
+  tools: ToolsSchema.default({}),
+  channels: ChannelsSchema.default({}),
+});

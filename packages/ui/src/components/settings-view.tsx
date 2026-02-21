@@ -1,202 +1,137 @@
-import { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../ui/card";
+import { useState } from "react";
+import { useConfig } from "../hooks/use-config";
 import { Button } from "../ui/button";
+import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
-import { ArrowLeft, Loader2, Trash2, Monitor, Smartphone, Globe } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  Brain,
+  Wrench,
+  Mic,
+  MessageSquare,
+  Wifi,
+  Monitor,
+  Info,
+  Radio,
+} from "lucide-react";
+import { AiSection } from "./settings/ai-section";
+import { MemorySection } from "./settings/memory-section";
+import { ToolsSection } from "./settings/tools-section";
+import { SpeechSection } from "./settings/speech-section";
+import { ChannelsSection } from "./settings/channels-section";
+import { ConnectionSection } from "./settings/connection-section";
+import { DevicesSection } from "./settings/devices-section";
+import { AboutSection } from "./settings/about-section";
 
 interface SettingsViewProps {
   onBack: () => void;
   onDisconnect: () => void;
 }
 
-interface TokenInfo {
-  id: string;
-  deviceName: string | null;
-  createdAt: number;
-  lastUsedAt: number | null;
-  isCurrent: boolean;
-}
+type SettingsSection =
+  | "chat"
+  | "memory"
+  | "tools"
+  | "speech"
+  | "channels"
+  | "connection"
+  | "devices"
+  | "about";
 
-function formatDate(ts: number | null): string {
-  if (!ts) return "Never";
-  return new Date(ts).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const NAV_ITEMS: { id: SettingsSection; label: string; icon: typeof Brain }[] = [
+  { id: "connection", label: "Connection", icon: Wifi },
+  { id: "chat", label: "Chat", icon: MessageSquare },
+  { id: "memory", label: "Memory", icon: Brain },
+  { id: "tools", label: "Tools", icon: Wrench },
+  { id: "speech", label: "Speech", icon: Mic },
+  { id: "channels", label: "Channels", icon: Radio },
+  { id: "devices", label: "Devices", icon: Monitor },
+  { id: "about", label: "About", icon: Info },
+];
 
-function DeviceIcon({ name }: { name: string | null }) {
-  const lower = (name ?? "").toLowerCase();
-  if (lower.includes("mobile") || lower.includes("iphone") || lower.includes("android")) {
-    return <Smartphone size={16} className="text-muted-foreground" />;
-  }
-  if (lower.includes("browser") || lower.includes("chrome") || lower.includes("safari") || lower.includes("firefox")) {
-    return <Globe size={16} className="text-muted-foreground" />;
-  }
-  return <Monitor size={16} className="text-muted-foreground" />;
+function resolveDefaultSection(): SettingsSection {
+  const token = localStorage.getItem("spaceduck.token");
+  return token ? "chat" : "connection";
 }
 
 export function SettingsView({ onBack, onDisconnect }: SettingsViewProps) {
-  const gatewayUrl = localStorage.getItem("spaceduck.gatewayUrl") ?? "";
-  const gatewayName = localStorage.getItem("spaceduck.gatewayName") ?? "Unknown";
-  const token = localStorage.getItem("spaceduck.token");
-
-  const [tokens, setTokens] = useState<TokenInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [revoking, setRevoking] = useState<string | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!gatewayUrl || !token) {
-      setLoading(false);
-      return;
-    }
-
-    fetch(`${gatewayUrl}/api/tokens`, {
-      headers: { authorization: `Bearer ${token}` },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<{ tokens: TokenInfo[] }>;
-      })
-      .then((data) => setTokens(data.tokens))
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load devices"))
-      .finally(() => setLoading(false));
-  }, [gatewayUrl, token]);
-
-  const revokeDevice = async (tokenId: string, isSelf: boolean) => {
-    if (!gatewayUrl || !token) return;
-    setRevoking(tokenId);
-    try {
-      const res = await fetch(`${gatewayUrl}/api/tokens/revoke`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ tokenId }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      if (isSelf) {
-        onDisconnect();
-      } else {
-        setTokens((prev) => prev.filter((t) => t.id !== tokenId));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Revocation failed");
-    } finally {
-      setRevoking(null);
-    }
-  };
+  const [section, setSection] = useState<SettingsSection>(resolveDefaultSection);
+  const cfg = useConfig();
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background p-4">
-      <div className="w-full max-w-lg flex flex-col gap-4">
-        <div>
-          <Button variant="ghost" size="sm" onClick={onBack}>
-            <ArrowLeft size={16} className="mr-1" />
+    <div className="flex h-screen bg-background">
+      {/* Sidebar */}
+      <div className="w-56 shrink-0 border-r border-border flex flex-col">
+        <div className="p-3">
+          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onBack}>
+            <ArrowLeft size={16} className="mr-2" />
             Back to Chat
           </Button>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Gateway Connection</CardTitle>
-            <CardDescription>Currently connected to {gatewayName}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">URL</span>
-              <span className="font-mono text-xs">{gatewayUrl}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Auth</span>
-              <span>{token ? "Token paired" : "No auth"}</span>
-            </div>
-            <Separator />
-            <Button
-              variant="outline"
-              onClick={() => {
-                localStorage.removeItem("spaceduck.gatewayUrl");
-                localStorage.removeItem("spaceduck.token");
-                localStorage.removeItem("spaceduck.gatewayName");
-                onDisconnect();
-              }}
+        <Separator />
+        <nav className="flex-1 p-2 flex flex-col gap-0.5">
+          {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setSection(id)}
+              className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                section === id
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
             >
-              Switch Gateway
-            </Button>
-          </CardContent>
-        </Card>
-
-        {token && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Paired Devices</CardTitle>
-              <CardDescription>
-                Devices that have paired with this gateway. Revoke access for any device you don't recognize.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="flex items-center justify-center py-6">
-                  <Loader2 size={20} className="animate-spin text-muted-foreground" />
-                </div>
-              ) : error ? (
-                <p className="text-sm text-destructive">{error}</p>
-              ) : tokens.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No paired devices found.</p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {tokens.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center gap-3 rounded-lg border border-border p-3"
-                    >
-                      <DeviceIcon name={t.deviceName} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {t.deviceName ?? "Unknown device"}
-                          {t.isCurrent && (
-                            <span className="ml-2 text-xs text-primary font-normal">(this device)</span>
-                          )}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Last used: {formatDate(t.lastUsedAt)} &middot; Created: {formatDate(t.createdAt)}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        disabled={revoking === t.id}
-                        onClick={() => revokeDevice(t.id, t.isCurrent)}
-                      >
-                        {revoking === t.id ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={14} />
-                        )}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>About</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Spaceduck v0.1.0
-          </CardContent>
-        </Card>
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
+        </nav>
       </div>
+
+      {/* Content */}
+      <ScrollArea className="flex-1">
+        <div className="max-w-2xl mx-auto p-8">
+          {/* Info: some changes need restart */}
+          {cfg.needsRestart && (
+            <div className="mb-6 flex items-start gap-3 rounded-lg border border-border bg-muted/50 p-4">
+              <Info size={18} className="text-muted-foreground mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Settings saved</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Some changes take effect after a gateway restart.
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={cfg.dismissRestart}>
+                OK
+              </Button>
+            </div>
+          )}
+
+          {/* Error banner */}
+          {cfg.error && (
+            <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+              <p className="text-sm text-destructive">{cfg.error}</p>
+            </div>
+          )}
+
+          {cfg.loading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 size={24} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {section === "chat" && <AiSection cfg={cfg} />}
+              {section === "memory" && <MemorySection cfg={cfg} />}
+              {section === "tools" && <ToolsSection cfg={cfg} />}
+              {section === "speech" && <SpeechSection cfg={cfg} />}
+              {section === "channels" && <ChannelsSection cfg={cfg} />}
+              {section === "connection" && <ConnectionSection onDisconnect={onDisconnect} />}
+              {section === "devices" && <DevicesSection onDisconnect={onDisconnect} />}
+              {section === "about" && <AboutSection />}
+            </>
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }

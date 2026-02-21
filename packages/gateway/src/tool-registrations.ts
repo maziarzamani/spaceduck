@@ -8,12 +8,18 @@ import { WebFetchTool } from "@spaceduck/tool-web-fetch";
 import { WebSearchTool, WebAnswerTool, type SearchProvider } from "@spaceduck/tool-web-search";
 import { MarkerTool } from "@spaceduck/tool-marker";
 import type { AttachmentStore } from "./attachment-store";
+import type { ConfigStore } from "./config";
+import { isSecretPath, decodePointer } from "@spaceduck/config";
 
 /**
  * Build a ToolRegistry pre-loaded with all built-in tools.
  * Lazily launches the browser only on first use.
  */
-export function createToolRegistry(logger: Logger, attachmentStore?: AttachmentStore): ToolRegistry {
+export function createToolRegistry(
+  logger: Logger,
+  attachmentStore?: AttachmentStore,
+  configStore?: ConfigStore,
+): ToolRegistry {
   const registry = new ToolRegistry();
   const log = logger.child({ component: "ToolRegistry" });
 
@@ -354,6 +360,107 @@ export function createToolRegistry(logger: Logger, attachmentStore?: AttachmentS
 
       log.info("marker_scan registered");
     });
+  }
+
+  // ── config_get / config_set (conditional — only if configStore available) ─
+
+  if (configStore) {
+    registry.register(
+      {
+        name: "config_get",
+        description:
+          "Read the current Spaceduck configuration. Optionally pass a JSON Pointer path to get a specific value. " +
+          "Secret values (API keys) are redacted — use Settings > Secrets to manage them.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description:
+                'Optional JSON Pointer (e.g. "/ai/model", "/ai/temperature"). Omit to get the full config.',
+            },
+          },
+        },
+      },
+      async (args) => {
+        const { config, rev } = configStore.getRedacted();
+        const path = args.path as string | undefined;
+        if (!path) {
+          return JSON.stringify({ config, rev }, null, 2);
+        }
+        try {
+          const segments = decodePointer(path);
+          let value: unknown = config;
+          for (const seg of segments) {
+            if (value == null || typeof value !== "object") {
+              return `Error: path "${path}" does not exist in config`;
+            }
+            value = (value as Record<string, unknown>)[seg];
+          }
+          return JSON.stringify({ path, value, rev }, null, 2);
+        } catch (e) {
+          return `Error: invalid path "${path}" — ${e instanceof Error ? e.message : String(e)}`;
+        }
+      },
+    );
+
+    registry.register(
+      {
+        name: "config_set",
+        description:
+          "Change a single Spaceduck configuration value. Uses a JSON Pointer path and the new value. " +
+          "Cannot set secret paths (API keys) — tell the user to use Settings > Secrets instead.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: 'JSON Pointer to the field to change (e.g. "/ai/model", "/ai/temperature").',
+            },
+            value: {
+              description: "The new value to set at the given path.",
+            },
+          },
+          required: ["path", "value"],
+        },
+      },
+      async (args) => {
+        const path = args.path as string;
+        const value = args.value;
+
+        if (isSecretPath(path)) {
+          return "Error: Secret paths cannot be set via chat tools. Use Settings > Secrets to manage API keys.";
+        }
+
+        const rev = configStore.rev();
+        const result = await configStore.patch(
+          [{ op: "replace", path, value }],
+          rev,
+        );
+
+        if (!result.ok) {
+          if (result.error === "CONFLICT") {
+            return "Error: config was modified concurrently. Please try again.";
+          }
+          if (result.error === "VALIDATION") {
+            return `Error: invalid value — ${result.issues.map((i) => `${i.path}: ${i.message}`).join(", ")}`;
+          }
+          return `Error: ${result.message}`;
+        }
+
+        const response: Record<string, unknown> = {
+          ok: true,
+          path,
+          value,
+        };
+        if (result.needsRestart) {
+          response.needsRestart = result.needsRestart.fields;
+        }
+        return JSON.stringify(response, null, 2);
+      },
+    );
+
+    log.info("config_get + config_set registered");
   }
 
   log.info("Tool registry initialized", { tools: registry.size });
