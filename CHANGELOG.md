@@ -6,6 +6,13 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.12.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.11.0...spaceduck-v0.12.0) (2026-02-21)
+
+
+### Features
+
+* add CLI for config management + fix hot-apply tests + update README ([7e8ed5c](https://github.com/maziarzamani/spaceduck/commit/7e8ed5c7a457382a87488ac00025908147331dee))
+
 ## [0.11.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.10.0...spaceduck-v0.11.0) (2026-02-21)
 
 
