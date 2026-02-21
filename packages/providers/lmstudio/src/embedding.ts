@@ -18,6 +18,8 @@ export interface LMStudioEmbeddingConfig {
   readonly dimensions?: number;
   /** Task instruction prepended to input for instruction-aware models. */
   readonly instruction?: string;
+  /** Override the provider name (e.g. "llamacpp" when reusing this class). */
+  readonly name?: string;
 }
 
 interface EmbeddingResponse {
@@ -27,15 +29,16 @@ interface EmbeddingResponse {
 }
 
 export class LMStudioEmbeddingProvider implements EmbeddingProvider {
-  readonly name = "lmstudio";
+  readonly name: string;
+  readonly model: string;
   readonly dimensions: number;
 
   private readonly baseUrl: string;
-  private readonly model: string;
   private readonly apiKey: string | undefined;
   private readonly instruction: string | undefined;
 
   constructor(config: LMStudioEmbeddingConfig) {
+    this.name = config.name ?? "lmstudio";
     this.model = config.model;
     this.baseUrl = (config.baseUrl ?? "http://localhost:1234/v1").replace(/\/+$/, "");
     this.apiKey = config.apiKey;

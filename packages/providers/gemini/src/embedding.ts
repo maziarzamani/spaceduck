@@ -16,10 +16,10 @@ const GEMINI_DIMENSIONS = 768;
 
 export class GeminiEmbeddingProvider implements EmbeddingProvider {
   readonly name = "gemini";
+  readonly model: string;
   readonly dimensions = GEMINI_DIMENSIONS;
 
   private readonly apiKey: string;
-  private readonly model: string;
 
   constructor(config: GeminiEmbeddingConfig) {
     this.apiKey = config.apiKey;

@@ -150,13 +150,26 @@ export class SqliteLongTermMemory implements LongTermMemory {
       }
 
       // Slot conflict resolution: deactivate previous facts in the same identity slot
+      // Preferences are additive (not mutually exclusive), so skip same-slot deactivation.
       if (slot && slot !== "other" && slot !== "preference") {
+        // Collect old slot values before deactivating — we use them to clean
+        // up slot-less turn-flush facts that mention those stale values.
+        const oldSlotValues = this.db
+          .query(
+            `SELECT slot_value FROM facts WHERE slot = ?1 AND is_active = 1 AND slot_value IS NOT NULL`,
+          )
+          .all(slot) as Array<{ slot_value: string }>;
+
         this.db
           .query(
             `UPDATE facts SET is_active = 0, updated_at = ?1
              WHERE slot = ?2 AND is_active = 1`,
           )
           .run(now, slot);
+
+        for (const { slot_value } of oldSlotValues) {
+          this.deactivateSlotlessByValue(slot_value, now);
+        }
       }
 
       this.db
@@ -246,12 +259,13 @@ export class SqliteLongTermMemory implements LongTermMemory {
         // Check current active fact for this slot
         const existing = this.db
           .query(
-            `SELECT id, source, derived_from_message_id, created_at
+            `SELECT id, source, derived_from_message_id, created_at, slot_value
              FROM facts WHERE slot = ?1 AND is_active = 1
              ORDER BY created_at DESC LIMIT 1`,
           )
           .get(input.slot) as {
-            id: string; source: string; derived_from_message_id: string | null; created_at: number;
+            id: string; source: string; derived_from_message_id: string | null;
+            created_at: number; slot_value: string | null;
           } | null;
 
         if (existing) {
@@ -281,6 +295,11 @@ export class SqliteLongTermMemory implements LongTermMemory {
           this.db
             .query(`UPDATE facts SET is_active = 0, updated_at = ?1 WHERE id = ?2`)
             .run(now, existing.id);
+
+          // Deactivate slot-less turn-flush facts that mention the old value.
+          if (existing.slot_value) {
+            this.deactivateSlotlessByValue(existing.slot_value, now);
+          }
         }
 
         // Insert new active fact
@@ -674,5 +693,22 @@ export class SqliteLongTermMemory implements LongTermMemory {
         `Embedding dimension mismatch: expected ${this.embedding.dimensions}, got ${vector.length}`,
       );
     }
+  }
+
+  /**
+   * Deactivate slot-less (turn-flush) facts whose content contains a stale
+   * slot value.  Language-agnostic: catches "Your name is John",
+   * "Dit navn er John", "Du bor i København", etc. without per-language
+   * pattern maintenance.
+   */
+  private deactivateSlotlessByValue(oldValue: string, now: number): void {
+    if (!oldValue || oldValue.length < 2) return;
+    this.db
+      .query(
+        `UPDATE facts SET is_active = 0, updated_at = ?1
+         WHERE slot IS NULL AND is_active = 1
+         AND content LIKE ?2`,
+      )
+      .run(now, `%${oldValue}%`);
   }
 }
