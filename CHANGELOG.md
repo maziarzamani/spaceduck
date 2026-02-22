@@ -6,6 +6,19 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.13.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.12.0...spaceduck-v0.13.0) (2026-02-22)
+
+
+### Features
+
+* harden memory pipeline — slot deactivation, contamination guard, multilingual extraction ([9ce9940](https://github.com/maziarzamani/spaceduck/commit/9ce99405d5b46a869941e7eb35457faddd9ffe75))
+
+
+### Bug Fixes
+
+* add required theme field to docs.json ([7fa3f71](https://github.com/maziarzamani/spaceduck/commit/7fa3f71613b86419c5008df4f3cd619609bcc261))
+* update docs.json to match current Mintlify schema ([f752fe3](https://github.com/maziarzamani/spaceduck/commit/f752fe3c3ef70f847c7d7a9cd9a899a00214a89c))
+
 ## [0.12.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.11.0...spaceduck-v0.12.0) (2026-02-21)
 
 
