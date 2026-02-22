@@ -13,6 +13,7 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/github/v/release/maziarzamani/spaceduck?style=for-the-badge&label=release&color=6366f1" alt="Release">
   <img src="https://img.shields.io/badge/runtime-Bun_1.3+-f9f1e1?style=for-the-badge&logo=bun&logoColor=14151a" alt="Bun">
   <img src="https://img.shields.io/badge/language-TypeScript-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite">
