@@ -10,63 +10,59 @@
   "colors": {
     "primary": "#6366f1",
     "light": "#818cf8",
-    "dark": "#4f46e5",
-    "anchors": {
-      "from": "#6366f1",
-      "to": "#a78bfa"
+    "dark": "#4f46e5"
+  },
+  "navbar": {
+    "links": [
+      {
+        "type": "github",
+        "href": "https://github.com/maziarzamani/spaceduck"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Quickstart",
+      "href": "/quickstart"
     }
   },
-  "topbarLinks": [
-    {
-      "name": "GitHub",
-      "url": "https://github.com/maziarzamani/spaceduck"
-    }
-  ],
-  "topbarCtaButton": {
-    "name": "Quickstart",
-    "url": "/quickstart"
+  "navigation": {
+    "groups": [
+      {
+        "group": "Start Here",
+        "pages": [
+          "index",
+          "quickstart",
+          "platforms"
+        ]
+      },
+      {
+        "group": "Model Providers",
+        "pages": [
+          "providers/overview",
+          "providers/llamacpp",
+          "providers/lmstudio",
+          "providers/bedrock",
+          "providers/gemini",
+          "providers/openrouter"
+        ]
+      },
+      {
+        "group": "Concepts",
+        "pages": [
+          "concepts/memory-search"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": [
+          "reference/common-errors"
+        ]
+      }
+    ]
   },
-  "anchors": [
-    {
-      "name": "GitHub",
-      "icon": "github",
-      "url": "https://github.com/maziarzamani/spaceduck"
+  "footer": {
+    "socials": {
+      "github": "https://github.com/maziarzamani/spaceduck"
     }
-  ],
-  "navigation": [
-    {
-      "group": "Start Here",
-      "pages": [
-        "index",
-        "quickstart",
-        "platforms"
-      ]
-    },
-    {
-      "group": "Model Providers",
-      "pages": [
-        "providers/overview",
-        "providers/llamacpp",
-        "providers/lmstudio",
-        "providers/bedrock",
-        "providers/gemini",
-        "providers/openrouter"
-      ]
-    },
-    {
-      "group": "Concepts",
-      "pages": [
-        "concepts/memory-search"
-      ]
-    },
-    {
-      "group": "Reference",
-      "pages": [
-        "reference/common-errors"
-      ]
-    }
-  ],
-  "footerSocials": {
-    "github": "https://github.com/maziarzamani/spaceduck"
   }
 }
