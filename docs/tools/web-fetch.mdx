@@ -1,0 +1,46 @@
+---
+title: "Web Fetch"
+description: "Fetch any URL and convert HTML to clean text — a lightweight alternative to the browser tool."
+---
+
+## What it does
+
+Fetches a URL via HTTP and converts the response to clean text:
+
+- **HTML** — converted to readable text (headings, lists, links preserved)
+- **JSON** — pretty-printed
+- **Plain text** — returned as-is
+
+Much faster and cheaper than launching a browser. The assistant prefers this for server-rendered pages and direct URLs.
+
+## Requirements
+
+None. Web fetch is always available — no configuration needed.
+
+## How the assistant uses it
+
+When the assistant needs to read a web page and doesn't need to interact with it (no clicking, no JavaScript rendering), it calls `web_fetch` with a URL. Common scenarios:
+
+- Reading documentation pages
+- Fetching API responses
+- Reading articles or blog posts
+- Checking content at a URL you shared in chat
+
+## Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `maxChars` | 20,000 | Output truncation limit |
+| `timeoutMs` | 15,000 ms | Request timeout |
+| `userAgent` | `Spaceduck/1.0` | User-agent string sent with requests |
+
+## Limitations
+
+- **No JavaScript execution** — won't work for SPAs or client-rendered pages (use the browser tool instead)
+- **No authentication** — can't access pages behind login
+- **Follows redirects** automatically
+- **Truncates** output at `maxChars` to stay within LLM context limits
+
+<Tip>
+If the assistant says it can't read a page or gets empty content, the page likely requires JavaScript. Ask it to use the browser tool instead.
+</Tip>

@@ -1,0 +1,65 @@
+---
+title: "Web Search"
+description: "Search the web via Brave or SearXNG, and get AI-synthesized answers via Perplexity Sonar."
+---
+
+## What it does
+
+Two complementary tools:
+
+- **Web Search** — returns structured search results (title, URL, snippet) from Brave Search or SearXNG
+- **Web Answer** — returns AI-synthesized answers with citations from Perplexity Sonar
+
+The assistant chooses between them based on the query. Factual lookups typically use search; complex questions use answer.
+
+## Requirements
+
+You need at least one search provider configured:
+
+| Provider | What you need |
+|----------|--------------|
+| **Brave Search** | API key from [brave.com/search/api](https://brave.com/search/api/) |
+| **SearXNG** | A running SearXNG instance URL |
+| **Perplexity Sonar** (answers) | API key from [perplexity.ai](https://www.perplexity.ai/) or an OpenRouter key |
+
+## Configuration
+
+Configure search providers in **Settings > Tools**, or via the CLI:
+
+```bash
+# Brave Search
+spaceduck config set /tools/webSearch/provider brave
+spaceduck config secret set /tools/webSearch/braveApiKey
+
+# SearXNG (self-hosted)
+spaceduck config set /tools/webSearch/provider searxng
+spaceduck config set /tools/webSearch/searxngUrl http://localhost:8888
+
+# Perplexity Sonar (for AI answers)
+spaceduck config secret set /tools/webAnswer/perplexityApiKey
+```
+
+## Features
+
+### Search
+
+| Feature | Details |
+|---------|---------|
+| Max results | 5 by default, up to 10 |
+| Rate limiting | Brave: 3 req/s, SearXNG: 5 req/s |
+| Caching | 15-minute in-memory cache (skipped for time-sensitive queries) |
+| Freshness filter | Past day, week, month, or year |
+| Locale/country | Configurable per query |
+
+### Answer
+
+| Feature | Details |
+|---------|---------|
+| Model | `sonar-pro` by default |
+| Citations | Returned with source URLs |
+| Caching | 5-minute in-memory cache |
+| Fallback | Uses OpenRouter if no Perplexity key |
+
+<Note>
+Search results are never synthesized — you get raw titles, URLs, and snippets. The assistant interprets them. AI answers from Perplexity Sonar are clearly marked as synthesized.
+</Note>

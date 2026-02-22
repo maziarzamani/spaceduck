@@ -31,8 +31,7 @@
         "group": "Start Here",
         "pages": [
           "index",
-          "quickstart",
-          "platforms"
+          "quickstart"
         ]
       },
       {
@@ -44,6 +43,24 @@
           "providers/bedrock",
           "providers/gemini",
           "providers/openrouter"
+        ]
+      },
+      {
+        "group": "Platforms",
+        "pages": [
+          "platforms/gateway",
+          "platforms/desktop",
+          "platforms/cli"
+        ]
+      },
+      {
+        "group": "Tools",
+        "pages": [
+          "tools/overview",
+          "tools/browser",
+          "tools/web-search",
+          "tools/web-fetch",
+          "tools/document-scanning"
         ]
       },
       {

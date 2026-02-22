@@ -1,0 +1,66 @@
+---
+title: "Gateway"
+description: "The Spaceduck gateway is the core server that handles chat, memory, tools, and configuration."
+---
+
+The gateway is the engine of Spaceduck. It runs on your machine and manages everything: chat streaming, memory, tools, file uploads, and configuration.
+
+## Starting the gateway
+
+```bash
+bun run dev
+# Gateway starts at http://localhost:3000
+```
+
+The web UI is served directly by the gateway — open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Where data lives
+
+| Data | Location | Notes |
+|------|----------|-------|
+| Config | `data/spaceduck.config.json5` | Single source of truth for all settings |
+| Database | `data/spaceduck.db` | SQLite — conversations, facts, vector embeddings |
+| Uploads | `data/uploads/` | Temporary file storage with TTL sweeper |
+
+All data stays on your machine. Nothing is sent anywhere except to the model provider you configure.
+
+## Ports and access
+
+The gateway listens on port `3000` by default. Change it with the `PORT` environment variable in `.env`.
+
+Clients connect over HTTP (config API, file uploads) and WebSocket (chat streaming). Both use the same port.
+
+## Environment variables
+
+These are deployment knobs only — product settings (provider, model, API keys) are managed in the Settings UI or via the CLI.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Gateway listen port |
+| `LOG_LEVEL` | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`) |
+| `SPACEDUCK_TOKEN` | — | Auth token for CLI and remote access |
+
+## Configuration system
+
+Spaceduck uses a single config file (`spaceduck.config.json5`) validated by a Zod schema. You can modify it through three surfaces:
+
+| Surface | How it works | Secrets? |
+|---------|-------------|----------|
+| **Settings UI** | Browser-based preference pane | Yes (masked input) |
+| **CLI** | `spaceduck config set /ai/provider bedrock` | Yes (`secret set`) |
+| **Chat tools** | Ask the assistant: "change my model to nova" | No (read-only for secrets) |
+
+### Hot-apply vs restart
+
+Some settings take effect immediately, others require a gateway restart:
+
+| Hot-applies immediately | Requires restart |
+|------------------------|------------------|
+| Chat provider, model, base URL | Embedding provider, model, dimensions |
+| System prompt | — |
+| API keys | — |
+| Temperature | — |
+
+<Warning>
+Changing embedding provider, model, or dimensions requires a restart and may invalidate existing vector memory.
+</Warning>
