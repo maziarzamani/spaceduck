@@ -1,0 +1,98 @@
+---
+title: "AWS Bedrock"
+description: "Connect Spaceduck to Amazon Bedrock for access to Nova, Claude, and Titan embeddings."
+---
+
+## What it's good for
+
+Access to high-quality models (Claude, Nova, Llama) on AWS infrastructure. Native Converse API support, Titan and Nova embeddings for semantic recall. Good for users already in the AWS ecosystem or who want strong models without running local hardware.
+
+## Requirements
+
+- An AWS account with Amazon Bedrock access
+- A Bedrock API key (Bearer token)
+- Model access enabled in your AWS region
+
+Generate your API key at: **AWS Console > Amazon Bedrock > API keys**
+
+## Configure in Spaceduck
+
+### Chat
+
+<Steps>
+  <Step title="Set your API key">
+    In **Settings > Chat**, select **Amazon Bedrock** as the provider, then enter your API key.
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config secret set /ai/secrets/bedrockApiKey
+    # Paste your key when prompted
+    ```
+  </Step>
+
+  <Step title="Select a model">
+    In **Settings > Chat**:
+    - **Provider**: Amazon Bedrock
+    - **Model**: choose from the dropdown, e.g.:
+      - `global.amazon.nova-2-lite-v1:0` (fast, cost-effective)
+      - `us.anthropic.claude-3-5-haiku-20241022-v1:0` (Claude Haiku)
+      - `amazon.nova-pro-v1:0` (Nova Pro)
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config set /ai/provider bedrock
+    spaceduck config set /ai/model "global.amazon.nova-2-lite-v1:0"
+    ```
+  </Step>
+
+  <Step title="Verify">
+    Send a message in the chat. If you get a streaming response, Bedrock is connected.
+
+    <Check>
+    The model dropdown in Settings populates dynamically from Bedrock's API once your key is set.
+    </Check>
+  </Step>
+</Steps>
+
+### Embeddings
+
+Bedrock supports Titan Text Embeddings V2 and Nova 2 Multimodal Embeddings.
+
+<Steps>
+  <Step title="Configure embedding model">
+    In **Settings > Memory**:
+    - Toggle **Semantic recall** on
+    - **Provider**: Amazon Bedrock (or "Same as chat provider")
+    - **Model**: `amazon.titan-embed-text-v2:0` or `amazon.nova-2-multimodal-embeddings-v1:0`
+    - **Dimensions**: `1024` (Titan default) or as needed
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config set /embedding/enabled true
+    spaceduck config set /embedding/provider bedrock
+    spaceduck config set /embedding/model "amazon.titan-embed-text-v2:0"
+    spaceduck config set /embedding/dimensions 1024
+    ```
+  </Step>
+
+  <Step title="Test">
+    Click the **Test** button in **Settings > Memory**. You should see a green status indicator.
+  </Step>
+</Steps>
+
+<Info>
+Bedrock uses the native Converse API for chat (required for Nova and Claude models) and the Invoke API for embeddings. The model type is auto-detected: models with "nova" in the ID use the Nova embedding API, others use Titan.
+</Info>
+
+## Test and troubleshoot
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `401 Unauthorized` | Invalid or expired API key | Regenerate at AWS Console > Bedrock > API keys |
+| `403 Forbidden` | Model not enabled in your region | Enable the model in Bedrock's model access settings |
+| Model dropdown shows few models | API key wasn't set when page loaded | Save the key first, then re-open Settings |
+| `429 Too Many Requests` | Rate limit exceeded | Wait and retry, or request a limit increase |
+| Context length exceeded | Message history too long | Spaceduck auto-compacts, but very long conversations may need a new chat |

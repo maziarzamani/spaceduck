@@ -1,0 +1,80 @@
+---
+title: "Google Gemini"
+description: "Connect Spaceduck to Google AI for Gemini chat models and text embeddings."
+---
+
+## What it's good for
+
+Fast, capable models with generous free tiers. Gemini handles both chat and embeddings from a single provider, so there's no two-server setup needed. Good for getting started quickly with a cloud provider.
+
+## Requirements
+
+- A Google AI API key
+- Generate one at [aistudio.google.com](https://aistudio.google.com/apikey)
+
+## Configure in Spaceduck
+
+### Chat
+
+<Steps>
+  <Step title="Set your API key">
+    In **Settings > Chat**, select **Google Gemini** as the provider, then enter your API key.
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config secret set /ai/secrets/geminiApiKey
+    ```
+  </Step>
+
+  <Step title="Select a model">
+    In **Settings > Chat**:
+    - **Provider**: Google Gemini
+    - **Model**: e.g., `gemini-2.5-flash` or `gemini-2.0-pro`
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config set /ai/provider gemini
+    spaceduck config set /ai/model "gemini-2.5-flash"
+    ```
+  </Step>
+
+  <Step title="Verify">
+    Send a message in the chat. You should see a streaming response.
+  </Step>
+</Steps>
+
+### Embeddings
+
+Gemini provides text embeddings through the same API key.
+
+<Steps>
+  <Step title="Configure embedding model">
+    In **Settings > Memory**:
+    - Toggle **Semantic recall** on
+    - **Provider**: Google Gemini (or "Same as chat provider")
+    - **Model**: `text-embedding-004`
+    - **Dimensions**: leave empty for the provider default
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config set /embedding/enabled true
+    spaceduck config set /embedding/provider gemini
+    spaceduck config set /embedding/model "text-embedding-004"
+    ```
+  </Step>
+
+  <Step title="Test">
+    Click the **Test** button in **Settings > Memory**.
+  </Step>
+</Steps>
+
+## Test and troubleshoot
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `401` or `403` error | Invalid API key | Check your key at [aistudio.google.com](https://aistudio.google.com/apikey) |
+| `429 Too Many Requests` | Rate limit (free tier) | Wait a minute and retry, or upgrade to a paid plan |
+| Model not found | Typo in model name | Check available models at [ai.google.dev/models](https://ai.google.dev/models) |

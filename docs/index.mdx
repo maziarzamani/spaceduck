@@ -1,0 +1,75 @@
+---
+title: "Introduction"
+description: "Spaceduck is a local-first AI assistant with persistent memory. It remembers what you've said, acts on your behalf with real tools, and runs entirely on your machine."
+---
+
+Spaceduck is a local-first AI assistant with persistent memory.
+
+It remembers what you've said across conversations, acts on your behalf with real tools, and runs entirely on your machine. No agent frameworks, no orchestration wrappers — every layer is handwritten TypeScript.
+
+## Why Spaceduck
+
+<CardGroup cols={2}>
+  <Card title="Persistent memory" icon="brain">
+    Hybrid recall (vector + keyword) finds what you said even when you don't use the same words. Facts are extracted eagerly after every response.
+  </Card>
+  <Card title="Provider freedom" icon="shuffle">
+    Swap between local models (llama.cpp, LM Studio) and cloud providers (Bedrock, Gemini, OpenRouter) from the Settings UI — no restart required.
+  </Card>
+  <Card title="Agentic tools" icon="wrench">
+    Web search, browser automation, document scanning, and HTTP fetch. The agent loop chains tool calls automatically.
+  </Card>
+  <Card title="Multi-channel" icon="comments">
+    Web UI, Desktop app (Tauri), WhatsApp, and CLI. Same memory, same tools, any surface.
+  </Card>
+</CardGroup>
+
+## How it works
+
+Spaceduck runs a local gateway server that connects your chosen AI model to persistent memory, tools, and channels.
+
+```mermaid
+graph TD
+    UI["Web UI"]
+    DESK["Desktop (Tauri)"]
+    CLI["CLI"]
+    WA["WhatsApp"]
+
+    GW["Gateway"]
+    MEM["Memory (SQLite)"]
+    CP["Chat Model Provider"]
+    EP["Embedding Provider"]
+    TOOLS["Tools"]
+
+    UI --> GW
+    DESK --> GW
+    CLI --> GW
+    WA --> GW
+
+    GW --> MEM
+    GW --> CP
+    GW --> TOOLS
+    MEM --> EP
+```
+
+Every conversation flows through the gateway. The gateway manages context budgets, extracts facts into long-term memory, embeds them for semantic recall, and orchestrates tool calls.
+
+## Key features
+
+- **Hybrid recall** — Reciprocal Rank Fusion combining vector cosine similarity and FTS5 BM25, with recency decay
+- **Slot-based identity** — `name`, `age`, `location` slots with transactional upsert and automatic deactivation of stale facts
+- **Contamination guard** — assistant-generated text can never overwrite your identity
+- **Hot-swap providers** — change your chat model or embedding model at runtime from the Settings UI or CLI
+- **Two-server pattern** — run chat and embeddings on separate endpoints (local, cloud, or mixed)
+- **Eager extraction** — facts are persisted after every turn, not only at compaction
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Spaceduck running and send your first message in under 5 minutes.
+  </Card>
+  <Card title="Model Providers" icon="server" href="/providers/overview">
+    Choose and configure your chat and embedding model providers.
+  </Card>
+</CardGroup>

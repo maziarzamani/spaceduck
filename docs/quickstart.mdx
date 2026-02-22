@@ -1,0 +1,147 @@
+---
+title: "Quickstart"
+description: "Get Spaceduck running and send your first message in under 5 minutes."
+---
+
+After completing this guide, you'll have a running Spaceduck gateway with a chat model connected and ready to use.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) v1.3 or later
+- A chat model — either a local server (llama.cpp, LM Studio) or a cloud API key (Bedrock, Gemini, OpenRouter)
+
+## Install and run
+
+<Steps>
+  <Step title="Clone and install">
+    ```bash
+    git clone https://github.com/maziarzamani/spaceduck.git
+    cd spaceduck
+    bun install
+    ```
+  </Step>
+
+  <Step title="Install system dependencies">
+    <Tabs>
+      <Tab title="macOS">
+        ```bash
+        # SQLite with extension support (required for sqlite-vec)
+        brew install sqlite
+        ```
+      </Tab>
+      <Tab title="Linux">
+        SQLite with extension support is typically available by default. If you get sqlite-vec errors, install `libsqlite3-dev`.
+      </Tab>
+      <Tab title="Windows">
+        SQLite is bundled with Bun on Windows. No additional steps needed.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Configure deployment settings">
+    ```bash
+    cp .env.example .env
+    ```
+
+    The `.env` file controls deployment knobs only (port, log level). Provider settings are managed in the Settings UI.
+  </Step>
+
+  <Step title="Start the gateway">
+    ```bash
+    bun run dev
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000) in your browser.
+  </Step>
+
+  <Step title="Configure your chat model">
+    Click the **Settings** icon in the sidebar, then go to **Chat**.
+
+    1. Select a **Provider** from the dropdown (e.g., llama.cpp, Bedrock, Gemini)
+    2. Enter the **Base URL** if using a local provider
+    3. Set your **API key** if using a cloud provider
+    4. Choose a **Model**
+
+    Changes to provider, model, and system prompt hot-apply immediately — no restart needed.
+
+    <Tip>
+      If you're unsure which provider to start with, see the [Model Providers overview](/providers/overview) for a comparison.
+    </Tip>
+  </Step>
+
+  <Step title="Send your first message">
+    Go back to the chat view and type something. You should see a streaming response from your configured model.
+
+    <Check>
+      If you see a response, Spaceduck is working. Your conversations are now being stored in SQLite with automatic fact extraction.
+    </Check>
+  </Step>
+</Steps>
+
+## Optional: enable semantic recall
+
+By default, Spaceduck uses keyword search (FTS5) for cross-conversation memory. To enable vector-based semantic recall:
+
+1. Go to **Settings > Memory**
+2. Toggle **Semantic recall** on
+3. Select an embedding provider and model
+4. Click **Test** to verify the connection
+
+<Info>
+Semantic recall requires a separate embedding model. You can use the same provider as your chat model, or run a dedicated embedding server. See [llama.cpp embeddings](/providers/llamacpp#embeddings) for a local setup.
+</Info>
+
+## Optional: install tools
+
+<AccordionGroup>
+  <Accordion title="Browser automation (Playwright)">
+    ```bash
+    bunx playwright install chromium
+    ```
+    Enables web browsing and page interaction via the `browser` tool.
+  </Accordion>
+
+  <Accordion title="Document scanning (Marker)">
+    ```bash
+    pip install marker-pdf   # requires Python 3.10+, PyTorch
+    ```
+    When `marker_single` is on your PATH, the `marker_scan` tool is automatically registered. Upload PDFs via the paperclip button in the chat UI.
+  </Accordion>
+
+  <Accordion title="Voice dictation (Whisper)">
+    ```bash
+    pip install openai-whisper   # requires Python 3.9+, ffmpeg
+    ```
+    When `whisper` is on your PATH, the mic button appears in the chat UI. Hold to record, release to transcribe.
+  </Accordion>
+</AccordionGroup>
+
+## Choose your client
+
+Spaceduck supports multiple clients — all connecting to the same gateway.
+
+| Client | Best for | How to connect |
+|--------|----------|----------------|
+| **Web UI** | Default experience | Open `http://localhost:3000` |
+| **Desktop app** | Native macOS/Linux/Windows window | See [Platforms](/platforms#desktop-app) |
+| **CLI** | Scripting and automation | See [Platforms](/platforms#cli) |
+| **WhatsApp** | Mobile access | Requires Baileys setup |
+
+## What you now have
+
+- A running gateway at `http://localhost:3000`
+- A chat model connected and streaming responses
+- Persistent conversation history in SQLite
+- Automatic fact extraction after every turn
+- Keyword-based cross-conversation recall (or semantic recall if you enabled it)
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Model Providers" icon="server" href="/providers/overview">
+    Learn about chat vs embedding providers and the two-server pattern.
+  </Card>
+  <Card title="Memory Search" icon="brain" href="/concepts/memory-search">
+    Understand how Spaceduck remembers and recalls facts across conversations.
+  </Card>
+</CardGroup>

@@ -1,0 +1,71 @@
+---
+title: "OpenRouter"
+description: "Access hundreds of AI models through a single API key with OpenRouter."
+---
+
+## What it's good for
+
+Widest model selection available — access Claude, GPT-4, Llama, Mistral, and hundreds more through one API key. Good for trying different models without managing separate accounts, or for accessing models not directly supported by Spaceduck's other providers.
+
+## Requirements
+
+- An OpenRouter account and API key
+- Sign up and get your key at [openrouter.ai/keys](https://openrouter.ai/keys)
+
+## Configure in Spaceduck
+
+### Chat
+
+<Steps>
+  <Step title="Set your API key">
+    In **Settings > Chat**, select **OpenRouter** as the provider, then enter your API key.
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config secret set /ai/secrets/openrouterApiKey
+    ```
+  </Step>
+
+  <Step title="Select a model">
+    In **Settings > Chat**:
+    - **Provider**: OpenRouter
+    - **Model**: use the OpenRouter model ID, e.g.:
+      - `anthropic/claude-3.5-sonnet`
+      - `meta-llama/llama-3.1-70b-instruct`
+      - `mistralai/mistral-large-latest`
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config set /ai/provider openrouter
+    spaceduck config set /ai/model "anthropic/claude-3.5-sonnet"
+    ```
+
+    <Tip>
+    Browse available models and pricing at [openrouter.ai/models](https://openrouter.ai/models).
+    </Tip>
+  </Step>
+
+  <Step title="Verify">
+    Send a message in the chat. You should see a streaming response.
+  </Step>
+</Steps>
+
+### Embeddings
+
+OpenRouter does not provide an embeddings API. If you want semantic recall, pair OpenRouter with a separate embedding provider:
+
+- **Local**: [llama.cpp embeddings](/providers/llamacpp#embeddings) or LM Studio
+- **Cloud**: Bedrock (Titan) or Gemini (`text-embedding-004`)
+
+This is the [two-server pattern](/providers/overview#the-two-server-pattern) — chat on OpenRouter, embeddings elsewhere.
+
+## Test and troubleshoot
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `401 Unauthorized` | Invalid API key | Check your key at [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `402 Payment Required` | Insufficient credits | Add credits at [openrouter.ai/credits](https://openrouter.ai/credits) |
+| Model not found | Wrong model ID format | Use the full `org/model-name` format from OpenRouter's model list |
+| `429 Too Many Requests` | Rate limit hit | Wait and retry, or use a different model |
