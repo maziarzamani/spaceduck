@@ -20,7 +20,7 @@
 </p>
 
 > [!WARNING]
-> **Experimental — APIs and storage may change before v1.0.**
+> **Experimental — Breaking changes before v1.0.**
 
 ---
 

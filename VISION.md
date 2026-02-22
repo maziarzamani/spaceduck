@@ -1,4 +1,4 @@
-# Spaceduck Vision
+# spaceduck Vision
 
 Spaceduck is a personal AI assistant that runs locally or connects to cloud models.
 It is designed to feel trustworthy, fast, and always available, while keeping the user in control.
