@@ -1,0 +1,58 @@
+---
+title: "Browser"
+description: "Headless browser automation using Playwright with accessibility-snapshot element references."
+---
+
+## What it does
+
+Launches a headless Chromium browser that the assistant can control — navigate to URLs, click elements, fill forms, read page content, and wait for changes. Uses accessibility snapshots to give the LLM numbered element references instead of fragile CSS selectors.
+
+## Requirements
+
+Install Playwright and Chromium (one-time):
+
+```bash
+bunx playwright install chromium
+```
+
+The browser tool is automatically registered at gateway startup when Playwright is available.
+
+## How the assistant uses it
+
+The browser tool exposes these actions:
+
+| Action | What it does |
+|--------|-------------|
+| `navigate` | Go to a URL |
+| `click` | Click an element by its ref number |
+| `type` | Type text into an input field |
+| `snapshot` | Get the current page structure as numbered elements |
+| `wait` | Wait for a selector, URL pattern, page state, or fixed delay |
+
+A typical flow:
+
+1. Assistant calls `navigate` to open a page
+2. Assistant calls `snapshot` to see the page structure
+3. Assistant identifies the right element by its ref number
+4. Assistant calls `click` or `type` to interact
+
+## Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `headless` | `true` | Run without a visible browser window |
+| `maxResultChars` | 50,000 | Max characters returned from snapshots |
+| `defaultTimeout` | 30,000 ms | Timeout for page actions |
+
+<Tip>
+The browser tool is heavier than web fetch. The assistant prefers `web_fetch` for simple page reads and only launches the browser when it needs to interact with a page (click, fill forms, handle JavaScript-rendered content).
+</Tip>
+
+## When to use browser vs web fetch
+
+| Use browser when | Use web fetch when |
+|------------------|--------------------|
+| Page requires JavaScript to render | Page is server-rendered HTML |
+| You need to click or fill forms | You just need the text content |
+| Content is behind interactions | Content is at a direct URL |
+| You need to navigate through pages | Single page read is enough |

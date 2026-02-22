@@ -1,0 +1,78 @@
+---
+description: Mintlify technical writing standards and component reference for documentation pages
+globs: "**/*.mdx"
+alwaysApply: false
+---
+
+# Mintlify Technical Writing
+
+## Writing principles
+
+- Use second person ("you") for instructions, active voice, present tense
+- Lead with the most important information; basic concepts before advanced
+- Break procedures into numbered steps with prerequisites and expected outcomes
+- Keep sentences concise; define jargon on first use; maintain consistent terminology
+- Use parallel structure in lists and headings
+
+## Page structure
+
+Every `.mdx` page starts with YAML frontmatter:
+
+```yaml
+---
+title: "Clear, keyword-rich title"
+description: "Concise description of page purpose and value"
+---
+```
+
+Heading hierarchy starts at H2 (`##`). Use descriptive, scannable headings.
+
+## Component selection
+
+| Need | Component |
+|------|-----------|
+| Sequential instructions | `<Steps>` with `<Step title="...">` |
+| Platform-specific alternatives | `<Tabs>` with `<Tab title="...">` |
+| Same concept in multiple languages | `<CodeGroup>` |
+| Progressive disclosure / FAQ | `<AccordionGroup>` + `<Accordion>` |
+| API endpoint request/response | `<RequestExample>` / `<ResponseExample>` |
+| API parameters | `<ParamField path\|body\|query\|header>` |
+| API response shape | `<ResponseField>` with `<Expandable>` for nesting |
+| Supplementary info | `<Note>`, `<Tip>`, `<Warning>`, `<Info>`, `<Check>` |
+| Navigation cards | `<Card>` / `<CardGroup cols={2}>` |
+| Images | Always wrap in `<Frame>` (optional `caption`) |
+| Inline definitions | `<Tooltip tip="...">` |
+
+## Callout usage
+
+- `<Note>` — helpful context that supports the main content
+- `<Tip>` — best practices, shortcuts, pro tips
+- `<Warning>` — potential issues, breaking changes, destructive actions
+- `<Info>` — neutral background or announcements
+- `<Check>` — success confirmations
+
+## Code examples
+
+- Always complete and runnable; use realistic data, never real secrets
+- Specify language and filename: `` ```javascript config.js ``
+- Add comments only for non-obvious logic
+- Show error handling and expected output
+- Use `<CodeGroup>` for multi-language variants
+
+## API documentation
+
+- Document all parameters (required and optional) with `<ParamField>`
+- Show success and error responses with `<ResponseExample>`
+- Include auth examples, rate limits, and all HTTP status codes
+- Use `<Expandable>` for nested object properties
+
+## Navigation config
+
+Refer to [docs.json schema](https://mintlify.com/docs.json) when building `docs.json` and site navigation.
+
+## Accessibility
+
+- Descriptive alt text on all images
+- Specific link text (never "click here")
+- Proper heading hierarchy
+- Sufficient color contrast in examples

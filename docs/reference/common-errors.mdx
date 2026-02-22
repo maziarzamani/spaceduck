@@ -1,0 +1,141 @@
+---
+title: "Common Errors"
+description: "Solutions for the most frequent issues when running Spaceduck."
+---
+
+## Connection errors
+
+### ECONNREFUSED
+
+```
+Error: connect ECONNREFUSED 127.0.0.1:8080
+```
+
+**Cause:** The server you're trying to connect to isn't running.
+
+**Fix:**
+- For llama.cpp: start `llama-server` on the expected port
+- For LM Studio: open the Developer tab and click Start Server
+- For the gateway itself: run `bun run dev`
+
+Check which port you configured in Settings and verify the server is listening:
+
+```bash
+curl http://127.0.0.1:8080/v1/models    # llama.cpp default
+curl http://localhost:1234/v1/models     # LM Studio default
+curl http://localhost:3000/api/config    # Spaceduck gateway
+```
+
+### Wrong /v1 prefix
+
+**Symptom:** 404 errors or empty responses from a local provider.
+
+**Cause:** The base URL is missing the `/v1` suffix, or has it duplicated.
+
+**Fix:** Make sure your base URL ends with exactly `/v1`:
+- Correct: `http://127.0.0.1:8080/v1`
+- Wrong: `http://127.0.0.1:8080` (missing /v1)
+- Wrong: `http://127.0.0.1:8080/v1/chat/completions` (too specific)
+
+## Authentication errors
+
+### 401 Unauthorized
+
+**Cause:** Invalid or missing API key.
+
+**Fix by provider:**
+- **Bedrock**: regenerate at AWS Console > Bedrock > API keys
+- **Gemini**: check at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- **OpenRouter**: check at [openrouter.ai/keys](https://openrouter.ai/keys)
+
+Set the key via Settings UI or CLI:
+
+```bash
+spaceduck config secret set /ai/secrets/bedrockApiKey
+spaceduck config secret set /ai/secrets/geminiApiKey
+spaceduck config secret set /ai/secrets/openrouterApiKey
+```
+
+### 403 Forbidden
+
+**Cause:** Valid key, but the model isn't enabled in your account or region.
+
+**Fix:**
+- **Bedrock**: enable the model in your AWS region's Bedrock model access settings
+- **Gemini**: some models require billing to be enabled
+- **OpenRouter**: check if the model requires a minimum credit balance
+
+## Rate limiting
+
+### 429 Too Many Requests
+
+**Cause:** You've hit the provider's rate limit.
+
+**Fix:**
+- Wait a minute and retry
+- Switch to a model with higher limits
+- For Gemini free tier: consider upgrading to a paid plan
+- For Bedrock: request a limit increase through AWS Support
+
+## Embedding errors
+
+### Dimension mismatch
+
+**Symptom:** Vector memory stops working after changing embedding models.
+
+**Cause:** The stored vectors have a different dimension count than the new model produces.
+
+**Fix:** You need to rebuild vector memory:
+1. Stop the gateway
+2. The existing facts are preserved — only vectors need regeneration
+3. Update the dimensions setting to match your new model
+4. Restart the gateway
+
+<Warning>
+Changing your embedding model or dimensions invalidates all previously stored vectors. Keyword search (FTS5) continues to work regardless.
+</Warning>
+
+### Embedding server not responding
+
+**Symptom:** "Embedding provider connected" never shows green in Settings > Memory.
+
+**Fix:**
+1. Verify the embedding server is running: `curl http://127.0.0.1:8081/v1/embeddings -H "Content-Type: application/json" -d '{"input": "test"}'`
+2. Check the Server URL in Settings > Memory matches the actual port
+3. For llama.cpp: make sure you started the server with `--embeddings`
+
+## Chat quality issues
+
+### Garbled or repeated output
+
+**Cause:** Missing or incorrect chat template on a local model.
+
+**Fix:** Add `--chat-template` to your llama-server command:
+
+```bash
+llama-server -m model.gguf --chat-template chatml ...
+```
+
+The correct template depends on your model. Common options: `chatml`, `llama3`, `mistral`.
+
+### Context length exceeded
+
+**Symptom:** Errors about maximum context length in long conversations.
+
+**Cause:** The conversation history exceeds the model's context window.
+
+**Fix:** Spaceduck auto-compacts conversations, but very long sessions may hit limits. Start a new conversation, or increase `--ctx-size` on your local server.
+
+### Memory not recalling facts
+
+**Cause:** Multiple possible reasons:
+1. Embeddings are disabled — toggle Semantic recall on in Settings > Memory
+2. Embedding model quality — try a stronger model like nomic-embed-text-v1.5
+3. Fact wasn't extracted — check that the fact was stated clearly in a user message
+
+<Tip>
+You can verify what's stored by querying the SQLite database directly:
+```bash
+sqlite3 data/spaceduck.db "SELECT content, slot, is_active FROM facts ORDER BY created_at DESC LIMIT 20"
+```
+</Tip>

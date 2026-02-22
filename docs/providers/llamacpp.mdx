@@ -1,0 +1,135 @@
+---
+title: "llama.cpp"
+description: "Run Spaceduck with llama-server for fully local chat and embeddings."
+---
+
+## What it's good for
+
+Full privacy — no data leaves your machine. Run any GGUF model with direct control over quantization, context size, and GPU layers. Best for users who want maximum control over their inference setup.
+
+## Requirements
+
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) built with `llama-server`
+- A GGUF model file downloaded to your machine
+- Sufficient RAM/VRAM for your chosen model and context size
+
+Install llama.cpp:
+
+```bash
+brew install llama.cpp    # macOS
+# or build from source: https://github.com/ggerganov/llama.cpp#build
+```
+
+## Configure in Spaceduck
+
+### Chat
+
+<Steps>
+  <Step title="Start llama-server">
+    ```bash
+    llama-server \
+      -m ~/models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf \
+      --host 127.0.0.1 \
+      --port 8080 \
+      --ctx-size 8192 \
+      -ngl 99
+    ```
+
+    <Tip>
+    `-ngl 99` offloads all layers to GPU. Reduce this number if you run out of VRAM.
+    </Tip>
+  </Step>
+
+  <Step title="Configure Spaceduck">
+    In **Settings > Chat**:
+    - **Provider**: llama.cpp
+    - **Base URL**: `http://127.0.0.1:8080/v1`
+    - **Model**: leave empty (llama-server uses the loaded model)
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config set /ai/provider llamacpp
+    spaceduck config set /ai/baseUrl http://127.0.0.1:8080/v1
+    ```
+  </Step>
+
+  <Step title="Verify">
+    ```bash
+    curl http://127.0.0.1:8080/v1/models
+    ```
+
+    You should see your loaded model in the response.
+  </Step>
+</Steps>
+
+### Embeddings
+
+llama.cpp runs embeddings on a **separate server instance** with the `--embeddings` flag. This is the [two-server pattern](/providers/overview#the-two-server-pattern).
+
+<Steps>
+  <Step title="Start embedding server">
+    ```bash
+    llama-server \
+      -hf nomic-ai/nomic-embed-text-v1.5-GGUF:Q5_K_M \
+      --host 127.0.0.1 \
+      --port 8081 \
+      --embeddings
+    ```
+
+    <Info>
+    The `-hf` flag downloads the model from Hugging Face automatically. You can also use `-m /path/to/model.gguf` for a local file.
+    </Info>
+  </Step>
+
+  <Step title="Configure Spaceduck">
+    In **Settings > Memory**:
+    - Toggle **Semantic recall** on
+    - **Provider**: llama.cpp
+    - **Server URL**: `http://127.0.0.1:8081/v1`
+    - **Model**: leave empty
+    - **Dimensions**: `768` (for nomic-embed-text-v1.5)
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config set /embedding/enabled true
+    spaceduck config set /embedding/provider llamacpp
+    spaceduck config set /embedding/baseUrl http://127.0.0.1:8081/v1
+    spaceduck config set /embedding/dimensions 768
+    ```
+  </Step>
+
+  <Step title="Verify">
+    ```bash
+    curl http://127.0.0.1:8081/v1/embeddings \
+      -H "Content-Type: application/json" \
+      -d '{"input": "test", "model": "nomic"}'
+    ```
+
+    You should get back a JSON response with an `embedding` array.
+
+    In **Settings > Memory**, click the **Test** button — you should see a green status indicator.
+  </Step>
+</Steps>
+
+### Recommended embedding models
+
+| Model | Dimensions | Size | Notes |
+|-------|-----------|------|-------|
+| nomic-embed-text-v1.5 | 768 | ~260 MB (Q5_K_M) | Good quality, fast, multilingual |
+| bge-small-en-v1.5 | 384 | ~130 MB | English-focused, very fast |
+| mxbai-embed-large-v1 | 1024 | ~670 MB | Higher quality, more RAM |
+
+## Test and troubleshoot
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `ECONNREFUSED` on port 8080 | llama-server not running | Start it with the command above |
+| Garbled or wrong responses | Missing or wrong chat template | Add `--chat-template` flag to llama-server |
+| Embeddings return errors | Missing `--embeddings` flag | Restart the embedding server with `--embeddings` |
+| Slow generation | Not enough GPU offload | Increase `-ngl` or use a smaller quantization |
+
+<Warning>
+If responses look wrong (e.g., raw tokens, repeated text), the most common cause is a missing chat template. Add `--chat-template chatml` or the appropriate template for your model to the llama-server command.
+</Warning>

@@ -1,0 +1,51 @@
+---
+title: "Tools"
+description: "Spaceduck comes with built-in tools that let the assistant browse the web, fetch pages, search, and process documents."
+---
+
+Spaceduck's agent loop can call tools automatically during a conversation. When the assistant needs external information or wants to take an action, it invokes a tool, reads the result, and continues the conversation.
+
+## Available tools
+
+<CardGroup cols={2}>
+  <Card title="Browser" icon="globe" href="/tools/browser">
+    Navigate web pages, click elements, fill forms, and take snapshots using a headless Chromium browser.
+  </Card>
+  <Card title="Web Search" icon="magnifying-glass" href="/tools/web-search">
+    Search the web via Brave or SearXNG, and get AI-synthesized answers via Perplexity Sonar.
+  </Card>
+  <Card title="Web Fetch" icon="download" href="/tools/web-fetch">
+    Fetch any URL and convert HTML to clean text. Fast alternative to the browser for static pages.
+  </Card>
+  <Card title="Document Scanning" icon="file-pdf" href="/tools/document-scanning">
+    Convert uploaded PDFs to markdown using Marker. Drag and drop in the chat UI.
+  </Card>
+</CardGroup>
+
+## How tools work
+
+The assistant decides when to use a tool based on the conversation. You don't need to invoke tools manually — the agent loop handles it:
+
+1. You ask a question or make a request
+2. The assistant determines a tool would help
+3. The tool runs and returns a text result
+4. The assistant reads the result and responds
+
+Tools can chain — the assistant might search the web, then fetch a specific page, then summarize the content. This happens automatically across multiple rounds.
+
+## Tool results are text
+
+All tool results are plain strings that the LLM can read — including errors. There are no structured schemas or silent failures. If a tool fails, the assistant sees the error message and can explain what went wrong.
+
+## Configuration
+
+Tools are configured in **Settings > Tools**. Some tools require external dependencies to be installed before they appear.
+
+| Tool | Requires | Auto-registered |
+|------|----------|-----------------|
+| Browser | Playwright + Chromium | Yes (if installed) |
+| Web Search | Brave API key or SearXNG URL | Yes (if configured) |
+| Web Fetch | Nothing | Always available |
+| Document Scanning | `marker_single` on PATH | Yes (if installed) |
+
+The assistant also has built-in tools for reading and updating configuration (`config_get`, `config_set`) — you can ask it to change settings during a conversation.

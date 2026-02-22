@@ -1,0 +1,111 @@
+---
+title: "CLI"
+description: "Manage your Spaceduck gateway from the terminal — check status, update config, and manage secrets."
+---
+
+The CLI is a thin HTTP client that talks to the gateway's config API. Use it for scripting, automation, and managing settings from the terminal.
+
+## Installation
+
+The CLI runs directly via Bun from the monorepo:
+
+```bash
+bun apps/cli/src/index.ts status
+```
+
+Or alias it for convenience:
+
+```bash
+alias spaceduck="bun /path/to/spaceduck/apps/cli/src/index.ts"
+```
+
+## Commands
+
+### Status
+
+Check gateway health and provider status:
+
+```bash
+spaceduck status
+```
+
+### Config get
+
+Read the full config or a specific path:
+
+```bash
+spaceduck config get                   # Full config (secrets redacted)
+spaceduck config get /ai/provider      # Specific value
+spaceduck config get /embedding         # Specific section
+```
+
+### Config set
+
+Update a config value:
+
+```bash
+spaceduck config set /ai/provider llamacpp
+spaceduck config set /ai/model "global.amazon.nova-2-lite-v1:0"
+spaceduck config set /ai/baseUrl http://127.0.0.1:8080/v1
+spaceduck config set /embedding/enabled true
+spaceduck config set /embedding/dimensions 768
+```
+
+### Config paths
+
+List all config paths and their current values:
+
+```bash
+spaceduck config paths
+```
+
+### Secrets
+
+Set or remove API keys and other secrets. Values are read from stdin for security — they never appear in your shell history.
+
+```bash
+spaceduck config secret set /ai/secrets/bedrockApiKey
+spaceduck config secret set /ai/secrets/geminiApiKey
+spaceduck config secret set /ai/secrets/openrouterApiKey
+
+spaceduck config secret unset /ai/secrets/bedrockApiKey
+```
+
+<Info>
+Secret values are never returned by the API. The CLI and Settings UI only see whether a secret is set (`isSet: true`), never the actual value.
+</Info>
+
+## Connection options
+
+| Flag | Environment variable | Default | Description |
+|------|---------------------|---------|-------------|
+| `--gateway <url>` | `SPACEDUCK_GATEWAY_URL` | `http://localhost:3000` | Gateway URL |
+| `--token <token>` | `SPACEDUCK_TOKEN` | — | Auth token |
+| `--json` | — | `false` | Output raw JSON |
+
+<Tip>
+Set `SPACEDUCK_GATEWAY_URL` and `SPACEDUCK_TOKEN` as environment variables to avoid passing flags on every command.
+</Tip>
+
+## Examples
+
+```bash
+# Check what's running
+spaceduck status
+
+# Switch to llama.cpp with a local server
+spaceduck config set /ai/provider llamacpp
+spaceduck config set /ai/baseUrl http://127.0.0.1:8080/v1
+
+# Enable semantic recall with nomic embeddings
+spaceduck config set /embedding/enabled true
+spaceduck config set /embedding/provider llamacpp
+spaceduck config set /embedding/baseUrl http://127.0.0.1:8081/v1
+spaceduck config set /embedding/dimensions 768
+
+# Set a Bedrock API key
+spaceduck config secret set /ai/secrets/bedrockApiKey
+
+# Dump everything as JSON for scripting
+spaceduck config get --json
+```

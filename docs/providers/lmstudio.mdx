@@ -1,0 +1,98 @@
+---
+title: "LM Studio"
+description: "Run Spaceduck with LM Studio for a GUI-based local model experience with chat and embeddings."
+---
+
+## What it's good for
+
+The easiest local setup. LM Studio has a built-in model browser, one-click downloads, and runs an OpenAI-compatible server out of the box. Great if you want local models without managing GGUF files and command-line flags.
+
+## Requirements
+
+- [LM Studio](https://lmstudio.ai) installed
+- A model downloaded through LM Studio's model browser
+- The local server started in LM Studio (Developer tab)
+
+## Configure in Spaceduck
+
+### Chat
+
+<Steps>
+  <Step title="Start the LM Studio server">
+    1. Open LM Studio
+    2. Load a model (e.g., Qwen3, Llama 3.1, DeepSeek)
+    3. Go to the **Developer** tab
+    4. Click **Start Server** — it runs at `http://localhost:1234` by default
+  </Step>
+
+  <Step title="Configure Spaceduck">
+    In **Settings > Chat**:
+    - **Provider**: LM Studio
+    - **Base URL**: `http://localhost:1234/v1`
+    - **Model**: the model identifier shown in LM Studio (e.g., `qwen/qwen3-4b-thinking-2507`)
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config set /ai/provider lmstudio
+    spaceduck config set /ai/model "qwen/qwen3-4b-thinking-2507"
+    ```
+
+    <Info>
+    LM Studio doesn't require an API key by default. Spaceduck sends a dummy key (`lm-studio`) for servers that require the Authorization header to be present.
+    </Info>
+  </Step>
+
+  <Step title="Verify">
+    ```bash
+    curl http://localhost:1234/v1/models
+    ```
+
+    You should see your loaded model listed.
+  </Step>
+</Steps>
+
+### Embeddings
+
+LM Studio can serve embeddings from the same server, or you can run a second instance on a different port.
+
+<Steps>
+  <Step title="Load an embedding model">
+    In LM Studio, load an embedding model alongside your chat model, or start a second server instance on a different port.
+  </Step>
+
+  <Step title="Configure Spaceduck">
+    In **Settings > Memory**:
+    - Toggle **Semantic recall** on
+    - **Provider**: LM Studio
+    - **Server URL**: `http://localhost:1234/v1` (same server, or a different port if running separately)
+    - **Model**: your embedding model identifier
+    - **Dimensions**: match the model (e.g., 768 for nomic, 1024 for large models)
+
+    Or via CLI:
+
+    ```bash
+    spaceduck config set /embedding/enabled true
+    spaceduck config set /embedding/provider lmstudio
+    spaceduck config set /embedding/model "nomic-ai/nomic-embed-text-v1.5"
+    spaceduck config set /embedding/dimensions 768
+    ```
+  </Step>
+
+  <Step title="Test">
+    Click the **Test** button in **Settings > Memory** to verify the embedding connection.
+  </Step>
+</Steps>
+
+## Test and troubleshoot
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `ECONNREFUSED` on port 1234 | LM Studio server not started | Go to Developer tab and click Start Server |
+| Model not found | Model identifier doesn't match | Check `curl localhost:1234/v1/models` for the exact name |
+| Slow responses | Model too large for available RAM | Try a smaller model or lower quantization |
+| `<think>` tags in output | Thinking model (Qwen3, DeepSeek) | Spaceduck strips these automatically — this is expected |
+
+<Tip>
+LM Studio's model browser makes it easy to try different models. Download a few, test them with Spaceduck, and keep the one that works best for your use case.
+</Tip>

@@ -1,0 +1,50 @@
+---
+title: "Desktop App"
+description: "Run Spaceduck as a native desktop application using Tauri v2."
+---
+
+The Spaceduck desktop app is a [Tauri v2](https://v2.tauri.app) shell that wraps the web UI in a native window. It supports macOS, Linux, and Windows.
+
+## What it does
+
+- Runs the gateway as a **sidecar process** — starts and stops with the app
+- Provides a native window with OS integration (menu bar, window management)
+- Connects to the gateway over `http://localhost:3000`
+
+<Info>
+The desktop app is a companion to the gateway — it doesn't replace it. The gateway does all the work; the desktop app provides a native window for the web UI.
+</Info>
+
+## Running the desktop app
+
+```bash
+bun run dev:desktop
+```
+
+This starts both the gateway sidecar and the Tauri window. The web UI loads automatically.
+
+## Building for distribution
+
+```bash
+bun run build:desktop
+```
+
+The built application is output to `apps/desktop/src-tauri/target/release/`.
+
+## How it connects
+
+The desktop app loads the web UI from the bundled frontend and connects to the gateway sidecar over localhost. The CSP (Content Security Policy) is configured to allow connections to `localhost` on any port:
+
+- HTTP and WebSocket connections to `localhost`
+- Font loading from Google Fonts
+- Image loading from `data:` and `blob:` URIs
+
+## Current status
+
+| Platform | Status |
+|----------|--------|
+| macOS | Supported |
+| Linux | Supported |
+| Windows | Supported |
+
+The desktop app provides the same functionality as the web UI — chat, settings, file upload, voice dictation. There are no desktop-specific features yet.

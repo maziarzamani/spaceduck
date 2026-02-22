@@ -1,0 +1,49 @@
+---
+title: "Document Scanning"
+description: "Convert PDFs to markdown using Marker — upload via the chat UI and the assistant processes them automatically."
+---
+
+## What it does
+
+Converts uploaded PDF documents into markdown text that the assistant can read and discuss. Uses [Marker](https://github.com/VikParuchuri/marker), an open-source PDF-to-markdown converter that handles complex layouts, tables, and OCR.
+
+## Requirements
+
+Install Marker separately (it's not bundled with Spaceduck):
+
+```bash
+pip install marker-pdf   # requires Python 3.10+, PyTorch
+```
+
+When `marker_single` is on your PATH, the `marker_scan` tool is automatically registered at gateway startup.
+
+<Note>
+Marker is GPL-3.0 with Open Rail model weight restrictions. Spaceduck never bundles Marker — it calls `marker_single` as an external process.
+</Note>
+
+## How to use it
+
+1. Click the **paperclip** button in the chat UI (or drag and drop a PDF)
+2. The file is uploaded to the gateway
+3. Ask the assistant about the document — it automatically invokes `marker_scan`
+4. The PDF is converted to markdown and the assistant can read and discuss it
+
+## Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `timeoutMs` | 120,000 ms (2 min) | Subprocess timeout — large PDFs can be slow |
+| `maxOutputChars` | 100,000 | Output truncation limit |
+| `pageRange` | All pages | Convert specific pages only |
+| `forceOcr` | `false` | Force OCR even on text PDFs |
+
+Set `MARKER_USE_LLM=true` as an environment variable to enable LLM-assisted conversion for higher-quality output on complex documents.
+
+## Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| Tool not registered | `marker_single` not on PATH | Run `pip install marker-pdf` and restart the gateway |
+| Timeout on large PDFs | Default 2-minute timeout too short | Increase timeout or use `pageRange` to convert specific pages |
+| Poor OCR quality | Default OCR settings | Try `forceOcr: true` or enable LLM-assisted conversion |
+| Upload rejected | File isn't a valid PDF | Spaceduck validates magic bytes — only real PDFs are accepted |
