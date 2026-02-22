@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/spaceduck-logo.png" alt="Spaceduck" width="280">
+  <img src="assets/spaceduck-logo.png" alt="Spaceduck" width="280">
 </p>
 
 <p align="center">
@@ -71,7 +71,7 @@ It remembers what you've said across conversations, acts on your behalf with rea
 - Streaming protocol delivers tokens over WebSocket to the UI in real time
 
 <p align="center">
-  <img src="docs/assets/desktop-app-screen.png" alt="Spaceduck Desktop App" width="720">
+  <img src="assets/desktop-app-screen.png" alt="Spaceduck Desktop App" width="720">
 </p>
 
 ## Status
