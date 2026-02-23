@@ -1,4 +1,5 @@
-export { SpaceduckConfigSchema, DEFAULT_SYSTEM_PROMPT } from "./schema";
+export { SpaceduckConfigSchema } from "./schema";
+export { DEFAULT_SYSTEM_PROMPT } from "./constants";
 export type { SpaceduckProductConfig } from "./types";
 export type { ConfigPatchOp } from "./types";
 export { defaultConfig } from "./defaults";

@@ -75,6 +75,12 @@ function AppInner() {
     setView("onboarding");
   }, []);
 
+  useEffect(() => {
+    if (ws.authFailed) {
+      handleDisconnect();
+    }
+  }, [ws.authFailed, handleDisconnect]);
+
   const handleDismissBanner = useCallback(() => {
     setSetupBanner(false);
   }, []);

@@ -18,7 +18,7 @@ import type { SectionProps } from "./shared";
 import { isSecretSet } from "./shared";
 import { SecretInput } from "../shared/secret-input";
 import { DebouncedInput, DebouncedTextarea, SavedBadge, useSaveFlash } from "../shared/debounced-input";
-import { DEFAULT_SYSTEM_PROMPT } from "@spaceduck/config";
+import { DEFAULT_SYSTEM_PROMPT } from "@spaceduck/config/constants";
 
 // ── Constants ───────────────────────────────────────────────────────
 
