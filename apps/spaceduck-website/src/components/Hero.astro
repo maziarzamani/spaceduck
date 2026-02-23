@@ -1,0 +1,96 @@
+---
+---
+
+<section class="relative overflow-hidden bg-surface px-6 pt-32 pb-20 md:pt-40 md:pb-28">
+  <div
+    class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--color-primary)_0%,_transparent_70%)] opacity-15"
+  ></div>
+
+  <div class="relative mx-auto max-w-4xl text-center">
+    <h1
+      class="text-4xl font-bold leading-tight tracking-tight text-text-hero md:text-6xl"
+    >
+      Your personal AI assistant,
+      <span class="text-primary-light">local or cloud.</span>
+    </h1>
+
+    <p class="mx-auto mt-6 max-w-2xl text-lg text-slate-300 md:text-xl">
+      A personal assistant that compounds over time and remains user-owned.
+    </p>
+
+    <p class="mx-auto mt-3 max-w-2xl text-base text-slate-400">
+      Works with local llama.cpp or cloud providers, and supports separate
+      embedding servers.
+    </p>
+
+    <div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+      <a
+        href="https://docs.spaceduck.ai/quickstart"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary-dark hover:shadow-xl hover:shadow-primary/30"
+      >
+        Get Started
+        <svg
+          class="ml-2 h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+        </svg>
+      </a>
+
+      <a
+        href="https://github.com/maziarzamani/spaceduck"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center rounded-lg border border-white/15 px-6 py-3 text-sm font-semibold text-slate-200 transition-all hover:border-white/30 hover:bg-white/5"
+      >
+        <svg class="mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+          <path
+            d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+          ></path>
+        </svg>
+        GitHub
+      </a>
+    </div>
+
+    <div
+      class="mx-auto mt-16 max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-surface-light shadow-2xl"
+    >
+      <div class="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+        <span class="h-3 w-3 rounded-full bg-red-500/70"></span>
+        <span class="h-3 w-3 rounded-full bg-yellow-500/70"></span>
+        <span class="h-3 w-3 rounded-full bg-green-500/70"></span>
+        <span class="ml-3 text-xs text-slate-500">spaceduck — localhost:3000</span>
+      </div>
+      <div class="px-6 py-8 text-left">
+        <div class="space-y-4">
+          <div class="flex gap-3">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-xs text-primary-light">
+              You
+            </div>
+            <div class="rounded-lg bg-white/5 px-4 py-2 text-sm text-slate-300">
+              What did we discuss about the API migration last week?
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs text-emerald-400">
+              SD
+            </div>
+            <div class="rounded-lg bg-white/5 px-4 py-2 text-sm text-slate-300">
+              Last Tuesday you mentioned moving from REST to GraphQL for the user
+              service. You decided to keep REST for auth endpoints and migrate
+              the profile queries first...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

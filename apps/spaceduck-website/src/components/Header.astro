@@ -1,0 +1,83 @@
+---
+import Logo from "./Logo.astro";
+
+const navLinks = [
+  { label: "Docs", href: "https://docs.spaceduck.ai" },
+  { label: "Quickstart", href: "https://docs.spaceduck.ai/quickstart" },
+  { label: "GitHub", href: "https://github.com/maziarzamani/spaceduck" },
+  {
+    label: "Download Desktop",
+    href: "https://github.com/maziarzamani/spaceduck/releases",
+  },
+];
+---
+
+<header
+  class="fixed top-0 z-50 w-full border-b border-white/10 bg-surface/80 backdrop-blur-md"
+>
+  <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+    <a href="/" class="flex items-center gap-2 text-white no-underline">
+      <Logo size={28} />
+      <span class="text-lg font-semibold">Spaceduck</span>
+    </a>
+
+    <button
+      id="mobile-toggle"
+      class="flex flex-col gap-1.5 md:hidden"
+      aria-label="Toggle navigation"
+    >
+      <span class="h-0.5 w-6 bg-white"></span>
+      <span class="h-0.5 w-6 bg-white"></span>
+      <span class="h-0.5 w-6 bg-white"></span>
+    </button>
+
+    <ul
+      id="nav-links"
+      class="hidden items-center gap-6 md:flex"
+    >
+      {
+        navLinks.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-sm font-medium text-slate-300 transition-colors hover:text-white"
+            >
+              {link.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </nav>
+
+  <ul
+    id="mobile-nav"
+    class="hidden flex-col gap-4 border-t border-white/10 px-6 py-4 md:hidden"
+  >
+    {
+      navLinks.map((link) => (
+        <li>
+          <a
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-sm font-medium text-slate-300 transition-colors hover:text-white"
+          >
+            {link.label}
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</header>
+
+<script>
+  const toggle = document.getElementById("mobile-toggle");
+  const mobileNav = document.getElementById("mobile-nav");
+  toggle?.addEventListener("click", () => {
+    mobileNav?.classList.toggle("hidden");
+    mobileNav?.classList.toggle("flex");
+  });
+</script>

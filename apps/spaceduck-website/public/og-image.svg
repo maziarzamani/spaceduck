@@ -1,0 +1,20 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#0f0f1a"/>
+  <rect width="1200" height="630" fill="url(#grad)" opacity="0.15"/>
+  <defs>
+    <radialGradient id="grad" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </radialGradient>
+  </defs>
+  <!-- Logo -->
+  <rect x="540" y="140" width="120" height="120" rx="30" fill="#6366f1"/>
+  <path d="M570 196c0-13.255 10.745-24 24-24s24 10.745 24 24c0 8.836-4.776 16.556-11.886 20.71C602.3 218.086 598.314 219 594 219s-8.3-.914-12.114-3.29C574.776 212.556 570 204.836 570 196z" fill="#818cf8"/>
+  <circle cx="584" cy="194" r="5" fill="white"/>
+  <circle cx="604" cy="194" r="5" fill="white"/>
+  <path d="M588 206c0 0 2.5 4 6 4s6-4 6-4" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <!-- Title -->
+  <text x="600" y="320" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="700">Spaceduck</text>
+  <text x="600" y="380" text-anchor="middle" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="28">Your personal AI assistant, local or cloud.</text>
+  <text x="600" y="440" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, sans-serif" font-size="20">spaceduck.ai</text>
+</svg>
