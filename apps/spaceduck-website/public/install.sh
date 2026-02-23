@@ -56,9 +56,9 @@ fatal() { err "$@"; exit 1; }
 # ── Usage ─────────────────────────────────────────────────────────────────────
 usage() {
   cat <<EOF
-${BOLD}Spaceduck Installer${RESET}
+${BOLD}spaceduck Installer${RESET}
 
-Install the Spaceduck gateway server + CLI.
+Install the spaceduck gateway server + CLI.
 
 ${BOLD}USAGE${RESET}
     curl -fsSL https://spaceduck.ai/install.sh | bash

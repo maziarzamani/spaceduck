@@ -46,9 +46,9 @@ function Exit-Fatal  { param([string]$Msg) Write-Err $Msg; exit 1 }
 function Show-Usage {
     Write-Host @"
 
-  Spaceduck Installer (Windows)
+  spaceduck Installer (Windows)
 
-  Install the Spaceduck gateway server + CLI.
+  Install the spaceduck gateway server + CLI.
 
   USAGE
       irm https://spaceduck.ai/install.ps1 | iex
