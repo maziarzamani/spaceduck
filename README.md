@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://spaceduck.mintlify.app">Docs</a> ·
+  <a href="https://docs.spaceduck.ai">Docs</a> ·
   <a href="https://github.com/maziarzamani/spaceduck/issues">Issues</a> ·
   <a href="https://github.com/maziarzamani/spaceduck/discussions">Discussions</a>
 </p>
