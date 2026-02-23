@@ -34,8 +34,14 @@
         "group": "Start Here",
         "pages": [
           "index",
-          "quickstart",
-          "install"
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Install",
+        "pages": [
+          "install/installer",
+          "install/from-source"
         ]
       },
       {
