@@ -5,78 +5,47 @@ description: "Get Spaceduck running and send your first message in under 5 minut
 
 After completing this guide, you'll have a running Spaceduck gateway with a chat model connected and ready to use.
 
-## Prerequisites
+## Install
 
-- [Bun](https://bun.sh) v1.3 or later
-- A chat model — either a local server (llama.cpp, LM Studio) or a cloud API key (Bedrock, Gemini, OpenRouter)
-
-## Install and run
-
-<Steps>
-  <Step title="Clone and install">
+<Tabs>
+  <Tab title="macOS / Linux">
     ```bash
-    git clone https://github.com/maziarzamani/spaceduck.git
-    cd spaceduck
-    bun install
+    curl -fsSL https://spaceduck.ai/install.sh | bash
     ```
-  </Step>
-
-  <Step title="Install system dependencies">
-    <Tabs>
-      <Tab title="macOS">
-        ```bash
-        # SQLite with extension support (required for sqlite-vec)
-        brew install sqlite
-        ```
-      </Tab>
-      <Tab title="Linux">
-        SQLite with extension support is typically available by default. If you get sqlite-vec errors, install `libsqlite3-dev`.
-      </Tab>
-      <Tab title="Windows">
-        SQLite is bundled with Bun on Windows. No additional steps needed.
-      </Tab>
-    </Tabs>
-  </Step>
-
-  <Step title="Configure deployment settings">
-    ```bash
-    cp .env.example .env
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    irm https://spaceduck.ai/install.ps1 | iex
     ```
+  </Tab>
+</Tabs>
 
-    The `.env` file controls deployment knobs only (port, log level). Provider settings are managed in the Settings UI.
-  </Step>
+<Info>
+  Prefer to install manually? See the [Install](/install) page for the from-source method.
+</Info>
 
-  <Step title="Start the gateway">
-    ```bash
-    bun run dev
-    ```
+## Configure your chat model
 
-    Open [http://localhost:3000](http://localhost:3000) in your browser.
-  </Step>
+Open [http://localhost:3000](http://localhost:3000) and click the **Settings** icon in the sidebar, then go to **Chat**.
 
-  <Step title="Configure your chat model">
-    Click the **Settings** icon in the sidebar, then go to **Chat**.
+1. Select a **Provider** from the dropdown (e.g., llama.cpp, Bedrock, Gemini)
+2. Enter the **Base URL** if using a local provider
+3. Set your **API key** if using a cloud provider
+4. Choose a **Model**
 
-    1. Select a **Provider** from the dropdown (e.g., llama.cpp, Bedrock, Gemini)
-    2. Enter the **Base URL** if using a local provider
-    3. Set your **API key** if using a cloud provider
-    4. Choose a **Model**
+Changes to provider, model, and system prompt hot-apply immediately — no restart needed.
 
-    Changes to provider, model, and system prompt hot-apply immediately — no restart needed.
+<Tip>
+  If you're unsure which provider to start with, see the [Model Providers overview](/providers/overview) for a comparison.
+</Tip>
 
-    <Tip>
-      If you're unsure which provider to start with, see the [Model Providers overview](/providers/overview) for a comparison.
-    </Tip>
-  </Step>
+## Send your first message
 
-  <Step title="Send your first message">
-    Go back to the chat view and type something. You should see a streaming response from your configured model.
+Go back to the chat view and type something. You should see a streaming response from your configured model.
 
-    <Check>
-      If you see a response, Spaceduck is working. Your conversations are now being stored in SQLite with automatic fact extraction.
-    </Check>
-  </Step>
-</Steps>
+<Check>
+  If you see a response, Spaceduck is working. Your conversations are now being stored in SQLite with automatic fact extraction.
+</Check>
 
 ## Optional: enable semantic recall
 
