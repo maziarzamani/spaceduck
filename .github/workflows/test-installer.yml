@@ -249,9 +249,20 @@ jobs:
       - name: Start mock release server
         shell: pwsh
         run: |
-          Start-Process -FilePath python -ArgumentList "-m","http.server","9876" -WorkingDirectory mock-release -NoNewWindow
-          Start-Sleep -Seconds 2
-          Write-Host "Mock server started on port 9876"
+          Start-Process -FilePath python -ArgumentList "-m","http.server","9876" -WorkingDirectory mock-release -WindowStyle Hidden
+          # Wait for server to be ready
+          $ready = $false
+          for ($i = 0; $i -lt 15; $i++) {
+            try {
+              $null = Invoke-WebRequest -Uri "http://localhost:9876/VERSION" -UseBasicParsing -TimeoutSec 2
+              $ready = $true
+              break
+            } catch {
+              Start-Sleep -Seconds 1
+            }
+          }
+          if (-not $ready) { throw "Mock release server failed to start" }
+          Write-Host "Mock server ready on port 9876"
 
       - name: Set up isolated install dir
         shell: pwsh
