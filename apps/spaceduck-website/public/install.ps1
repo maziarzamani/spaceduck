@@ -333,12 +333,12 @@ shift
 goto :eof
 
 :version
-if exist "%SD_HOME%\current\VERSION" (
-    set /p VER=<"%SD_HOME%\current\VERSION"
-    echo spaceduck %VER%
-) else (
-    echo spaceduck (version unknown^)
+if not exist "%SD_HOME%\current\VERSION" (
+    echo spaceduck ^(version unknown^)
+    goto :eof
 )
+set /p VER=<"%SD_HOME%\current\VERSION"
+echo spaceduck %VER%
 goto :eof
 
 :cli
