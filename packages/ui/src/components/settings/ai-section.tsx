@@ -23,7 +23,7 @@ import { isSecretSet } from "./shared";
 
 function useSaveFlash() {
   const [saved, setSaved] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const flash = useCallback(() => {
     setSaved(true);
     clearTimeout(timer.current);

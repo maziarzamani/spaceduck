@@ -942,6 +942,7 @@ export class Gateway implements Lifecycle {
       reason: availability.reason,
       backend: "whisper",
       model,
+      language: Bun.env.SPACEDUCK_STT_LANGUAGE ?? "",
       maxSeconds,
       maxBytes,
       timeoutMs,
