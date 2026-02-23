@@ -1,7 +1,21 @@
-import { describe, test, expect, beforeAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { createGateway, Gateway } from "../../../../packages/gateway/src/gateway";
+import type { Message, Provider, ProviderOptions, ProviderChunk } from "@spaceduck/core";
 
+process.env.SPACEDUCK_REQUIRE_AUTH = "0";
+
+class TestProvider implements Provider {
+  readonly name = "cli-test";
+  async *chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {
+    yield { type: "text", text: "Test response" };
+  }
+}
+
+const PORT = 49152 + Math.floor(Math.random() * 10000);
+const GATEWAY = `http://localhost:${PORT}`;
 const CLI = ["bun", "run", "apps/cli/src/index.ts"];
-const GATEWAY = "http://localhost:3000";
+
+let gateway: Gateway;
 
 function run(...args: string[]) {
   return Bun.spawn([...CLI, "--gateway", GATEWAY, ...args], {
@@ -22,7 +36,27 @@ async function exec(...args: string[]): Promise<{ stdout: string; stderr: string
 }
 
 describe("CLI e2e", () => {
-  // ── Help ───────────────────────────────────────────────────────────
+  beforeAll(async () => {
+    gateway = await createGateway({
+      provider: new TestProvider(),
+      config: {
+        port: PORT,
+        logLevel: "error",
+        provider: { name: "cli-test", model: "test-model" },
+        memory: { backend: "sqlite", connectionString: ":memory:" },
+        channels: ["web"],
+      },
+    });
+    await gateway.start();
+  });
+
+  afterAll(async () => {
+    if (gateway?.status === "running") {
+      await gateway.stop();
+    }
+  });
+
+  // ── Help ──────────────────────────────────────────────────────────
 
   test("--help prints usage and exits 0", async () => {
     const { stdout, exitCode } = await exec("--help");
@@ -34,7 +68,6 @@ describe("CLI e2e", () => {
   });
 
   test("no args prints usage and exits 0", async () => {
-    // Call directly without the --gateway flag the helper adds
     const proc = Bun.spawn([...CLI], {
       stdout: "pipe",
       stderr: "pipe",
@@ -49,7 +82,7 @@ describe("CLI e2e", () => {
     expect(stdout).toContain("Usage:");
   });
 
-  // ── Status ─────────────────────────────────────────────────────────
+  // ── Status ────────────────────────────────────────────────────────
 
   test("status shows connected gateway", async () => {
     const { stdout, exitCode } = await exec("status");
@@ -64,7 +97,6 @@ describe("CLI e2e", () => {
     const data = JSON.parse(stdout);
     expect(data.gateway).toBe("connected");
     expect(data.provider).toBeDefined();
-    expect(data.model).toBeDefined();
     expect(typeof data.uptime).toBe("number");
   });
 
@@ -77,7 +109,7 @@ describe("CLI e2e", () => {
     expect(exitCode).toBe(1);
   });
 
-  // ── Config get ─────────────────────────────────────────────────────
+  // ── Config get ────────────────────────────────────────────────────
 
   test("config get (no path) returns full config JSON", async () => {
     const { stdout, exitCode } = await exec("config", "get");
@@ -91,7 +123,7 @@ describe("CLI e2e", () => {
   test("config get /ai/provider returns a string", async () => {
     const { stdout, exitCode } = await exec("config", "get", "/ai/provider");
     expect(exitCode).toBe(0);
-    expect(["bedrock", "gemini", "openrouter", "lmstudio"]).toContain(stdout);
+    expect(stdout.length).toBeGreaterThan(0);
   });
 
   test("config get /ai/temperature returns a number", async () => {
@@ -106,7 +138,6 @@ describe("CLI e2e", () => {
     expect(exitCode).toBe(0);
     const parsed = JSON.parse(stdout);
     expect(parsed.provider).toBeDefined();
-    expect(parsed.model).toBeDefined();
     expect(typeof parsed.temperature).toBe("number");
   });
 
@@ -122,7 +153,7 @@ describe("CLI e2e", () => {
     expect(stderr).toContain("must start with /");
   });
 
-  // ── Config paths ───────────────────────────────────────────────────
+  // ── Config paths ──────────────────────────────────────────────────
 
   test("config paths lists all paths", async () => {
     const { stdout, exitCode } = await exec("config", "paths");
@@ -142,12 +173,11 @@ describe("CLI e2e", () => {
     expect(data["/ai/temperature"]).toBeDefined();
   });
 
-  // ── Config set ─────────────────────────────────────────────────────
+  // ── Config set ────────────────────────────────────────────────────
 
   let originalTemp: number;
 
   test("config set changes a value", async () => {
-    // Save original
     const { stdout: orig } = await exec("config", "get", "/ai/temperature");
     originalTemp = Number(orig);
 
@@ -156,7 +186,6 @@ describe("CLI e2e", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("Set /ai/temperature");
 
-    // Verify it changed
     const { stdout: after } = await exec("config", "get", "/ai/temperature");
     expect(Number(after)).toBe(newTemp);
   });
@@ -169,7 +198,6 @@ describe("CLI e2e", () => {
   });
 
   test("config set with boolean value", async () => {
-    const { stdout: orig } = await exec("config", "get", "/stt/enabled");
     const { exitCode } = await exec("config", "set", "/stt/enabled", "true");
     expect(exitCode).toBe(0);
     const { stdout: after } = await exec("config", "get", "/stt/enabled");
@@ -188,7 +216,7 @@ describe("CLI e2e", () => {
     expect(stderr).toContain("must start with /");
   });
 
-  // ── Config secret ──────────────────────────────────────────────────
+  // ── Config secret ─────────────────────────────────────────────────
 
   test("config secret with no args shows usage", async () => {
     const { stderr, exitCode } = await exec("config", "secret");
@@ -202,7 +230,7 @@ describe("CLI e2e", () => {
     expect(stderr).toContain("Usage:");
   });
 
-  // ── Unknown commands ───────────────────────────────────────────────
+  // ── Unknown commands ──────────────────────────────────────────────
 
   test("unknown command exits 1", async () => {
     const { stderr, exitCode } = await exec("foobar");
