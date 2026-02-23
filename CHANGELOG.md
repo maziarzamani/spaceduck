@@ -6,6 +6,22 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.15.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.14.1...spaceduck-v0.15.0) (2026-02-23)
+
+
+### Features
+
+* add default system prompt for new and existing installations ([e1e66e9](https://github.com/maziarzamani/spaceduck/commit/e1e66e920e218495ad8d409285bc14f212e93402))
+* onboarding setup wizard, UI polish, and chat UX improvements ([4005fa0](https://github.com/maziarzamani/spaceduck/commit/4005fa0019d771d823e91338d671811c7b65c1c6))
+* opener plugin, pairing UX improvements, and external link handling ([69dced7](https://github.com/maziarzamani/spaceduck/commit/69dced735d1212d0e355c0683b6fa3fb45900d9d))
+* OTP input for pairing code and clickable gateway URL ([b75a428](https://github.com/maziarzamani/spaceduck/commit/b75a42829d6271938f6bb9183666d606997b8931))
+
+
+### Bug Fixes
+
+* typecheck error in schema test — use const assertion for mode array ([de17818](https://github.com/maziarzamani/spaceduck/commit/de1781845da06278fe0d3f7fcaadb9a1c703e800))
+* update test regex to match new /pair page HTML structure ([99e56cd](https://github.com/maziarzamani/spaceduck/commit/99e56cde8a094c99817ba3be159bcf1894d54eda))
+
 ## [0.14.1](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.14.0...spaceduck-v0.14.1) (2026-02-23)
 
 
