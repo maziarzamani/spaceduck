@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import type { Message } from "@spaceduck/core";
 import type { PendingStream } from "../hooks/use-spaceduck-ws";
 import { cn } from "../lib/utils";
@@ -7,6 +7,7 @@ import Markdown from "react-markdown";
 import { SpaceduckLogo } from "./spaceduck-logo";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { ScrollArea } from "../ui/scroll-area";
+import { openExternal } from "../lib/open-external";
 
 interface MessageListProps {
   messages: Message[];
@@ -15,6 +16,17 @@ interface MessageListProps {
 
 function MessageBubble({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
   const isUser = message.role === "user";
+
+  const handleLinkClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      const href = e.currentTarget.href;
+      if (href) {
+        e.preventDefault();
+        openExternal(href);
+      }
+    },
+    [],
+  );
 
   return (
     <div
@@ -46,7 +58,7 @@ function MessageBubble({ message, isStreaming }: { message: Message; isStreaming
             <Markdown
               components={{
                 a: ({ href, children, ...rest }) => (
-                  <a {...rest} href={href} target="_blank" rel="noopener noreferrer">
+                  <a {...rest} href={href} onClick={handleLinkClick}>
                     {children}
                   </a>
                 ),

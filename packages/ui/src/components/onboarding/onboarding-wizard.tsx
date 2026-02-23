@@ -10,7 +10,7 @@ import { StepSetupCloud } from "./step-setup-cloud";
 import { StepSetupAdvanced } from "./step-setup-advanced";
 import { StepSummary } from "./step-summary";
 import { StepIndicator, type Step } from "./step-indicator";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, CheckCircle2 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 import { useTheme } from "../../hooks/use-theme";
@@ -39,6 +39,7 @@ export type WizardStep =
   | "security"
   | "find-gateway"
   | "pairing"
+  | "paired-confirmation"
   | "setup-choice"
   | "setup-local"
   | "setup-cloud"
@@ -126,7 +127,7 @@ export function OnboardingWizard({ onComplete, initialStep }: OnboardingWizardPr
   const handlePaired = (rawToken: string) => {
     setToken(rawToken);
     localStorage.setItem("spaceduck.token", rawToken);
-    setStep("setup-choice");
+    setStep("paired-confirmation");
   };
 
   const handleSetupChoice = (mode: SetupMode) => {
@@ -231,7 +232,8 @@ export function OnboardingWizard({ onComplete, initialStep }: OnboardingWizardPr
       case "welcome": return 0;
       case "security": return 1;
       case "find-gateway":
-      case "pairing": return 2;
+      case "pairing":
+      case "paired-confirmation": return 2;
       case "setup-choice": return 3;
       case "setup-local":
       case "setup-cloud":
@@ -298,6 +300,18 @@ export function OnboardingWizard({ onComplete, initialStep }: OnboardingWizardPr
               onPaired={handlePaired}
               onBack={() => setStep("find-gateway")}
             />
+          )}
+          {step === "paired-confirmation" && (
+            <div className="flex flex-col items-center text-center gap-6 py-8">
+              <CheckCircle2 size={48} className="text-green-500" />
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Paired successfully</h1>
+                <p className="text-muted-foreground mt-2">
+                  Your device is now authorized to access <strong>{gateway?.gatewayName ?? "the gateway"}</strong>.
+                </p>
+              </div>
+              <Button onClick={() => setStep("setup-choice")}>Continue</Button>
+            </div>
           )}
           {step === "setup-choice" && (
             <StepSetupChoice

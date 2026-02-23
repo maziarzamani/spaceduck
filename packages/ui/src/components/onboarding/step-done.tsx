@@ -28,8 +28,8 @@ export function StepDone({ gatewayName, authDisabled, onStart }: StepDoneProps) 
               </>
             ) : (
               <>
-                Successfully paired with <strong>{gatewayName}</strong>.
-                Your device is now authorized to use this gateway.
+                Successfully connected to <strong>{gatewayName}</strong>.
+                Your gateway is configured and ready to go.
               </>
             )}
           </p>

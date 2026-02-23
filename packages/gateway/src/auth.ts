@@ -88,6 +88,15 @@ export function createPairingSession(db: Database): PairingSession {
   return { pairingId, code, expiresAt };
 }
 
+export function getActivePairingSession(db: Database): PairingSession | null {
+  const row = db.query(
+    "SELECT id, code, expires_at FROM pairing_sessions WHERE used_at IS NULL AND expires_at > ? AND attempts < ? ORDER BY created_at DESC LIMIT 1",
+  ).get(Date.now(), MAX_PAIRING_ATTEMPTS) as { id: string; code: string; expires_at: number } | null;
+
+  if (!row) return null;
+  return { pairingId: row.id, code: row.code, expiresAt: row.expires_at };
+}
+
 export function getActivePairingCode(db: Database): string | null {
   const row = db.query(
     "SELECT code FROM pairing_sessions WHERE used_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1",

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "../../ui/button";
 import { Label } from "../../ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../../ui/input-otp";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
-import { Loader2, ArrowLeft, AlertTriangle, ExternalLink } from "lucide-react";
+import { Loader2, ArrowLeft, ExternalLink } from "lucide-react";
+import { openExternal } from "../../lib/open-external";
 
 interface StepPairingProps {
   gatewayUrl: string;
@@ -20,6 +21,14 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
   const [state, setState] = useState<PairingState>("input");
   const [errorMsg, setErrorMsg] = useState("");
   const [starting, setStarting] = useState(false);
+
+  const handleOpenPairUrl = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      openExternal(`${gatewayUrl}/pair`);
+    },
+    [gatewayUrl],
+  );
 
   const startPairing = async () => {
     setStarting(true);
@@ -54,7 +63,15 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
         const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string };
         if (res.status === 429) throw new Error("Too many attempts. Please get a new code.");
         if (res.status === 410) throw new Error("Code expired. Please get a new code.");
-        throw new Error(body.error ?? `HTTP ${res.status}`);
+        const errorCode = body.error ?? `HTTP ${res.status}`;
+        const friendly: Record<string, string> = {
+          wrong_code: "Incorrect code. Please check and try again.",
+          not_found: "Pairing session not found. Please start over.",
+          expired: "Code expired. Please get a new code.",
+          already_used: "This code has already been used. Please get a new code.",
+          rate_limited: "Too many attempts. Please get a new code.",
+        };
+        throw new Error(friendly[errorCode] ?? errorCode);
       }
       const data = await res.json() as { token: string };
       onPaired(data.token);
@@ -76,9 +93,8 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
             Open{" "}
             <a
               href={`${gatewayUrl}/pair`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary underline underline-offset-4 hover:text-primary/80"
+              onClick={handleOpenPairUrl}
+              className="inline-flex items-center gap-1 text-primary underline underline-offset-4 hover:text-primary/80 cursor-pointer"
             >
               {gatewayUrl}/pair
               <ExternalLink size={12} />
@@ -88,21 +104,26 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
         </div>
       </div>
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col items-center gap-4">
         {!pairingId ? (
-          <Button onClick={startPairing} disabled={starting} className="w-full">
-            {starting ? (
-              <>
-                <Loader2 size={16} className="animate-spin mr-2" />
-                Starting...
-              </>
-            ) : (
-              "Start Pairing"
+          <>
+            <Button onClick={startPairing} disabled={starting} className="self-center">
+              {starting ? (
+                <>
+                  <Loader2 size={16} className="animate-spin mr-2" />
+                  Starting...
+                </>
+              ) : (
+                "Start Pairing"
+              )}
+            </Button>
+            {errorMsg && (
+              <p className="text-sm text-destructive text-center">{errorMsg}</p>
             )}
-          </Button>
+          </>
         ) : (
           <>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col items-center gap-3">
               <Label>Enter the 6-digit code</Label>
               <InputOTP
                 maxLength={6}
@@ -110,7 +131,10 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
                 value={code}
                 onChange={(value) => {
                   setCode(value);
-                  setState("input");
+                  if (state === "error") {
+                    setState("input");
+                    setErrorMsg("");
+                  }
                 }}
                 onComplete={confirm}
               >
@@ -123,11 +147,14 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
                   <InputOTPSlot index={5} />
                 </InputOTPGroup>
               </InputOTP>
+              {errorMsg && (
+                <p className="text-sm text-destructive text-center">{errorMsg}</p>
+              )}
             </div>
             <Button
               onClick={confirm}
               disabled={code.length !== 6 || state === "submitting"}
-              className="w-full"
+              className="self-center"
             >
               {state === "submitting" ? (
                 <>
@@ -141,14 +168,7 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
           </>
         )}
 
-        {errorMsg && (
-          <div className="flex items-center gap-2 text-sm text-destructive">
-            <AlertTriangle size={16} />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {state === "error" && (errorMsg.includes("new code") || errorMsg.includes("expired")) && (
+        {state === "error" && (errorMsg.includes("new code") || errorMsg.includes("start over")) && (
           <Button
             variant="outline"
             size="sm"

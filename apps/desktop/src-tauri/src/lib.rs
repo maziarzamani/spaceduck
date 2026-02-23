@@ -46,6 +46,7 @@ fn try_spawn_sidecar(handle: &tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let handle = app.handle().clone();
             try_spawn_sidecar(&handle);

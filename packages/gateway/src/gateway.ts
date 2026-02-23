@@ -54,6 +54,7 @@ import {
   ensureGatewaySettings,
   getGatewayInfo,
   createPairingSession,
+  getActivePairingSession,
   getActivePairingCode,
   confirmPairing,
   requireAuth,
@@ -438,9 +439,10 @@ export class Gateway implements Lifecycle {
     // Pairing start
     if (req.method === "POST" && url.pathname === "/api/pair/start") {
       if (!this.db) return Response.json({ error: "No database" }, { status: 500 });
-      const session = createPairingSession(this.db);
+      const existing = getActivePairingSession(this.db);
+      const session = existing ?? createPairingSession(this.db);
       const logCode = (Bun.env.SPACEDUCK_PAIRING_LOG_CODE ?? "0") === "1";
-      if (logCode) {
+      if (logCode && !existing) {
         this.deps.logger.info(`PAIR CODE: ${session.code}`);
       }
       return Response.json({
@@ -890,7 +892,12 @@ export class Gateway implements Lifecycle {
     body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0a0a0a; color: #e5e5e5; }
     .card { text-align: center; padding: 3rem 4rem; border: 1px solid #333; border-radius: 1rem; background: #141414; }
     h1 { font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem; color: #a3a3a3; }
-    .code { font-size: 4rem; font-weight: 700; letter-spacing: 0.5rem; font-variant-numeric: tabular-nums; margin: 1.5rem 0; color: #fff; }
+    .code-wrap { position: relative; display: inline-block; margin: 1.5rem 0; cursor: pointer; }
+    .code-wrap:hover .copy-hint { opacity: 1; }
+    .code { font-size: 4rem; font-weight: 700; letter-spacing: 0.5rem; font-variant-numeric: tabular-nums; color: #fff; user-select: all; }
+    .copy-hint { position: absolute; top: -1.4rem; right: 0; font-size: 0.7rem; color: #737373; opacity: 0; transition: opacity 0.15s; }
+    .copied-toast { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #141414ee; border-radius: 0.5rem; font-size: 1rem; color: #4ade80; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .copied-toast.show { opacity: 1; }
     .no-code { font-size: 1.2rem; color: #737373; margin: 1.5rem 0; }
     .name { font-size: 0.85rem; color: #525252; margin-top: 1rem; }
     button { background: #262626; color: #e5e5e5; border: 1px solid #404040; padding: 0.5rem 1.5rem; border-radius: 0.5rem; cursor: pointer; font-size: 0.9rem; margin-top: 1rem; }
@@ -901,14 +908,20 @@ export class Gateway implements Lifecycle {
   <div class="card">
     <h1>Pairing Code</h1>
     ${code
-      ? `<div class="code">${code}</div>`
-      : `<div class="no-code">No active pairing session</div>`}
-    <button onclick="fetch('/api/pair/start',{method:'POST'}).then(()=>location.reload())">
-      ${code ? "Regenerate" : "Generate Code"}
-    </button>
+      ? `<div class="code-wrap" onclick="copyCode()">
+          <span class="copy-hint">click to copy</span>
+          <div class="code" id="code">${code}</div>
+          <div class="copied-toast" id="toast">Copied!</div>
+        </div>
+        <div><button onclick="fetch('/api/pair/start',{method:'POST'}).then(()=>location.reload())">Regenerate</button></div>`
+      : `<div class="no-code">No active pairing session</div>
+        <div><button onclick="fetch('/api/pair/start',{method:'POST'}).then(()=>location.reload())">Generate Code</button></div>`}
     <div class="name">${name}</div>
   </div>
-  <script>setTimeout(()=>location.reload(), 30000)</script>
+  <script>
+    function copyCode(){var c=document.getElementById('code');if(!c)return;navigator.clipboard.writeText(c.textContent.trim());var t=document.getElementById('toast');if(t){t.classList.add('show');setTimeout(function(){t.classList.remove('show')},1200)}}
+    setTimeout(()=>location.reload(), 30000);
+  </script>
 </body>
 </html>`;
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
