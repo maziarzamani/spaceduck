@@ -285,6 +285,7 @@ jobs:
           $sdHome = Join-Path $env:TEST_LOCALAPPDATA ".spaceduck"
           $binDir = Join-Path $sdHome "bin"
           $env:PATH = "$binDir;$env:PATH"
+          $env:SPACEDUCK_HOME = $sdHome
 
           # .cmd wrapper works
           $ver = & cmd /c spaceduck.cmd version
@@ -308,6 +309,7 @@ jobs:
           $sdHome = Join-Path $env:TEST_LOCALAPPDATA ".spaceduck"
           $binDir = Join-Path $sdHome "bin"
           $env:PATH = "$binDir;$env:PATH"
+          $env:SPACEDUCK_HOME = $sdHome
 
           $ver = & cmd /c spaceduck.cmd version
           if ($ver -notmatch "v0.0.0-test") { throw "Version mismatch after second install" }
