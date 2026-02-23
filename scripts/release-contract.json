@@ -1,0 +1,20 @@
+{
+  "repo": "maziarzamani/spaceduck",
+  "artifacts": {
+    "gateway": "spaceduck-gateway.js",
+    "cli": "spaceduck-cli.js",
+    "checksums": "checksums.txt",
+    "manifest": "manifest.json",
+    "version": "VERSION"
+  },
+  "install": {
+    "defaultDir": ".spaceduck",
+    "binDir": "bin",
+    "releasesDir": "releases",
+    "currentLink": "current",
+    "dataDir": "data"
+  },
+  "bun": {
+    "minVersion": "1.2.0"
+  }
+}

@@ -32,24 +32,79 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build
+      - name: Read release contract
+        id: contract
+        run: |
+          GATEWAY=$(jq -r '.artifacts.gateway' scripts/release-contract.json)
+          CLI=$(jq -r '.artifacts.cli' scripts/release-contract.json)
+          CHECKSUMS=$(jq -r '.artifacts.checksums' scripts/release-contract.json)
+          MANIFEST=$(jq -r '.artifacts.manifest' scripts/release-contract.json)
+          VERSION_FILE=$(jq -r '.artifacts.version' scripts/release-contract.json)
+          BUN_MIN=$(jq -r '.bun.minVersion' scripts/release-contract.json)
+          echo "gateway=$GATEWAY" >> "$GITHUB_OUTPUT"
+          echo "cli=$CLI" >> "$GITHUB_OUTPUT"
+          echo "checksums=$CHECKSUMS" >> "$GITHUB_OUTPUT"
+          echo "manifest=$MANIFEST" >> "$GITHUB_OUTPUT"
+          echo "version_file=$VERSION_FILE" >> "$GITHUB_OUTPUT"
+          echo "bun_min=$BUN_MIN" >> "$GITHUB_OUTPUT"
+
+      - name: Build gateway
         run: bun run build
 
-      - name: Package artifact
+      - name: Build CLI
+        run: bun build --target=bun --production --outdir=dist/cli apps/cli/src/index.ts
+
+      - name: Package artifacts
+        env:
+          TAG: ${{ github.ref_name }}
+          GATEWAY: ${{ steps.contract.outputs.gateway }}
+          CLI: ${{ steps.contract.outputs.cli }}
+          CHECKSUMS: ${{ steps.contract.outputs.checksums }}
+          MANIFEST: ${{ steps.contract.outputs.manifest }}
+          VERSION_FILE: ${{ steps.contract.outputs.version_file }}
+          BUN_MIN: ${{ steps.contract.outputs.bun_min }}
         run: |
           mkdir -p release-artifacts
-          cp dist/index.js release-artifacts/spaceduck.js
-          cd release-artifacts && sha256sum spaceduck.js > spaceduck.js.sha256
+          cp dist/index.js "release-artifacts/$GATEWAY"
+          cp dist/cli/index.js "release-artifacts/$CLI"
+
+          # VERSION file
+          echo "$TAG" > "release-artifacts/$VERSION_FILE"
+
+          # manifest.json
+          cat > "release-artifacts/$MANIFEST" <<EOF
+          {
+            "version": "$TAG",
+            "artifacts": {
+              "gateway": "$GATEWAY",
+              "cli": "$CLI",
+              "checksums": "$CHECKSUMS"
+            },
+            "bun": { "minVersion": "$BUN_MIN" }
+          }
+          EOF
+          # Normalize manifest (remove leading whitespace from heredoc)
+          bun -e "
+            const m = JSON.parse(await Bun.file('release-artifacts/$MANIFEST').text());
+            await Bun.write('release-artifacts/$MANIFEST', JSON.stringify(m, null, 2) + '\n');
+          "
+
+          # checksums.txt — hash all four assets
+          cd release-artifacts
+          sha256sum "$GATEWAY" "$CLI" "$MANIFEST" "$VERSION_FILE" > "$CHECKSUMS"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v3
         with:
-          subject-path: release-artifacts/spaceduck.js
+          subject-path: release-artifacts/${{ steps.contract.outputs.gateway }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            release-artifacts/spaceduck.js
-            release-artifacts/spaceduck.js.sha256
+            release-artifacts/${{ steps.contract.outputs.gateway }}
+            release-artifacts/${{ steps.contract.outputs.cli }}
+            release-artifacts/${{ steps.contract.outputs.checksums }}
+            release-artifacts/${{ steps.contract.outputs.manifest }}
+            release-artifacts/${{ steps.contract.outputs.version_file }}

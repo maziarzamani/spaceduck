@@ -1,0 +1,302 @@
+name: Test Installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/spaceduck-website/public/install.sh"
+      - "apps/spaceduck-website/public/install.ps1"
+      - "scripts/release-contract.json"
+      - ".github/workflows/test-installer.yml"
+  pull_request:
+    paths:
+      - "apps/spaceduck-website/public/install.sh"
+      - "apps/spaceduck-website/public/install.ps1"
+      - "scripts/release-contract.json"
+      - ".github/workflows/test-installer.yml"
+
+jobs:
+  # ── Linux + macOS ─────────────────────────────────────────────────────────
+  test-install-sh:
+    name: install.sh (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Read release contract
+        id: contract
+        run: |
+          GATEWAY=$(jq -r '.artifacts.gateway' scripts/release-contract.json)
+          CLI=$(jq -r '.artifacts.cli' scripts/release-contract.json)
+          echo "gateway=$GATEWAY" >> "$GITHUB_OUTPUT"
+          echo "cli=$CLI" >> "$GITHUB_OUTPUT"
+
+      - name: Build mock release artifacts
+        env:
+          GATEWAY: ${{ steps.contract.outputs.gateway }}
+          CLI: ${{ steps.contract.outputs.cli }}
+        run: |
+          mkdir -p mock-release
+
+          # Build gateway
+          bun run build
+          cp dist/index.js "mock-release/$GATEWAY"
+
+          # Build CLI
+          bun build --target=bun --production --outdir=dist/cli apps/cli/src/index.ts
+          cp dist/cli/index.js "mock-release/$CLI"
+
+          TAG="v0.0.0-test"
+
+          # VERSION
+          echo "$TAG" > mock-release/VERSION
+
+          # manifest.json
+          BUN_MIN=$(jq -r '.bun.minVersion' scripts/release-contract.json)
+          cat > mock-release/manifest.json <<EOF
+          {
+            "version": "$TAG",
+            "artifacts": {
+              "gateway": "$GATEWAY",
+              "cli": "$CLI",
+              "checksums": "checksums.txt"
+            },
+            "bun": { "minVersion": "$BUN_MIN" }
+          }
+          EOF
+          bun -e "
+            const m = JSON.parse(await Bun.file('mock-release/manifest.json').text());
+            await Bun.write('mock-release/manifest.json', JSON.stringify(m, null, 2) + '\n');
+          "
+
+          # checksums.txt
+          cd mock-release
+          sha256sum "$GATEWAY" "$CLI" manifest.json VERSION > checksums.txt || \
+            shasum -a 256 "$GATEWAY" "$CLI" manifest.json VERSION > checksums.txt
+          cd ..
+
+      - name: Start mock release server
+        run: |
+          cd mock-release
+          python3 -m http.server 9876 &
+          sleep 1
+          echo "Mock server started on port 9876"
+
+      - name: Set up isolated HOME
+        run: |
+          TEST_HOME="$(mktemp -d)"
+          echo "TEST_HOME=$TEST_HOME" >> "$GITHUB_ENV"
+          # Create a .zshrc or .bashrc so PATH updates have a target
+          if [ "$(basename "$SHELL")" = "zsh" ]; then
+            touch "$TEST_HOME/.zshrc"
+          else
+            touch "$TEST_HOME/.bashrc"
+          fi
+
+      - name: Validate shell syntax
+        run: bash -n apps/spaceduck-website/public/install.sh
+
+      - name: Fresh install
+        env:
+          HOME: ${{ env.TEST_HOME }}
+          SPACEDUCK_RELEASE_BASE_URL: "http://localhost:9876"
+          SPACEDUCK_VERSION: "v0.0.0-test"
+        run: |
+          chmod +x apps/spaceduck-website/public/install.sh
+          ./apps/spaceduck-website/public/install.sh --yes
+
+      - name: Verify install
+        env:
+          HOME: ${{ env.TEST_HOME }}
+        run: |
+          export PATH="$HOME/.spaceduck/bin:$PATH"
+
+          # Wrapper version works
+          spaceduck version
+          spaceduck version | grep -q "v0.0.0-test"
+
+          # Verify directory structure
+          test -L "$HOME/.spaceduck/current"
+          test -f "$HOME/.spaceduck/current/spaceduck-gateway.js"
+          test -f "$HOME/.spaceduck/current/spaceduck-cli.js"
+          test -f "$HOME/.spaceduck/current/VERSION"
+          test -d "$HOME/.spaceduck/data"
+          test -d "$HOME/.spaceduck/releases/v0.0.0-test"
+
+      - name: Verify PATH written exactly once
+        env:
+          HOME: ${{ env.TEST_HOME }}
+        run: |
+          RC_FILE=""
+          if [ -f "$HOME/.zshrc" ]; then RC_FILE="$HOME/.zshrc"; fi
+          if [ -f "$HOME/.bashrc" ]; then RC_FILE="$HOME/.bashrc"; fi
+          if [ -z "$RC_FILE" ]; then echo "No rc file found"; exit 1; fi
+
+          COUNT=$(grep -c ">>> spaceduck >>>" "$RC_FILE" || true)
+          if [ "$COUNT" -ne 1 ]; then
+            echo "Expected 1 spaceduck PATH block, found $COUNT"
+            cat "$RC_FILE"
+            exit 1
+          fi
+
+      - name: Idempotency — run installer again
+        env:
+          HOME: ${{ env.TEST_HOME }}
+          SPACEDUCK_RELEASE_BASE_URL: "http://localhost:9876"
+          SPACEDUCK_VERSION: "v0.0.0-test"
+        run: ./apps/spaceduck-website/public/install.sh --yes
+
+      - name: Verify PATH still exactly once after second run
+        env:
+          HOME: ${{ env.TEST_HOME }}
+        run: |
+          RC_FILE=""
+          if [ -f "$HOME/.zshrc" ]; then RC_FILE="$HOME/.zshrc"; fi
+          if [ -f "$HOME/.bashrc" ]; then RC_FILE="$HOME/.bashrc"; fi
+
+          COUNT=$(grep -c ">>> spaceduck >>>" "$RC_FILE" || true)
+          if [ "$COUNT" -ne 1 ]; then
+            echo "PATH block duplicated after second install ($COUNT occurrences)"
+            cat "$RC_FILE"
+            exit 1
+          fi
+
+          export PATH="$HOME/.spaceduck/bin:$PATH"
+          spaceduck version | grep -q "v0.0.0-test"
+
+      - name: Bun fallback path test
+        env:
+          HOME: ${{ env.TEST_HOME }}
+        run: |
+          # Remove bun from PATH, but it should still be findable at ~/.bun/bin/bun
+          CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v bun | tr '\n' ':')
+          export PATH="$HOME/.spaceduck/bin:$CLEAN_PATH"
+
+          # Only run this test if bun is installed in the default location
+          if [ -x "$HOME/.bun/bin/bun" ]; then
+            spaceduck version | grep -q "v0.0.0-test"
+            echo "Bun fallback path test passed"
+          else
+            echo "Skipping bun fallback test (bun not at ~/.bun/bin/bun)"
+          fi
+
+  # ── Windows ───────────────────────────────────────────────────────────────
+  test-install-ps1:
+    name: install.ps1 (windows)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build mock release artifacts
+        shell: pwsh
+        run: |
+          $contract = Get-Content scripts/release-contract.json | ConvertFrom-Json
+          $GATEWAY = $contract.artifacts.gateway
+          $CLI = $contract.artifacts.cli
+          $BUN_MIN = $contract.bun.minVersion
+
+          New-Item -ItemType Directory -Path mock-release -Force | Out-Null
+
+          # Build gateway
+          bun run build
+          Copy-Item dist/index.js "mock-release/$GATEWAY"
+
+          # Build CLI
+          bun build --target=bun --production --outdir=dist/cli apps/cli/src/index.ts
+          Copy-Item dist/cli/index.js "mock-release/$CLI"
+
+          $TAG = "v0.0.0-test"
+
+          # VERSION
+          $TAG | Set-Content mock-release/VERSION -NoNewline
+
+          # manifest.json
+          @{
+            version = $TAG
+            artifacts = @{ gateway = $GATEWAY; cli = $CLI; checksums = "checksums.txt" }
+            bun = @{ minVersion = $BUN_MIN }
+          } | ConvertTo-Json -Depth 3 | Set-Content mock-release/manifest.json
+
+          # checksums.txt
+          $files = @($GATEWAY, $CLI, "manifest.json", "VERSION")
+          $checksumLines = $files | ForEach-Object {
+            $hash = (Get-FileHash -Path "mock-release/$_" -Algorithm SHA256).Hash.ToLower()
+            "$hash  $_"
+          }
+          $checksumLines -join "`n" | Set-Content mock-release/checksums.txt -NoNewline
+
+      - name: Start mock release server
+        shell: pwsh
+        run: |
+          Start-Process -FilePath python -ArgumentList "-m","http.server","9876" -WorkingDirectory mock-release -NoNewWindow
+          Start-Sleep -Seconds 2
+          Write-Host "Mock server started on port 9876"
+
+      - name: Set up isolated install dir
+        shell: pwsh
+        run: |
+          $testDir = Join-Path $env:RUNNER_TEMP "spaceduck-test-home"
+          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+          echo "TEST_LOCALAPPDATA=$testDir" >> $env:GITHUB_ENV
+
+      - name: Fresh install
+        shell: pwsh
+        env:
+          SPACEDUCK_RELEASE_BASE_URL: "http://localhost:9876"
+          SPACEDUCK_VERSION: "v0.0.0-test"
+        run: |
+          & .\apps\spaceduck-website\public\install.ps1 -Yes -InstallDir "$env:TEST_LOCALAPPDATA\.spaceduck"
+
+      - name: Verify install
+        shell: pwsh
+        run: |
+          $sdHome = Join-Path $env:TEST_LOCALAPPDATA ".spaceduck"
+          $binDir = Join-Path $sdHome "bin"
+          $env:PATH = "$binDir;$env:PATH"
+
+          # .cmd wrapper works
+          $ver = & cmd /c spaceduck.cmd version
+          Write-Host "Version: $ver"
+          if ($ver -notmatch "v0.0.0-test") { throw "Version mismatch" }
+
+          # Verify directory structure
+          if (-not (Test-Path (Join-Path $sdHome "current\spaceduck-gateway.js"))) { throw "gateway.js missing" }
+          if (-not (Test-Path (Join-Path $sdHome "current\spaceduck-cli.js"))) { throw "cli.js missing" }
+          if (-not (Test-Path (Join-Path $sdHome "current\VERSION"))) { throw "VERSION missing" }
+          if (-not (Test-Path (Join-Path $sdHome "data"))) { throw "data dir missing" }
+
+      - name: Idempotency — run installer again
+        shell: pwsh
+        env:
+          SPACEDUCK_RELEASE_BASE_URL: "http://localhost:9876"
+          SPACEDUCK_VERSION: "v0.0.0-test"
+        run: |
+          & .\apps\spaceduck-website\public\install.ps1 -Yes -InstallDir "$env:TEST_LOCALAPPDATA\.spaceduck"
+
+          $sdHome = Join-Path $env:TEST_LOCALAPPDATA ".spaceduck"
+          $binDir = Join-Path $sdHome "bin"
+          $env:PATH = "$binDir;$env:PATH"
+
+          $ver = & cmd /c spaceduck.cmd version
+          if ($ver -notmatch "v0.0.0-test") { throw "Version mismatch after second install" }
