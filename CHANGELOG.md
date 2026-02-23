@@ -6,6 +6,13 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.14.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.13.0...spaceduck-v0.14.0) (2026-02-23)
+
+
+### Features
+
+* add spaceduck.ai landing page with GitHub Pages deployment ([b78d526](https://github.com/maziarzamani/spaceduck/commit/b78d526941819fb60d7c3792bb8fbead63c9f046))
+
 ## [0.13.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.12.0...spaceduck-v0.13.0) (2026-02-22)
 
 
