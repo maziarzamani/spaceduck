@@ -89,6 +89,16 @@ const GatewaySchema = z.object({
   name: z.string().default(hostname()),
 });
 
+const OnboardingSchema = z.object({
+  version: z.number().int().default(1),
+  versionCompleted: z.number().int().nullable().default(null),
+  completed: z.boolean().default(false),
+  mode: z.enum(["local", "cloud", "advanced"]).nullable().default(null),
+  lastStep: z.string().nullable().default(null),
+  completedAt: z.string().nullable().default(null),
+  skippedAt: z.string().nullable().default(null),
+});
+
 export const SpaceduckConfigSchema = z.object({
   version: z.literal(1).default(1),
   gateway: GatewaySchema.default({}),
@@ -98,4 +108,5 @@ export const SpaceduckConfigSchema = z.object({
   stt: SttSchema.default({}),
   tools: ToolsSchema.default({}),
   channels: ChannelsSchema.default({}),
+  onboarding: OnboardingSchema.default({}),
 });

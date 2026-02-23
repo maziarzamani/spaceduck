@@ -1,5 +1,4 @@
 import { useState, useRef } from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
@@ -67,15 +66,21 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Pair with {gatewayName}</CardTitle>
-        <CardDescription>
-          Open <code className="text-xs bg-muted px-1 py-0.5 rounded">{gatewayUrl}/pair</code> on
-          the gateway machine to see the pairing code.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8 shrink-0">
+          <ArrowLeft size={16} />
+        </Button>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Pair with {gatewayName}</h1>
+          <p className="text-sm text-muted-foreground">
+            Open <code className="text-xs bg-muted px-1 py-0.5 rounded">{gatewayUrl}/pair</code> on
+            the gateway machine to see the pairing code.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4">
         {!pairingId ? (
           <Button onClick={startPairing} disabled={starting} className="w-full">
             {starting ? (
@@ -148,13 +153,7 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
             Get New Code
           </Button>
         )}
-      </CardContent>
-      <CardFooter>
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft size={16} className="mr-1" />
-          Back
-        </Button>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }

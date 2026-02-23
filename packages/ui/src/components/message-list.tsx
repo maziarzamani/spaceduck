@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { Message } from "@spaceduck/core";
 import type { PendingStream } from "../hooks/use-spaceduck-ws";
 import { cn } from "../lib/utils";
-import { Bot, User } from "lucide-react";
+import { User } from "lucide-react";
 import Markdown from "react-markdown";
 import { SpaceduckLogo } from "./spaceduck-logo";
 import { Avatar, AvatarFallback } from "../ui/avatar";
@@ -24,9 +24,9 @@ function MessageBubble({ message, isStreaming }: { message: Message; isStreaming
       )}
     >
       {!isUser && (
-        <Avatar className="bg-primary/20">
-          <AvatarFallback className="bg-primary/20">
-            <Bot size={16} className="text-primary" />
+        <Avatar className="bg-transparent">
+          <AvatarFallback className="bg-transparent">
+            <SpaceduckLogo size={32} />
           </AvatarFallback>
         </Avatar>
       )}
@@ -72,10 +72,27 @@ function MessageBubble({ message, isStreaming }: { message: Message; isStreaming
 
 export function MessageList({ messages, pendingStream }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const prevMsgCountRef = useRef(0);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, pendingStream?.content]);
+    if (!bottomRef.current) return;
+    const isConversationSwitch = prevMsgCountRef.current === 0 && messages.length > 0;
+    const behavior = isConversationSwitch ? "instant" : "smooth";
+    bottomRef.current.scrollIntoView({ behavior });
+    prevMsgCountRef.current = messages.length;
+  }, [messages]);
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      prevMsgCountRef.current = 0;
+    }
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (pendingStream?.content) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [pendingStream?.content]);
 
   if (messages.length === 0 && !pendingStream) {
     return (

@@ -60,6 +60,7 @@ export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
         onSelect={ws.selectConversation}
         onCreate={() => ws.createConversation()}
         onDelete={ws.deleteConversation}
+        onRename={ws.renameConversation}
         onOpenSettings={onOpenSettings}
       />
 

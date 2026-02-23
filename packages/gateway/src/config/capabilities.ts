@@ -1,5 +1,8 @@
 import type { SpaceduckProductConfig } from "@spaceduck/config";
-import { getSecretStatus } from "@spaceduck/config";
+import { getSecretStatus, recommendTier } from "@spaceduck/config";
+import type { ModelTier, ModelRecommendation } from "@spaceduck/config";
+import { LOCAL_MODEL_RECOMMENDATIONS } from "@spaceduck/config";
+import { arch, platform, cpus, totalmem } from "node:os";
 
 // ── Unauthenticated: binary/environment availability only ────────
 
@@ -99,4 +102,74 @@ export function getConfiguredStatus(
     secretIsSet("/ai/secrets/openrouterApiKey");
 
   return { aiProviderReady, webSearchReady, webAnswerReady };
+}
+
+// ── System profile (unauthenticated -- safe fields only) ─────────
+
+export interface SystemProfile {
+  os: string | null;
+  arch: string | null;
+  appleSilicon: boolean;
+  totalMemoryGB: number | null;
+  cpuCores: number | null;
+  confidence: "high" | "partial" | "unknown";
+  recommendedTier: ModelTier;
+  recommendations: Record<ModelTier, ModelRecommendation>;
+}
+
+let cachedProfile: SystemProfile | null = null;
+
+export function getSystemProfile(): SystemProfile {
+  if (cachedProfile) return cachedProfile;
+
+  let os: string | null = null;
+  let archStr: string | null = null;
+  let totalMemoryGB: number | null = null;
+  let cpuCores: number | null = null;
+  let appleSilicon = false;
+
+  try {
+    os = platform();
+  } catch { /* safe default */ }
+
+  try {
+    archStr = arch();
+  } catch { /* safe default */ }
+
+  try {
+    const bytes = totalmem();
+    totalMemoryGB = Math.round((bytes / (1024 ** 3)) * 10) / 10;
+  } catch { /* safe default */ }
+
+  try {
+    cpuCores = cpus().length || null;
+  } catch { /* safe default */ }
+
+  if (os === "darwin" && archStr === "arm64") {
+    appleSilicon = true;
+  }
+
+  const knownFields = [os, archStr, totalMemoryGB, cpuCores].filter((v) => v != null).length;
+  const confidence: SystemProfile["confidence"] =
+    knownFields >= 4 ? "high" : knownFields >= 2 ? "partial" : "unknown";
+
+  const tier = recommendTier(totalMemoryGB);
+
+  cachedProfile = {
+    os,
+    arch: archStr,
+    appleSilicon,
+    totalMemoryGB,
+    cpuCores,
+    confidence,
+    recommendedTier: tier,
+    recommendations: LOCAL_MODEL_RECOMMENDATIONS,
+  };
+
+  return cachedProfile;
+}
+
+/** Reset cached profile (for tests). */
+export function _resetSystemProfileCache(): void {
+  cachedProfile = null;
 }

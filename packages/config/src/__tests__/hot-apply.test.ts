@@ -9,6 +9,12 @@ describe("HOT_APPLY_PATHS", () => {
     expect(HOT_APPLY_PATHS.has("/gateway/name")).toBe(true);
     expect(HOT_APPLY_PATHS.has("/stt/languageHint")).toBe(true);
     expect(HOT_APPLY_PATHS.has("/tools/marker/enabled")).toBe(true);
+    expect(HOT_APPLY_PATHS.has("/onboarding/completed")).toBe(true);
+    expect(HOT_APPLY_PATHS.has("/onboarding/mode")).toBe(true);
+    expect(HOT_APPLY_PATHS.has("/onboarding/lastStep")).toBe(true);
+    expect(HOT_APPLY_PATHS.has("/onboarding/completedAt")).toBe(true);
+    expect(HOT_APPLY_PATHS.has("/onboarding/skippedAt")).toBe(true);
+    expect(HOT_APPLY_PATHS.has("/onboarding/versionCompleted")).toBe(true);
   });
 
   test("does NOT contain restart-required paths", () => {

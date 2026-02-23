@@ -13,7 +13,8 @@ export type WsClientEnvelope =
   | { v: 1; type: "conversation.list" }
   | { v: 1; type: "conversation.history"; conversationId: string }
   | { v: 1; type: "conversation.create"; title?: string }
-  | { v: 1; type: "conversation.delete"; conversationId: string };
+  | { v: 1; type: "conversation.delete"; conversationId: string }
+  | { v: 1; type: "conversation.rename"; conversationId: string; title: string };
 
 export type WsServerEnvelope =
   | { v: 1; type: "message.accepted"; requestId: string; conversationId: string }
@@ -27,6 +28,7 @@ export type WsServerEnvelope =
   | { v: 1; type: "conversation.history"; conversationId: string; messages: Message[] }
   | { v: 1; type: "conversation.created"; conversationId: string }
   | { v: 1; type: "conversation.deleted"; conversationId: string }
+  | { v: 1; type: "conversation.renamed"; conversationId: string; title: string }
   | { v: 1; type: "error"; code: string; message: string };
 
 export interface ConversationSummary {

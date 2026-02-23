@@ -17,6 +17,8 @@ describe("SpaceduckConfigSchema", () => {
     expect(config.tools.marker.enabled).toBe(true);
     expect(config.tools.webAnswer.enabled).toBe(true);
     expect(config.channels.whatsapp.enabled).toBe(false);
+    expect(config.onboarding.completed).toBe(false);
+    expect(config.onboarding.version).toBe(1);
   });
 
   test("all secrets default to null", () => {
@@ -89,6 +91,7 @@ describe("defaultConfig", () => {
     expect(config.stt).toBeDefined();
     expect(config.tools).toBeDefined();
     expect(config.channels).toBeDefined();
+    expect(config.onboarding).toBeDefined();
   });
 
   test("every nested object is fully materialized", () => {
@@ -106,5 +109,49 @@ describe("ConfigPatchOp type", () => {
     const add: ConfigPatchOp = { op: "add", path: "/ai/systemPrompt", value: "Hello" };
     expect(replace.op).toBe("replace");
     expect(add.op).toBe("add");
+  });
+});
+
+describe("OnboardingSchema", () => {
+  test("defaults are all null/false", () => {
+    const config = SpaceduckConfigSchema.parse({});
+    expect(config.onboarding.completed).toBe(false);
+    expect(config.onboarding.version).toBe(1);
+    expect(config.onboarding.versionCompleted).toBeNull();
+    expect(config.onboarding.mode).toBeNull();
+    expect(config.onboarding.lastStep).toBeNull();
+    expect(config.onboarding.completedAt).toBeNull();
+    expect(config.onboarding.skippedAt).toBeNull();
+  });
+
+  test("accepts valid mode values", () => {
+    for (const mode of ["local", "cloud", "advanced"]) {
+      const config = SpaceduckConfigSchema.parse({ onboarding: { mode } });
+      expect(config.onboarding.mode).toBe(mode);
+    }
+  });
+
+  test("rejects invalid mode", () => {
+    expect(() =>
+      SpaceduckConfigSchema.parse({ onboarding: { mode: "unknown" } }),
+    ).toThrow();
+  });
+
+  test("accepts partial overrides", () => {
+    const config = SpaceduckConfigSchema.parse({
+      onboarding: {
+        completed: true,
+        mode: "cloud",
+        lastStep: "summary",
+        completedAt: "2026-01-01T00:00:00.000Z",
+        versionCompleted: 1,
+      },
+    });
+    expect(config.onboarding.completed).toBe(true);
+    expect(config.onboarding.mode).toBe("cloud");
+    expect(config.onboarding.lastStep).toBe("summary");
+    expect(config.onboarding.completedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(config.onboarding.versionCompleted).toBe(1);
+    expect(config.onboarding.skippedAt).toBeNull();
   });
 });

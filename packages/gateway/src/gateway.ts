@@ -67,6 +67,7 @@ import {
   ConfigStore,
   getCapabilities,
   getConfiguredStatus,
+  getSystemProfile,
 } from "./config";
 import type { ConfigPatchOp, SpaceduckProductConfig } from "@spaceduck/config";
 import { isSecretPath } from "@spaceduck/config";
@@ -417,6 +418,11 @@ export class Gateway implements Lifecycle {
       return Response.json(capabilities);
     }
 
+    // System profile (unauthenticated — safe hardware info for setup)
+    if (req.method === "GET" && url.pathname === "/api/system/profile") {
+      return Response.json(getSystemProfile());
+    }
+
     // Public gateway info (no auth — used by onboarding to validate URL)
     if (req.method === "GET" && url.pathname === "/api/gateway/public-info") {
       const info = this.gatewayInfo ?? { gatewayId: "unknown", gatewayName: "unknown" };
@@ -591,6 +597,49 @@ export class Gateway implements Lifecycle {
               provider: config.ai.provider,
               model: config.ai.model,
               error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        // POST /api/config/provider-test (authenticated) — test provider connectivity without writing config
+        if (req.method === "POST" && url.pathname === "/api/config/provider-test") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          try {
+            const body = (await req.json()) as Record<string, unknown>;
+            const parsed = parseProviderTestRequest(body);
+            if (!parsed.ok) {
+              return Response.json(
+                { ok: false, error: { code: "INVALID_REQUEST", message: parsed.error, retryable: false } },
+                { status: 400 },
+              );
+            }
+            const { provider, baseUrl, model, region, secretSlot } = parsed.value;
+
+            let resolvedSecret: string | null = null;
+            if (secretSlot) {
+              const cfg = configStore.current;
+              resolvedSecret = resolveSecretFromConfig(cfg, secretSlot);
+              if (!resolvedSecret) {
+                return Response.json({
+                  ok: false,
+                  error: { code: "NO_SECRET", message: "API key not set. Save your key first, then test.", retryable: false },
+                });
+              }
+            }
+
+            const result = await probeProvider({
+              provider,
+              baseUrl: baseUrl ?? undefined,
+              model: model ?? undefined,
+              region: region ?? undefined,
+              secret: resolvedSecret,
+              logger: this.deps.logger,
+            });
+            return Response.json(result);
+          } catch (err) {
+            return Response.json({
+              ok: false,
+              error: mapProviderTestError(err),
             });
           }
         }
@@ -1133,6 +1182,232 @@ const EMBEDDING_REBUILD_PATHS = new Set([
  * Build a Provider instance from product config.
  * Throws if the selected provider requires an API key that isn't set.
  */
+// ── Provider test helpers ────────────────────────────────────────────
+
+const LOCAL_PROVIDER_IDS = new Set(["llamacpp", "lmstudio", "custom"]);
+const CLOUD_PROVIDER_IDS = new Set(["gemini", "openrouter", "bedrock"]);
+
+interface ProviderTestParsed {
+  provider: string;
+  baseUrl: string | null;
+  model: string | null;
+  region: string | null;
+  secretSlot: string | null;
+}
+
+function parseProviderTestRequest(
+  body: Record<string, unknown>,
+): { ok: true; value: ProviderTestParsed } | { ok: false; error: string } {
+  const provider = typeof body.provider === "string" ? body.provider.trim() : "";
+  if (!provider) return { ok: false, error: "Missing required field: provider" };
+
+  const baseUrl = typeof body.baseUrl === "string" ? body.baseUrl.trim() : null;
+  const model = typeof body.model === "string" ? body.model.trim() : null;
+  const region = typeof body.region === "string" ? body.region.trim() : null;
+  const secretSlot = typeof body.secretSlot === "string" ? body.secretSlot.trim() : null;
+
+  if (LOCAL_PROVIDER_IDS.has(provider) && !baseUrl) {
+    return { ok: false, error: "baseUrl is required for local providers" };
+  }
+  if (CLOUD_PROVIDER_IDS.has(provider) && !secretSlot) {
+    return { ok: false, error: "secretSlot is required for cloud providers" };
+  }
+  if (provider === "bedrock" && !region) {
+    return { ok: false, error: "region is required for Bedrock" };
+  }
+
+  return { ok: true, value: { provider, baseUrl, model, region, secretSlot } };
+}
+
+function resolveSecretFromConfig(
+  cfg: SpaceduckProductConfig,
+  slot: string,
+): string | null {
+  const map: Record<string, string | null> = {
+    "/ai/secrets/geminiApiKey": cfg.ai.secrets.geminiApiKey,
+    "/ai/secrets/openrouterApiKey": cfg.ai.secrets.openrouterApiKey,
+    "/ai/secrets/bedrockApiKey": cfg.ai.secrets.bedrockApiKey,
+    "/ai/secrets/lmstudioApiKey": cfg.ai.secrets.lmstudioApiKey,
+    "/ai/secrets/llamacppApiKey": cfg.ai.secrets.llamacppApiKey,
+  };
+  return map[slot] ?? null;
+}
+
+function normalizeProviderBaseUrl(raw: string): string {
+  let url = raw.replace(/\/+$/, "");
+  url = url.replace(/\/chat\/completions$/, "");
+  url = url.replace(/\/+$/, "");
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname === "/" || parsed.pathname === "") {
+      url += "/v1";
+    } else if (!parsed.pathname.endsWith("/v1")) {
+      // Only append /v1 if the path is just a port root — don't mangle custom paths
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      if (segments.length === 0) {
+        url += "/v1";
+      }
+    }
+  } catch {
+    if (!url.endsWith("/v1")) url += "/v1";
+  }
+  return url;
+}
+
+interface ProviderTestError {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+function mapProviderTestError(err: unknown): ProviderTestError {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+
+  if (lower.includes("econnrefused") || lower.includes("connection refused")) {
+    return { code: "ECONNREFUSED", message: "Connection refused. Start your local server, then try again.", retryable: true };
+  }
+  if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("aborted")) {
+    return { code: "TIMEOUT", message: "Connection timed out. Check that the server is running and reachable.", retryable: true };
+  }
+  if (lower.includes("unauthorized") || lower.includes("401")) {
+    return { code: "UNAUTHORIZED", message: "Authentication failed. Check your API key.", retryable: false };
+  }
+  if (lower.includes("invalid") && lower.includes("key")) {
+    return { code: "INVALID_KEY", message: "Invalid API key. Double-check the key and try again.", retryable: false };
+  }
+  if (lower.includes("access denied") || lower.includes("403")) {
+    return { code: "UNAUTHORIZED", message: "Access denied. Check your credentials and permissions.", retryable: false };
+  }
+  if (lower.includes("not found") && lower.includes("model")) {
+    return { code: "BEDROCK_MODEL_UNAVAILABLE", message: "Model not available. Check the model ID and region.", retryable: false };
+  }
+  if (lower.includes("region")) {
+    return { code: "BEDROCK_REGION_MISSING", message: "Invalid or missing AWS region.", retryable: false };
+  }
+
+  return { code: "UNKNOWN", message: msg || "Connection test failed.", retryable: true };
+}
+
+interface ProbeInput {
+  provider: string;
+  baseUrl?: string;
+  model?: string;
+  region?: string;
+  secret: string | null;
+  logger: Logger;
+}
+
+async function probeProvider(
+  input: ProbeInput,
+): Promise<{ ok: true; normalizedBaseUrl: string | null } | { ok: false; error: ProviderTestError; details?: Record<string, unknown> }> {
+  const { provider, baseUrl, model, region, secret, logger } = input;
+
+  if (LOCAL_PROVIDER_IDS.has(provider) && baseUrl) {
+    const normalized = normalizeProviderBaseUrl(baseUrl);
+    const headers: Record<string, string> = {};
+    if (secret) {
+      headers["Authorization"] = `Bearer ${secret}`;
+    }
+    try {
+      const res = await fetch(`${normalized}/models`, {
+        headers,
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (res.ok) {
+        return { ok: true, normalizedBaseUrl: normalized };
+      }
+      if (res.status === 404) {
+        const healthRes = await fetch(normalized.replace(/\/v1$/, ""), {
+          headers,
+          signal: AbortSignal.timeout(5_000),
+        }).catch(() => null);
+        if (healthRes?.ok) {
+          return { ok: true, normalizedBaseUrl: normalized };
+        }
+      }
+      return {
+        ok: false,
+        error: { code: "ECONNREFUSED", message: `Server responded with ${res.status}. Check the URL and server status.`, retryable: true },
+        details: { provider, hint: "Expected an OpenAI-compatible endpoint like http://127.0.0.1:8080/v1" },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: mapProviderTestError(err),
+        details: { provider, hint: "Expected an OpenAI-compatible endpoint like http://127.0.0.1:8080/v1" },
+      };
+    }
+  }
+
+  if (provider === "gemini" && secret) {
+    try {
+      const { GeminiProvider } = require("@spaceduck/provider-gemini") as { GeminiProvider: new (cfg: { apiKey: string; model?: string }) => Provider };
+      const tmp = new GeminiProvider({ apiKey: secret, model: model || "gemini-2.5-flash" });
+      const chunks: string[] = [];
+      for await (const chunk of tmp.chat(
+        [{ id: "probe", role: "user" as const, content: "Say OK", timestamp: Date.now(), source: "system" as const }],
+        { signal: AbortSignal.timeout(8_000) },
+      )) {
+        if (chunk.type === "text") chunks.push(chunk.text);
+        if (chunks.join("").length > 5) break;
+      }
+      return { ok: true, normalizedBaseUrl: null };
+    } catch (err) {
+      return { ok: false, error: mapProviderTestError(err) };
+    }
+  }
+
+  if (provider === "openrouter" && secret) {
+    try {
+      const { OpenRouterProvider } = require("@spaceduck/provider-openrouter") as { OpenRouterProvider: new (cfg: { apiKey: string; model?: string }) => Provider };
+      const tmp = new OpenRouterProvider({ apiKey: secret, model: model || "google/gemini-2.5-flash" });
+      const chunks: string[] = [];
+      for await (const chunk of tmp.chat(
+        [{ id: "probe", role: "user" as const, content: "Say OK", timestamp: Date.now(), source: "system" as const }],
+        { signal: AbortSignal.timeout(8_000) },
+      )) {
+        if (chunk.type === "text") chunks.push(chunk.text);
+        if (chunks.join("").length > 5) break;
+      }
+      return { ok: true, normalizedBaseUrl: null };
+    } catch (err) {
+      return { ok: false, error: mapProviderTestError(err) };
+    }
+  }
+
+  if (provider === "bedrock") {
+    try {
+      const { BedrockProvider } = require("@spaceduck/provider-bedrock") as { BedrockProvider: new (cfg: { model?: string; region?: string; apiKey?: string }) => Provider };
+      const tmp = new BedrockProvider({
+        model: model || "us.amazon.nova-2-pro-v1:0",
+        region: region || undefined,
+        apiKey: secret || undefined,
+      });
+      const chunks: string[] = [];
+      for await (const chunk of tmp.chat(
+        [{ id: "probe", role: "user" as const, content: "Say OK", timestamp: Date.now(), source: "system" as const }],
+        { signal: AbortSignal.timeout(8_000) },
+      )) {
+        if (chunk.type === "text") chunks.push(chunk.text);
+        if (chunks.join("").length > 5) break;
+      }
+      return { ok: true, normalizedBaseUrl: null };
+    } catch (err) {
+      return {
+        ok: false,
+        error: mapProviderTestError(err),
+        details: { provider: "bedrock", region: region ?? "not set" },
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    error: { code: "UNKNOWN", message: `Unsupported provider: ${provider}`, retryable: false },
+  };
+}
+
 // ── Null provider (used when no provider is configured yet) ──────────
 
 class NullProvider implements Provider {

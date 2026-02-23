@@ -1,4 +1,3 @@
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { Shield, Wifi, Lock } from "lucide-react";
 
@@ -8,14 +7,15 @@ interface StepSecurityProps {
 
 export function StepSecurity({ onContinue }: StepSecurityProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Before we connect</CardTitle>
-        <CardDescription>
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Before we connect</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           A few things about how Spaceduck keeps your data safe.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-4">
         <div className="flex gap-3 items-start">
           <Shield size={20} className="text-primary shrink-0 mt-0.5" />
           <div>
@@ -43,10 +43,11 @@ export function StepSecurity({ onContinue }: StepSecurityProps) {
             </p>
           </div>
         </div>
-      </CardContent>
-      <CardFooter className="justify-end">
+      </div>
+
+      <div className="flex justify-end">
         <Button onClick={onContinue}>Continue</Button>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }

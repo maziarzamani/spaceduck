@@ -5,11 +5,15 @@ import { configSet } from "./commands/config-set";
 import { configSecret } from "./commands/config-secret";
 import { configPaths } from "./commands/config-paths";
 import { status } from "./commands/status";
+import { setup } from "./commands/setup";
 
 const USAGE = `
 spaceduck — CLI for managing your Spaceduck gateway
 
 Usage:
+  spaceduck setup                           Interactive setup wizard
+  spaceduck setup --mode local|cloud|advanced  Setup with a specific mode
+  spaceduck setup --skip                    Skip setup for now
   spaceduck status                          Check gateway and provider health
   spaceduck config get [path]               Read config (optionally a specific path)
   spaceduck config set <path> <value>       Update a config value
@@ -24,6 +28,8 @@ Options:
   --help, -h         Show this help
 
 Examples:
+  spaceduck setup
+  spaceduck setup --mode cloud
   spaceduck status
   spaceduck config get /ai/provider
   spaceduck config set /ai/model us.amazon.nova-2-pro-v1:0
@@ -79,6 +85,10 @@ async function main() {
     switch (command) {
       case "status":
         await status(opts);
+        break;
+
+      case "setup":
+        await setup(opts, commandArgs);
         break;
 
       case "config": {
