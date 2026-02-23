@@ -1,0 +1,95 @@
+---
+title: "Install"
+description: "Install Spaceduck using the one-line installer or from source."
+---
+
+## Installer
+
+The fastest way to get Spaceduck running. The installer handles Bun, system dependencies, and configuration automatically.
+
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```bash
+    curl -fsSL https://spaceduck.ai/install.sh | bash
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    irm https://spaceduck.ai/install.ps1 | iex
+    ```
+  </Tab>
+</Tabs>
+
+The installer will:
+
+1. Install [Bun](https://bun.sh) if not already present
+2. Clone the repository and install dependencies
+3. Set up SQLite with extension support
+4. Create a default `.env` file
+5. Start the gateway
+
+Once complete, open [http://localhost:3000](http://localhost:3000) and head to **Settings** to pick a provider.
+
+<Tip>
+  Want to inspect the script before running it?
+
+  ```bash
+  curl -fsSL https://spaceduck.ai/install.sh -o install.sh
+  less install.sh
+  bash install.sh
+  ```
+</Tip>
+
+## From source
+
+For contributors or if you prefer manual control.
+
+### Prerequisites
+
+- [Bun](https://bun.sh) v1.3 or later
+- A chat model — either a local server (llama.cpp, LM Studio) or a cloud API key (Bedrock, Gemini, OpenRouter)
+
+### Steps
+
+<Steps>
+  <Step title="Clone and install">
+    ```bash
+    git clone https://github.com/maziarzamani/spaceduck.git
+    cd spaceduck
+    bun install
+    ```
+  </Step>
+
+  <Step title="Install system dependencies">
+    <Tabs>
+      <Tab title="macOS">
+        ```bash
+        # SQLite with extension support (required for sqlite-vec)
+        brew install sqlite
+        ```
+      </Tab>
+      <Tab title="Linux">
+        SQLite with extension support is typically available by default. If you get sqlite-vec errors, install `libsqlite3-dev`.
+      </Tab>
+      <Tab title="Windows">
+        SQLite is bundled with Bun on Windows. No additional steps needed.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Configure deployment settings">
+    ```bash
+    cp .env.example .env
+    ```
+
+    The `.env` file controls deployment knobs only (port, log level). Provider settings are managed in the Settings UI.
+  </Step>
+
+  <Step title="Start the gateway">
+    ```bash
+    bun run dev
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000) in your browser.
+  </Step>
+</Steps>

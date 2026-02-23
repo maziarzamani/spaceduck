@@ -1,18 +1,8 @@
 import { Button } from "@/components/ui/button"
-import { BorderBeam } from "@/components/ui/border-beam"
 
 export function HeroButtons() {
   return (
     <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-      <Button asChild size="lg" className="relative overflow-hidden bg-primary text-white hover:bg-primary-dark">
-        <a href="https://docs.spaceduck.ai/quickstart" target="_blank" rel="noopener noreferrer">
-          Get Started
-          <svg className="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-          </svg>
-          <BorderBeam size={60} duration={4} colorFrom="#818cf8" colorTo="#6366f1" borderWidth={2} />
-        </a>
-      </Button>
       <Button asChild variant="outline" size="lg" className="border-white/15 bg-transparent text-slate-300 hover:border-white/30 hover:bg-white/5 hover:text-slate-200">
         <a href="https://github.com/maziarzamani/spaceduck" target="_blank" rel="noopener noreferrer">
           <svg className="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
