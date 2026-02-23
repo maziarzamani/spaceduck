@@ -5,7 +5,7 @@
   "types": "src/index.ts",
   "type": "module",
   "dependencies": {
-    "zod": "^3.25.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "bun-types": "latest",
