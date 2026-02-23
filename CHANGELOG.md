@@ -6,6 +6,16 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.14.1](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.14.0...spaceduck-v0.14.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* exclude website from root typecheck ([d2d5808](https://github.com/maziarzamani/spaceduck/commit/d2d58082f2f8b39fcde7856c1fb12d02f8e51bda))
+* make PDF upload test independent of marker_single on PATH ([609603a](https://github.com/maziarzamani/spaceduck/commit/609603a6236bd9150eddd32ec1f538e9e732aa41))
+* repair broken tests across CLI, config, and gateway ([48dcc96](https://github.com/maziarzamani/spaceduck/commit/48dcc96d19dbbc7c986cd4367bf8bfccfcf2f55f))
+* resolve pre-existing type errors in gateway and ui ([b85ead3](https://github.com/maziarzamani/spaceduck/commit/b85ead300882ced378ef08033b45bb5480e02f36))
+
 ## [0.14.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.13.0...spaceduck-v0.14.0) (2026-02-23)
 
 
