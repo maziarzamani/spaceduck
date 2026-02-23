@@ -12,6 +12,6 @@
     "@spaceduck/provider-openai-compat": "workspace:*"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "bun-types": "^1.3.9"
   }
 }

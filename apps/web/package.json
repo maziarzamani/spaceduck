@@ -15,8 +15,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.1.4",
-    "bun-plugin-tailwind": "latest",
-    "bun-types": "latest",
+    "bun-plugin-tailwind": "^0.1.2",
+    "bun-types": "^1.3.9",
     "tailwindcss": "^4",
     "vite": "^7.3.1"
   }

@@ -34,9 +34,15 @@
     "test:memory": "bun test --recursive packages/memory/"
   },
   "devDependencies": {
-    "bun-plugin-tailwind": "latest",
-    "bun-types": "latest",
-    "tailwindcss": "^4",
+    "bun-plugin-tailwind": "^0.1.2",
+    "bun-types": "^1.3.9",
+    "tailwindcss": "^4.2.1",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.1"
+  },
+  "overrides": {
+    "minimatch": "^10.2.2"
   }
 }
