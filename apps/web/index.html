@@ -9,6 +9,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
+  <script>
+    // Apply theme class before first paint to avoid flash
+    (function(){var t=localStorage.getItem("spaceduck.theme");var d=(t==="dark")||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark");})();
+  </script>
   <div id="root"></div>
   <script type="module" src="./src/client.tsx"></script>
 </body>

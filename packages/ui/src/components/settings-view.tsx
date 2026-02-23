@@ -14,6 +14,7 @@ import {
   Monitor,
   Info,
   Radio,
+  Palette,
 } from "lucide-react";
 import { AiSection } from "./settings/ai-section";
 import { MemorySection } from "./settings/memory-section";
@@ -23,6 +24,7 @@ import { ChannelsSection } from "./settings/channels-section";
 import { ConnectionSection } from "./settings/connection-section";
 import { DevicesSection } from "./settings/devices-section";
 import { AboutSection } from "./settings/about-section";
+import { AppearanceSection } from "./settings/appearance-section";
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -37,10 +39,12 @@ type SettingsSection =
   | "channels"
   | "connection"
   | "devices"
+  | "appearance"
   | "about";
 
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: typeof Brain }[] = [
   { id: "connection", label: "Connection", icon: Wifi },
+  { id: "appearance", label: "Appearance", icon: Palette },
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "memory", label: "Memory", icon: Brain },
   { id: "tools", label: "Tools", icon: Wrench },
@@ -72,18 +76,20 @@ export function SettingsView({ onBack, onDisconnect }: SettingsViewProps) {
         <Separator />
         <nav className="flex-1 p-2 flex flex-col gap-0.5">
           {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
-            <button
+            <Button
               key={id}
+              variant={section === id ? "secondary" : "ghost"}
+              size="sm"
               onClick={() => setSection(id)}
-              className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              className={`justify-start gap-2.5 ${
                 section === id
                   ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground"
               }`}
             >
               <Icon size={16} />
               {label}
-            </button>
+            </Button>
           ))}
         </nav>
       </div>
@@ -127,6 +133,7 @@ export function SettingsView({ onBack, onDisconnect }: SettingsViewProps) {
               {section === "channels" && <ChannelsSection cfg={cfg} />}
               {section === "connection" && <ConnectionSection onDisconnect={onDisconnect} />}
               {section === "devices" && <DevicesSection onDisconnect={onDisconnect} />}
+              {section === "appearance" && <AppearanceSection />}
               {section === "about" && <AboutSection />}
             </>
           )}

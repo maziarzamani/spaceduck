@@ -33,12 +33,14 @@ export class LMStudioEmbeddingProvider implements EmbeddingProvider {
   readonly model: string;
   readonly dimensions: number;
 
+  private readonly displayName: string;
   private readonly baseUrl: string;
   private readonly apiKey: string | undefined;
   private readonly instruction: string | undefined;
 
   constructor(config: LMStudioEmbeddingConfig) {
     this.name = config.name ?? "lmstudio";
+    this.displayName = this.name === "llamacpp" ? "llama.cpp" : "LM Studio";
     this.model = config.model;
     this.baseUrl = (config.baseUrl ?? "http://localhost:1234/v1").replace(/\/+$/, "");
     this.apiKey = config.apiKey;
@@ -112,15 +114,15 @@ export class LMStudioEmbeddingProvider implements EmbeddingProvider {
     } catch (cause) {
       const msg =
         cause instanceof TypeError && String(cause).includes("ECONNREFUSED")
-          ? `LM Studio is not running at ${this.baseUrl}. Start it and load an embedding model.`
-          : `Failed to connect to LM Studio at ${this.baseUrl}: ${cause}`;
+          ? `${this.displayName} is not running at ${this.baseUrl}. Start it and load an embedding model.`
+          : `Failed to connect to ${this.displayName} at ${this.baseUrl}: ${cause}`;
       throw new ProviderError(msg, "transient_network", cause);
     }
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       throw new ProviderError(
-        `LM Studio embedding API error ${response.status}: ${text}`,
+        `${this.displayName} embedding API error ${response.status}: ${text}`,
         response.status === 401 ? "auth_failed" : "invalid_request",
       );
     }
@@ -129,7 +131,7 @@ export class LMStudioEmbeddingProvider implements EmbeddingProvider {
 
     if (!json.data || !Array.isArray(json.data)) {
       throw new ProviderError(
-        "LM Studio embedding response missing data array",
+        `${this.displayName} embedding response missing data array`,
         "invalid_request",
       );
     }

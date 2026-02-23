@@ -108,6 +108,9 @@ export function createWsHandler(deps: WsHandlerDeps) {
           case "conversation.delete":
             await handleConversationDelete(ws, envelope);
             break;
+          case "conversation.rename":
+            await handleConversationRename(ws, envelope);
+            break;
           default:
             sendError(ws, "UNKNOWN_TYPE", `Unknown message type: ${(envelope as { type: string }).type}`);
         }
@@ -289,5 +292,24 @@ export function createWsHandler(deps: WsHandlerDeps) {
     }
 
     send(ws, { v: 1, type: "conversation.deleted", conversationId });
+  }
+
+  async function handleConversationRename(
+    ws: { send(data: string): void },
+    envelope: Extract<WsClientEnvelope, { type: "conversation.rename" }>,
+  ) {
+    const { conversationId, title } = envelope;
+    if (!conversationId || typeof title !== "string") {
+      sendError(ws, "INVALID_REQUEST", "conversation.rename requires conversationId and title");
+      return;
+    }
+
+    const result = await conversationStore.updateTitle(conversationId, title);
+    if (!result.ok) {
+      sendError(ws, "MEMORY_ERROR", result.error.message);
+      return;
+    }
+
+    send(ws, { v: 1, type: "conversation.renamed", conversationId, title });
   }
 }

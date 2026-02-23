@@ -1,11 +1,24 @@
+import { useState, useRef, useEffect } from "react";
 import { cn } from "../lib/utils";
 import type { ConversationSummary } from "@spaceduck/core";
-import { MessageSquarePlus, Trash2, MessageCircle, Settings } from "lucide-react";
+import { MessageSquarePlus, Trash2, MessageCircle, Settings, Sun, Moon, MoreHorizontal, Pencil } from "lucide-react";
 import { SpaceduckLogo } from "./spaceduck-logo";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
+import { useTheme } from "../hooks/use-theme";
 
 interface SidebarProps {
   conversations: ConversationSummary[];
@@ -13,6 +26,7 @@ interface SidebarProps {
   onSelect: (id: string) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
+  onRename: (id: string, title: string) => void;
   onOpenSettings?: () => void;
 }
 
@@ -24,7 +38,36 @@ function timeAgo(ts: number): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete, onOpenSettings }: SidebarProps) {
+export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete, onRename, onOpenSettings }: SidebarProps) {
+  const { resolved, setTheme } = useTheme();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ConversationSummary | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingId]);
+
+  const startEditing = (conv: ConversationSummary) => {
+    setEditingId(conv.id);
+    setEditValue(conv.title || "Untitled");
+  };
+
+  const commitEdit = () => {
+    if (editingId && editValue.trim()) {
+      onRename(editingId, editValue.trim());
+    }
+    setEditingId(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+  };
+
   return (
     <aside className="flex flex-col w-64 h-full bg-card border-r border-border">
       <div className="flex items-center justify-between px-4 py-3">
@@ -51,64 +94,147 @@ export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete,
               No conversations yet. Start a new one!
             </p>
           )}
-          {conversations.map((conv) => (
-            <button
-              key={conv.id}
-              type="button"
-              className={cn(
-                "group flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg transition-colors mb-0.5",
-                activeId === conv.id
-                  ? "bg-primary/15 text-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-              onClick={() => onSelect(conv.id)}
-            >
-              <MessageCircle size={14} className="shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm truncate">{conv.title || "Untitled"}</p>
-                <p className="text-xs text-muted-foreground">{timeAgo(conv.lastActiveAt)}</p>
-              </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(conv.id);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.stopPropagation();
-                        onDelete(conv.id);
-                      }
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
-                  >
-                    <Trash2 size={14} />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Delete</TooltipContent>
-              </Tooltip>
-            </button>
-          ))}
+          {conversations.map((conv) => {
+            const isEditing = editingId === conv.id;
+
+            return (
+              <button
+                key={conv.id}
+                type="button"
+                className={cn(
+                  "group flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg transition-colors mb-0.5",
+                  activeId === conv.id
+                    ? "bg-primary/15 text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                onClick={() => {
+                  if (!isEditing) onSelect(conv.id);
+                }}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  startEditing(conv);
+                }}
+              >
+                <MessageCircle size={14} className="shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {isEditing ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Enter") commitEdit();
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        onBlur={commitEdit}
+                        className="w-full text-sm bg-background border border-border rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm truncate">{conv.title || "Untitled"}</p>
+                      <p className="text-xs text-muted-foreground">{timeAgo(conv.lastActiveAt)}</p>
+                    </>
+                  )}
+                </div>
+                {!isEditing && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => e.stopPropagation()}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                      >
+                        <MoreHorizontal size={14} />
+                      </span>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" side="bottom">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEditing(conv);
+                        }}
+                      >
+                        <Pencil size={14} />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(conv);
+                        }}
+                      >
+                        <Trash2 size={14} />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </button>
+            );
+          })}
         </nav>
       </ScrollArea>
 
       <Separator />
       <div className="flex items-center justify-between px-4 py-3">
         <p className="text-xs text-muted-foreground">spaceduck v0.1.0</p>
-        {onOpenSettings && (
+        <div className="flex items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={onOpenSettings} className="h-7 w-7">
-                <Settings size={16} />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
+                className="h-7 w-7"
+              >
+                {resolved === "dark" ? <Sun size={16} /> : <Moon size={16} />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Settings</TooltipContent>
+            <TooltipContent side="top">Toggle theme</TooltipContent>
           </Tooltip>
-        )}
+          {onOpenSettings && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={onOpenSettings} className="h-7 w-7">
+                  <Settings size={16} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Settings</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete &ldquo;{deleteTarget?.title || "Untitled"}&rdquo; and all its messages. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) onDelete(deleteTarget.id);
+                setDeleteTarget(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 }

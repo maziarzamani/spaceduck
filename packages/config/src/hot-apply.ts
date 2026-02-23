@@ -20,6 +20,12 @@ export const HOT_APPLY_PATHS: ReadonlySet<string> = new Set([
   "/tools/webSearch/searxngUrl",
   "/tools/webAnswer/enabled",
   "/channels/whatsapp/enabled",
+  "/onboarding/completed",
+  "/onboarding/mode",
+  "/onboarding/lastStep",
+  "/onboarding/completedAt",
+  "/onboarding/skippedAt",
+  "/onboarding/versionCompleted",
 ]);
 
 /**

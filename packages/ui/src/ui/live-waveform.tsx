@@ -353,7 +353,7 @@ export const LiveWaveform = ({
         barColor ||
         (() => {
           const style = getComputedStyle(canvas);
-          return style.color || "#000";
+          return style.color || getComputedStyle(document.documentElement).getPropertyValue("--color-foreground").trim() || "currentColor";
         })();
 
       const step = barWidth + barGap;

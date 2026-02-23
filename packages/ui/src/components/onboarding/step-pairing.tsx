@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../../ui/card";
+import { useState, useCallback } from "react";
 import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
-import { Loader2, ArrowLeft, AlertTriangle } from "lucide-react";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "../../ui/input-otp";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { Loader2, ArrowLeft, ExternalLink } from "lucide-react";
+import { openExternal } from "../../lib/open-external";
 
 interface StepPairingProps {
   gatewayUrl: string;
@@ -20,7 +21,14 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
   const [state, setState] = useState<PairingState>("input");
   const [errorMsg, setErrorMsg] = useState("");
   const [starting, setStarting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenPairUrl = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      openExternal(`${gatewayUrl}/pair`);
+    },
+    [gatewayUrl],
+  );
 
   const startPairing = async () => {
     setStarting(true);
@@ -31,7 +39,6 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
       const data = await res.json() as { pairingId: string };
       setPairingId(data.pairingId);
       setStarting(false);
-      setTimeout(() => inputRef.current?.focus(), 100);
     } catch (err) {
       setStarting(false);
       setErrorMsg(err instanceof Error ? err.message : "Failed to start pairing");
@@ -56,7 +63,15 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
         const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string };
         if (res.status === 429) throw new Error("Too many attempts. Please get a new code.");
         if (res.status === 410) throw new Error("Code expired. Please get a new code.");
-        throw new Error(body.error ?? `HTTP ${res.status}`);
+        const errorCode = body.error ?? `HTTP ${res.status}`;
+        const friendly: Record<string, string> = {
+          wrong_code: "Incorrect code. Please check and try again.",
+          not_found: "Pairing session not found. Please start over.",
+          expired: "Code expired. Please get a new code.",
+          already_used: "This code has already been used. Please get a new code.",
+          rate_limited: "Too many attempts. Please get a new code.",
+        };
+        throw new Error(friendly[errorCode] ?? errorCode);
       }
       const data = await res.json() as { token: string };
       onPaired(data.token);
@@ -67,52 +82,79 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Pair with {gatewayName}</CardTitle>
-        <CardDescription>
-          Open <code className="text-xs bg-muted px-1 py-0.5 rounded">{gatewayUrl}/pair</code> on
-          the gateway machine to see the pairing code.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8 shrink-0">
+          <ArrowLeft size={16} />
+        </Button>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Pair with {gatewayName}</h1>
+          <p className="text-sm text-muted-foreground">
+            Open{" "}
+            <a
+              href={`${gatewayUrl}/pair`}
+              onClick={handleOpenPairUrl}
+              className="inline-flex items-center gap-1 text-primary underline underline-offset-4 hover:text-primary/80 cursor-pointer"
+            >
+              {gatewayUrl}/pair
+              <ExternalLink size={12} />
+            </a>{" "}
+            on the gateway machine to see the pairing code.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center gap-4">
         {!pairingId ? (
-          <Button onClick={startPairing} disabled={starting} className="w-full">
-            {starting ? (
-              <>
-                <Loader2 size={16} className="animate-spin mr-2" />
-                Starting...
-              </>
-            ) : (
-              "Start Pairing"
+          <>
+            <Button onClick={startPairing} disabled={starting} className="self-center">
+              {starting ? (
+                <>
+                  <Loader2 size={16} className="animate-spin mr-2" />
+                  Starting...
+                </>
+              ) : (
+                "Start Pairing"
+              )}
+            </Button>
+            {errorMsg && (
+              <p className="text-sm text-destructive text-center">{errorMsg}</p>
             )}
-          </Button>
+          </>
         ) : (
           <>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="pairing-code">Enter the 6-digit code</Label>
-              <Input
-                ref={inputRef}
-                id="pairing-code"
-                value={code}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-                  setCode(v);
-                  setState("input");
-                }}
-                placeholder="000000"
+            <div className="flex flex-col items-center gap-3">
+              <Label>Enter the 6-digit code</Label>
+              <InputOTP
                 maxLength={6}
-                className="text-center text-2xl tracking-[0.5em] font-mono"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && code.length === 6) confirm();
+                pattern={REGEXP_ONLY_DIGITS}
+                value={code}
+                onChange={(value) => {
+                  setCode(value);
+                  if (state === "error") {
+                    setState("input");
+                    setErrorMsg("");
+                  }
                 }}
-                autoComplete="off"
-              />
+                onComplete={confirm}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+              {errorMsg && (
+                <p className="text-sm text-destructive text-center">{errorMsg}</p>
+              )}
             </div>
             <Button
               onClick={confirm}
               disabled={code.length !== 6 || state === "submitting"}
-              className="w-full"
+              className="self-center"
             >
               {state === "submitting" ? (
                 <>
@@ -126,14 +168,7 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
           </>
         )}
 
-        {errorMsg && (
-          <div className="flex items-center gap-2 text-sm text-destructive">
-            <AlertTriangle size={16} />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {state === "error" && (errorMsg.includes("new code") || errorMsg.includes("expired")) && (
+        {state === "error" && (errorMsg.includes("new code") || errorMsg.includes("start over")) && (
           <Button
             variant="outline"
             size="sm"
@@ -148,13 +183,7 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
             Get New Code
           </Button>
         )}
-      </CardContent>
-      <CardFooter>
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft size={16} className="mr-1" />
-          Back
-        </Button>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }

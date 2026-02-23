@@ -50,11 +50,12 @@ export interface UseSpaceduckWs {
   sendMessage: (content: string, conversationId?: string, attachments?: Attachment[]) => string;
   createConversation: (title?: string) => void;
   deleteConversation: (conversationId: string) => void;
+  renameConversation: (conversationId: string, title: string) => void;
   selectConversation: (conversationId: string) => void;
   refreshConversations: () => void;
 }
 
-export function useSpaceduckWs(): UseSpaceduckWs {
+export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const wsRef = useRef<WebSocket | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -66,6 +67,10 @@ export function useSpaceduckWs(): UseSpaceduckWs {
   const retriesRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountedRef = useRef(false);
+  const activeConvIdRef = useRef<string | null>(null);
+  const handleMessageRef = useRef<(envelope: WsServerEnvelope) => void>(() => {});
+
+  activeConvIdRef.current = activeConversationId;
 
   const send = useCallback((envelope: WsClientEnvelope) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -108,25 +113,37 @@ export function useSpaceduckWs(): UseSpaceduckWs {
     ws.onmessage = (event) => {
       try {
         const envelope = JSON.parse(event.data) as WsServerEnvelope;
-        handleServerMessage(envelope);
+        handleMessageRef.current(envelope);
       } catch {
         // Ignore malformed messages
       }
     };
-  }, []);
+  }, [send]);
 
   useEffect(() => {
     unmountedRef.current = false;
+
+    if (!enabled) {
+      setStatus("disconnected");
+      return;
+    }
+
     connect();
 
     return () => {
       unmountedRef.current = true;
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
-      wsRef.current?.close();
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      retriesRef.current = 0;
     };
-  }, [connect]);
+  }, [connect, enabled]);
 
   function handleServerMessage(envelope: WsServerEnvelope) {
     switch (envelope.type) {
@@ -142,10 +159,18 @@ export function useSpaceduckWs(): UseSpaceduckWs {
 
       case "conversation.deleted":
         setConversations((prev) => prev.filter((c) => c.id !== envelope.conversationId));
-        if (activeConversationId === envelope.conversationId) {
+        if (activeConvIdRef.current === envelope.conversationId) {
           setActiveConversationId(null);
           setMessages([]);
         }
+        break;
+
+      case "conversation.renamed":
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === envelope.conversationId ? { ...c, title: envelope.title } : c,
+          ),
+        );
         break;
 
       case "conversation.history":
@@ -153,7 +178,7 @@ export function useSpaceduckWs(): UseSpaceduckWs {
         break;
 
       case "message.accepted":
-        if (!activeConversationId) {
+        if (!activeConvIdRef.current) {
           setActiveConversationId(envelope.conversationId);
         }
         break;
@@ -162,7 +187,7 @@ export function useSpaceduckWs(): UseSpaceduckWs {
         streamBufferRef.current = "";
         setPendingStream({
           requestId: envelope.requestId,
-          conversationId: activeConversationId || "",
+          conversationId: activeConvIdRef.current || "",
           content: "",
         });
         break;
@@ -201,11 +226,12 @@ export function useSpaceduckWs(): UseSpaceduckWs {
         break;
     }
   }
+  handleMessageRef.current = handleServerMessage;
 
   const sendMessage = useCallback(
     (content: string, conversationId?: string, attachments?: Attachment[]): string => {
       const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-      const convId = conversationId || activeConversationId || undefined;
+      const convId = conversationId || activeConvIdRef.current || undefined;
 
       const userMsg: Message = {
         id: `local-${requestId}`,
@@ -227,7 +253,7 @@ export function useSpaceduckWs(): UseSpaceduckWs {
       });
       return requestId;
     },
-    [activeConversationId, send],
+    [send],
   );
 
   const createConversation = useCallback(
@@ -240,6 +266,18 @@ export function useSpaceduckWs(): UseSpaceduckWs {
   const deleteConversation = useCallback(
     (conversationId: string) => {
       send({ v: 1, type: "conversation.delete", conversationId });
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+      if (activeConvIdRef.current === conversationId) {
+        setActiveConversationId(null);
+        setMessages([]);
+      }
+    },
+    [send],
+  );
+
+  const renameConversation = useCallback(
+    (conversationId: string, title: string) => {
+      send({ v: 1, type: "conversation.rename", conversationId, title });
     },
     [send],
   );
@@ -266,6 +304,7 @@ export function useSpaceduckWs(): UseSpaceduckWs {
     sendMessage,
     createConversation,
     deleteConversation,
+    renameConversation,
     selectConversation,
     refreshConversations,
   };

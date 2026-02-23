@@ -54,6 +54,7 @@ import {
   ensureGatewaySettings,
   getGatewayInfo,
   createPairingSession,
+  getActivePairingSession,
   getActivePairingCode,
   confirmPairing,
   requireAuth,
@@ -67,6 +68,7 @@ import {
   ConfigStore,
   getCapabilities,
   getConfiguredStatus,
+  getSystemProfile,
 } from "./config";
 import type { ConfigPatchOp, SpaceduckProductConfig } from "@spaceduck/config";
 import { isSecretPath } from "@spaceduck/config";
@@ -417,6 +419,11 @@ export class Gateway implements Lifecycle {
       return Response.json(capabilities);
     }
 
+    // System profile (unauthenticated — safe hardware info for setup)
+    if (req.method === "GET" && url.pathname === "/api/system/profile") {
+      return Response.json(getSystemProfile());
+    }
+
     // Public gateway info (no auth — used by onboarding to validate URL)
     if (req.method === "GET" && url.pathname === "/api/gateway/public-info") {
       const info = this.gatewayInfo ?? { gatewayId: "unknown", gatewayName: "unknown" };
@@ -432,9 +439,10 @@ export class Gateway implements Lifecycle {
     // Pairing start
     if (req.method === "POST" && url.pathname === "/api/pair/start") {
       if (!this.db) return Response.json({ error: "No database" }, { status: 500 });
-      const session = createPairingSession(this.db);
+      const existing = getActivePairingSession(this.db);
+      const session = existing ?? createPairingSession(this.db);
       const logCode = (Bun.env.SPACEDUCK_PAIRING_LOG_CODE ?? "0") === "1";
-      if (logCode) {
+      if (logCode && !existing) {
         this.deps.logger.info(`PAIR CODE: ${session.code}`);
       }
       return Response.json({
@@ -591,6 +599,49 @@ export class Gateway implements Lifecycle {
               provider: config.ai.provider,
               model: config.ai.model,
               error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        // POST /api/config/provider-test (authenticated) — test provider connectivity without writing config
+        if (req.method === "POST" && url.pathname === "/api/config/provider-test") {
+          if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+          try {
+            const body = (await req.json()) as Record<string, unknown>;
+            const parsed = parseProviderTestRequest(body);
+            if (!parsed.ok) {
+              return Response.json(
+                { ok: false, error: { code: "INVALID_REQUEST", message: parsed.error, retryable: false } },
+                { status: 400 },
+              );
+            }
+            const { provider, baseUrl, model, region, secretSlot } = parsed.value;
+
+            let resolvedSecret: string | null = null;
+            if (secretSlot) {
+              const cfg = configStore.current;
+              resolvedSecret = resolveSecretFromConfig(cfg, secretSlot);
+              if (!resolvedSecret) {
+                return Response.json({
+                  ok: false,
+                  error: { code: "NO_SECRET", message: "API key not set. Save your key first, then test.", retryable: false },
+                });
+              }
+            }
+
+            const result = await probeProvider({
+              provider,
+              baseUrl: baseUrl ?? undefined,
+              model: model ?? undefined,
+              region: region ?? undefined,
+              secret: resolvedSecret,
+              logger: this.deps.logger,
+            });
+            return Response.json(result);
+          } catch (err) {
+            return Response.json({
+              ok: false,
+              error: mapProviderTestError(err),
             });
           }
         }
@@ -841,7 +892,12 @@ export class Gateway implements Lifecycle {
     body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0a0a0a; color: #e5e5e5; }
     .card { text-align: center; padding: 3rem 4rem; border: 1px solid #333; border-radius: 1rem; background: #141414; }
     h1 { font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem; color: #a3a3a3; }
-    .code { font-size: 4rem; font-weight: 700; letter-spacing: 0.5rem; font-variant-numeric: tabular-nums; margin: 1.5rem 0; color: #fff; }
+    .code-wrap { position: relative; display: inline-block; margin: 1.5rem 0; cursor: pointer; }
+    .code-wrap:hover .copy-hint { opacity: 1; }
+    .code { font-size: 4rem; font-weight: 700; letter-spacing: 0.5rem; font-variant-numeric: tabular-nums; color: #fff; user-select: all; }
+    .copy-hint { position: absolute; top: -1.4rem; right: 0; font-size: 0.7rem; color: #737373; opacity: 0; transition: opacity 0.15s; }
+    .copied-toast { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #141414ee; border-radius: 0.5rem; font-size: 1rem; color: #4ade80; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .copied-toast.show { opacity: 1; }
     .no-code { font-size: 1.2rem; color: #737373; margin: 1.5rem 0; }
     .name { font-size: 0.85rem; color: #525252; margin-top: 1rem; }
     button { background: #262626; color: #e5e5e5; border: 1px solid #404040; padding: 0.5rem 1.5rem; border-radius: 0.5rem; cursor: pointer; font-size: 0.9rem; margin-top: 1rem; }
@@ -852,14 +908,20 @@ export class Gateway implements Lifecycle {
   <div class="card">
     <h1>Pairing Code</h1>
     ${code
-      ? `<div class="code">${code}</div>`
-      : `<div class="no-code">No active pairing session</div>`}
-    <button onclick="fetch('/api/pair/start',{method:'POST'}).then(()=>location.reload())">
-      ${code ? "Regenerate" : "Generate Code"}
-    </button>
+      ? `<div class="code-wrap" onclick="copyCode()">
+          <span class="copy-hint">click to copy</span>
+          <div class="code" id="code">${code}</div>
+          <div class="copied-toast" id="toast">Copied!</div>
+        </div>
+        <div><button onclick="fetch('/api/pair/start',{method:'POST'}).then(()=>location.reload())">Regenerate</button></div>`
+      : `<div class="no-code">No active pairing session</div>
+        <div><button onclick="fetch('/api/pair/start',{method:'POST'}).then(()=>location.reload())">Generate Code</button></div>`}
     <div class="name">${name}</div>
   </div>
-  <script>setTimeout(()=>location.reload(), 30000)</script>
+  <script>
+    function copyCode(){var c=document.getElementById('code');if(!c)return;navigator.clipboard.writeText(c.textContent.trim());var t=document.getElementById('toast');if(t){t.classList.add('show');setTimeout(function(){t.classList.remove('show')},1200)}}
+    setTimeout(()=>location.reload(), 30000);
+  </script>
 </body>
 </html>`;
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
@@ -1133,6 +1195,232 @@ const EMBEDDING_REBUILD_PATHS = new Set([
  * Build a Provider instance from product config.
  * Throws if the selected provider requires an API key that isn't set.
  */
+// ── Provider test helpers ────────────────────────────────────────────
+
+const LOCAL_PROVIDER_IDS = new Set(["llamacpp", "lmstudio", "custom"]);
+const CLOUD_PROVIDER_IDS = new Set(["gemini", "openrouter", "bedrock"]);
+
+interface ProviderTestParsed {
+  provider: string;
+  baseUrl: string | null;
+  model: string | null;
+  region: string | null;
+  secretSlot: string | null;
+}
+
+function parseProviderTestRequest(
+  body: Record<string, unknown>,
+): { ok: true; value: ProviderTestParsed } | { ok: false; error: string } {
+  const provider = typeof body.provider === "string" ? body.provider.trim() : "";
+  if (!provider) return { ok: false, error: "Missing required field: provider" };
+
+  const baseUrl = typeof body.baseUrl === "string" ? body.baseUrl.trim() : null;
+  const model = typeof body.model === "string" ? body.model.trim() : null;
+  const region = typeof body.region === "string" ? body.region.trim() : null;
+  const secretSlot = typeof body.secretSlot === "string" ? body.secretSlot.trim() : null;
+
+  if (LOCAL_PROVIDER_IDS.has(provider) && !baseUrl) {
+    return { ok: false, error: "baseUrl is required for local providers" };
+  }
+  if (CLOUD_PROVIDER_IDS.has(provider) && !secretSlot) {
+    return { ok: false, error: "secretSlot is required for cloud providers" };
+  }
+  if (provider === "bedrock" && !region) {
+    return { ok: false, error: "region is required for Bedrock" };
+  }
+
+  return { ok: true, value: { provider, baseUrl, model, region, secretSlot } };
+}
+
+function resolveSecretFromConfig(
+  cfg: SpaceduckProductConfig,
+  slot: string,
+): string | null {
+  const map: Record<string, string | null> = {
+    "/ai/secrets/geminiApiKey": cfg.ai.secrets.geminiApiKey,
+    "/ai/secrets/openrouterApiKey": cfg.ai.secrets.openrouterApiKey,
+    "/ai/secrets/bedrockApiKey": cfg.ai.secrets.bedrockApiKey,
+    "/ai/secrets/lmstudioApiKey": cfg.ai.secrets.lmstudioApiKey,
+    "/ai/secrets/llamacppApiKey": cfg.ai.secrets.llamacppApiKey,
+  };
+  return map[slot] ?? null;
+}
+
+function normalizeProviderBaseUrl(raw: string): string {
+  let url = raw.replace(/\/+$/, "");
+  url = url.replace(/\/chat\/completions$/, "");
+  url = url.replace(/\/+$/, "");
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname === "/" || parsed.pathname === "") {
+      url += "/v1";
+    } else if (!parsed.pathname.endsWith("/v1")) {
+      // Only append /v1 if the path is just a port root — don't mangle custom paths
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      if (segments.length === 0) {
+        url += "/v1";
+      }
+    }
+  } catch {
+    if (!url.endsWith("/v1")) url += "/v1";
+  }
+  return url;
+}
+
+interface ProviderTestError {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+function mapProviderTestError(err: unknown): ProviderTestError {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+
+  if (lower.includes("econnrefused") || lower.includes("connection refused")) {
+    return { code: "ECONNREFUSED", message: "Connection refused. Start your local server, then try again.", retryable: true };
+  }
+  if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("aborted")) {
+    return { code: "TIMEOUT", message: "Connection timed out. Check that the server is running and reachable.", retryable: true };
+  }
+  if (lower.includes("unauthorized") || lower.includes("401")) {
+    return { code: "UNAUTHORIZED", message: "Authentication failed. Check your API key.", retryable: false };
+  }
+  if (lower.includes("invalid") && lower.includes("key")) {
+    return { code: "INVALID_KEY", message: "Invalid API key. Double-check the key and try again.", retryable: false };
+  }
+  if (lower.includes("access denied") || lower.includes("403")) {
+    return { code: "UNAUTHORIZED", message: "Access denied. Check your credentials and permissions.", retryable: false };
+  }
+  if (lower.includes("not found") && lower.includes("model")) {
+    return { code: "BEDROCK_MODEL_UNAVAILABLE", message: "Model not available. Check the model ID and region.", retryable: false };
+  }
+  if (lower.includes("region")) {
+    return { code: "BEDROCK_REGION_MISSING", message: "Invalid or missing AWS region.", retryable: false };
+  }
+
+  return { code: "UNKNOWN", message: msg || "Connection test failed.", retryable: true };
+}
+
+interface ProbeInput {
+  provider: string;
+  baseUrl?: string;
+  model?: string;
+  region?: string;
+  secret: string | null;
+  logger: Logger;
+}
+
+async function probeProvider(
+  input: ProbeInput,
+): Promise<{ ok: true; normalizedBaseUrl: string | null } | { ok: false; error: ProviderTestError; details?: Record<string, unknown> }> {
+  const { provider, baseUrl, model, region, secret, logger } = input;
+
+  if (LOCAL_PROVIDER_IDS.has(provider) && baseUrl) {
+    const normalized = normalizeProviderBaseUrl(baseUrl);
+    const headers: Record<string, string> = {};
+    if (secret) {
+      headers["Authorization"] = `Bearer ${secret}`;
+    }
+    try {
+      const res = await fetch(`${normalized}/models`, {
+        headers,
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (res.ok) {
+        return { ok: true, normalizedBaseUrl: normalized };
+      }
+      if (res.status === 404) {
+        const healthRes = await fetch(normalized.replace(/\/v1$/, ""), {
+          headers,
+          signal: AbortSignal.timeout(5_000),
+        }).catch(() => null);
+        if (healthRes?.ok) {
+          return { ok: true, normalizedBaseUrl: normalized };
+        }
+      }
+      return {
+        ok: false,
+        error: { code: "ECONNREFUSED", message: `Server responded with ${res.status}. Check the URL and server status.`, retryable: true },
+        details: { provider, hint: "Expected an OpenAI-compatible endpoint like http://127.0.0.1:8080/v1" },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: mapProviderTestError(err),
+        details: { provider, hint: "Expected an OpenAI-compatible endpoint like http://127.0.0.1:8080/v1" },
+      };
+    }
+  }
+
+  if (provider === "gemini" && secret) {
+    try {
+      const { GeminiProvider } = require("@spaceduck/provider-gemini") as { GeminiProvider: new (cfg: { apiKey: string; model?: string }) => Provider };
+      const tmp = new GeminiProvider({ apiKey: secret, model: model || "gemini-2.5-flash" });
+      const chunks: string[] = [];
+      for await (const chunk of tmp.chat(
+        [{ id: "probe", role: "user" as const, content: "Say OK", timestamp: Date.now(), source: "system" as const }],
+        { signal: AbortSignal.timeout(8_000) },
+      )) {
+        if (chunk.type === "text") chunks.push(chunk.text);
+        if (chunks.join("").length > 5) break;
+      }
+      return { ok: true, normalizedBaseUrl: null };
+    } catch (err) {
+      return { ok: false, error: mapProviderTestError(err) };
+    }
+  }
+
+  if (provider === "openrouter" && secret) {
+    try {
+      const { OpenRouterProvider } = require("@spaceduck/provider-openrouter") as { OpenRouterProvider: new (cfg: { apiKey: string; model?: string }) => Provider };
+      const tmp = new OpenRouterProvider({ apiKey: secret, model: model || "google/gemini-2.5-flash" });
+      const chunks: string[] = [];
+      for await (const chunk of tmp.chat(
+        [{ id: "probe", role: "user" as const, content: "Say OK", timestamp: Date.now(), source: "system" as const }],
+        { signal: AbortSignal.timeout(8_000) },
+      )) {
+        if (chunk.type === "text") chunks.push(chunk.text);
+        if (chunks.join("").length > 5) break;
+      }
+      return { ok: true, normalizedBaseUrl: null };
+    } catch (err) {
+      return { ok: false, error: mapProviderTestError(err) };
+    }
+  }
+
+  if (provider === "bedrock") {
+    try {
+      const { BedrockProvider } = require("@spaceduck/provider-bedrock") as { BedrockProvider: new (cfg: { model?: string; region?: string; apiKey?: string }) => Provider };
+      const tmp = new BedrockProvider({
+        model: model || "us.amazon.nova-2-pro-v1:0",
+        region: region || undefined,
+        apiKey: secret || undefined,
+      });
+      const chunks: string[] = [];
+      for await (const chunk of tmp.chat(
+        [{ id: "probe", role: "user" as const, content: "Say OK", timestamp: Date.now(), source: "system" as const }],
+        { signal: AbortSignal.timeout(8_000) },
+      )) {
+        if (chunk.type === "text") chunks.push(chunk.text);
+        if (chunks.join("").length > 5) break;
+      }
+      return { ok: true, normalizedBaseUrl: null };
+    } catch (err) {
+      return {
+        ok: false,
+        error: mapProviderTestError(err),
+        details: { provider: "bedrock", region: region ?? "not set" },
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    error: { code: "UNKNOWN", message: `Unsupported provider: ${provider}`, retryable: false },
+  };
+}
+
 // ── Null provider (used when no provider is configured yet) ──────────
 
 class NullProvider implements Provider {

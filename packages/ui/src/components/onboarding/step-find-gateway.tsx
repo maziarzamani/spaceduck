@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
@@ -41,21 +40,12 @@ export function StepFindGateway({ onGatewayFound }: StepFindGatewayProps) {
       };
       setState("valid");
 
-      if (!data.requiresAuth) {
-        onGatewayFound({
-          url: normalized,
-          gatewayId: data.gatewayId,
-          gatewayName: data.gatewayName,
-          requiresAuth: false,
-        });
-      } else {
-        onGatewayFound({
-          url: normalized,
-          gatewayId: data.gatewayId,
-          gatewayName: data.gatewayName,
-          requiresAuth: true,
-        });
-      }
+      onGatewayFound({
+        url: normalized,
+        gatewayId: data.gatewayId,
+        gatewayName: data.gatewayName,
+        requiresAuth: data.requiresAuth,
+      });
     } catch (err) {
       setState("error");
       setErrorMsg(
@@ -69,14 +59,15 @@ export function StepFindGateway({ onGatewayFound }: StepFindGatewayProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Find your gateway</CardTitle>
-        <CardDescription>
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Find your gateway</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Enter the URL of your Spaceduck gateway, or use one of the quick-connect options.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-4">
         <Button
           variant="outline"
           className="w-full justify-start text-left"
@@ -94,7 +85,7 @@ export function StepFindGateway({ onGatewayFound }: StepFindGatewayProps) {
             <span className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">or enter URL</span>
+            <span className="bg-background px-2 text-muted-foreground">or enter URL</span>
           </div>
         </div>
 
@@ -139,12 +130,11 @@ export function StepFindGateway({ onGatewayFound }: StepFindGatewayProps) {
             <span>{errorMsg}</span>
           </div>
         )}
-      </CardContent>
-      <CardFooter>
-        <p className="text-xs text-muted-foreground">
-          Automatic discovery is coming soon. For now, enter the URL manually.
-        </p>
-      </CardFooter>
-    </Card>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Automatic discovery is coming soon. For now, enter the URL manually.
+      </p>
+    </div>
   );
 }
