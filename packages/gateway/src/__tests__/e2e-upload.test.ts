@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { createGateway, Gateway } from "../gateway";
 import type { Message, Provider, ProviderOptions, ProviderChunk, ToolDefinition } from "@spaceduck/core";
+import { ToolRegistry } from "@spaceduck/core";
 
 process.env.SPACEDUCK_REQUIRE_AUTH = "0";
 
@@ -184,8 +185,26 @@ describe("PDF upload + attachment E2E", () => {
     gateway = result.gateway;
     await gateway.start();
 
-    // Wait for async marker_scan registration to complete
-    await new Promise((r) => setTimeout(r, 200));
+    // Register a mock marker_scan tool directly on the agent's tool registry
+    // so the test doesn't depend on `marker_single` being on PATH.
+    const agentDeps = (gateway.deps.agent as unknown as { deps: { toolRegistry: ToolRegistry } }).deps;
+    const registry = agentDeps.toolRegistry;
+    if (registry && !registry.has("marker_scan")) {
+      registry.register(
+        {
+          name: "marker_scan",
+          description: "Mock marker_scan for testing",
+          parameters: {
+            type: "object",
+            properties: {
+              attachmentId: { type: "string", description: "The attachment ID." },
+            },
+            required: ["attachmentId"],
+          },
+        },
+        async (args) => `Mock PDF content for ${args.attachmentId}`,
+      );
+    }
 
     const { conversationStore, sessionManager } = gateway.deps;
     const session = await sessionManager.resolve("web", "test-user");
