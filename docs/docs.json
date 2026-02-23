@@ -1,12 +1,15 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Spaceduck",
+  "name": "spaceduck",
   "logo": {
     "dark": "/logo/spaceduck-logo.png",
     "light": "/logo/spaceduck-logo.png"
   },
-  "favicon": "/logo/spaceduck-logo.png",
+  "favicon": {
+    "light": "/logo/spaceduck-logo.png",
+    "dark": "/logo/spaceduck-logo.png"
+  },
   "colors": {
     "primary": "#6366f1",
     "light": "#818cf8",
