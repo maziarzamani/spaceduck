@@ -71,7 +71,7 @@ import {
   getSystemProfile,
 } from "./config";
 import type { ConfigPatchOp, SpaceduckProductConfig } from "@spaceduck/config";
-import { isSecretPath } from "@spaceduck/config";
+import { isSecretPath, DEFAULT_SYSTEM_PROMPT } from "@spaceduck/config";
 
 const MODEL_CATALOG: Record<string, { id: string; name: string; context?: string }[]> = {
   bedrock: [
@@ -746,7 +746,7 @@ export class Gateway implements Lifecycle {
               // Hot-swap system prompt
               if (changedPaths.has("/ai/systemPrompt") && ctxBuilder) {
                 ctxBuilder.setSystemPrompt(
-                  configStore.current.ai.systemPrompt ?? undefined,
+                  configStore.current.ai.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
                 );
               }
 
@@ -1608,7 +1608,7 @@ export async function createGateway(overrides?: {
     conversationStore,
     longTermMemory,
     logger,
-    productConfig.ai.systemPrompt ?? undefined,
+    productConfig.ai.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
   );
 
   // Create run lock

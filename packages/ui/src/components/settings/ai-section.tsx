@@ -18,6 +18,7 @@ import type { SectionProps } from "./shared";
 import { isSecretSet } from "./shared";
 import { SecretInput } from "../shared/secret-input";
 import { DebouncedInput, DebouncedTextarea, SavedBadge, useSaveFlash } from "../shared/debounced-input";
+import { DEFAULT_SYSTEM_PROMPT } from "@spaceduck/config";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -441,7 +442,7 @@ export function AiSection({ cfg }: SectionProps) {
               id="system-prompt"
               rows={4}
               value={systemPrompt}
-              placeholder="Optional system instructions for the AI..."
+              placeholder={DEFAULT_SYSTEM_PROMPT}
               className="resize-y"
               onCommit={async (v) =>
                 cfg.patchConfig([{ op: "replace", path: "/ai/systemPrompt", value: v || null }])
