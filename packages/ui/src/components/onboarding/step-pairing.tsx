@@ -1,8 +1,9 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
-import { Loader2, ArrowLeft, AlertTriangle } from "lucide-react";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "../../ui/input-otp";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { Loader2, ArrowLeft, AlertTriangle, ExternalLink } from "lucide-react";
 
 interface StepPairingProps {
   gatewayUrl: string;
@@ -19,7 +20,6 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
   const [state, setState] = useState<PairingState>("input");
   const [errorMsg, setErrorMsg] = useState("");
   const [starting, setStarting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const startPairing = async () => {
     setStarting(true);
@@ -30,7 +30,6 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
       const data = await res.json() as { pairingId: string };
       setPairingId(data.pairingId);
       setStarting(false);
-      setTimeout(() => inputRef.current?.focus(), 100);
     } catch (err) {
       setStarting(false);
       setErrorMsg(err instanceof Error ? err.message : "Failed to start pairing");
@@ -74,8 +73,17 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Pair with {gatewayName}</h1>
           <p className="text-sm text-muted-foreground">
-            Open <code className="text-xs bg-muted px-1 py-0.5 rounded">{gatewayUrl}/pair</code> on
-            the gateway machine to see the pairing code.
+            Open{" "}
+            <a
+              href={`${gatewayUrl}/pair`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary underline underline-offset-4 hover:text-primary/80"
+            >
+              {gatewayUrl}/pair
+              <ExternalLink size={12} />
+            </a>{" "}
+            on the gateway machine to see the pairing code.
           </p>
         </div>
       </div>
@@ -94,25 +102,27 @@ export function StepPairing({ gatewayUrl, gatewayName, onPaired, onBack }: StepP
           </Button>
         ) : (
           <>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="pairing-code">Enter the 6-digit code</Label>
-              <Input
-                ref={inputRef}
-                id="pairing-code"
+            <div className="flex flex-col gap-3">
+              <Label>Enter the 6-digit code</Label>
+              <InputOTP
+                maxLength={6}
+                pattern={REGEXP_ONLY_DIGITS}
                 value={code}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-                  setCode(v);
+                onChange={(value) => {
+                  setCode(value);
                   setState("input");
                 }}
-                placeholder="000000"
-                maxLength={6}
-                className="text-center text-2xl tracking-[0.5em] font-mono"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && code.length === 6) confirm();
-                }}
-                autoComplete="off"
-              />
+                onComplete={confirm}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
             </div>
             <Button
               onClick={confirm}
