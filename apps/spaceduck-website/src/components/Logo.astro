@@ -1,0 +1,42 @@
+---
+interface Props {
+  size?: number;
+}
+
+const { size = 32 } = Astro.props;
+---
+
+<svg
+  width={size}
+  height={size}
+  viewBox="0 0 64 64"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+  aria-label="spaceduck logo"
+>
+  <rect width="64" height="64" rx="16" fill="#6366f1" />
+  <path
+    d="M20 28c0-6.627 5.373-12 12-12s12 5.373 12 12c0 4.418-2.388 8.278-5.943 10.355C36.15 39.543 34.157 40 32 40s-4.15-.457-6.057-1.645C22.388 36.278 20 32.418 20 28z"
+    fill="#818cf8"
+  />
+  <circle cx="27" cy="27" r="2.5" fill="white" />
+  <circle cx="37" cy="27" r="2.5" fill="white" />
+  <path
+    d="M28 33c0 0 2 2 4 2s4-2 4-2"
+    stroke="white"
+    stroke-width="2"
+    stroke-linecap="round"
+  />
+  <path
+    d="M18 42c2-2 6-4 14-4s12 2 14 4"
+    stroke="#4f46e5"
+    stroke-width="2.5"
+    stroke-linecap="round"
+  />
+  <path
+    d="M24 44c0 0 3 4 8 4s8-4 8-4"
+    stroke="#4f46e5"
+    stroke-width="2"
+    stroke-linecap="round"
+  />
+</svg>

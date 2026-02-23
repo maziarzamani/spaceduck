@@ -1,0 +1,261 @@
+---
+import "../styles/global.css";
+import Base from "../layouts/Base.astro";
+import { WorksWith } from "../components/WorksWith";
+import { HeroButtons } from "../components/HeroButtons";
+---
+
+<Base>
+  <div class="mx-auto min-h-screen max-w-3xl overflow-hidden bg-surface text-slate-300">
+
+    <!-- ═══ Hero ═══ -->
+    <section class="flex flex-col items-center px-6 pt-24 pb-20 md:pt-32 md:pb-28">
+      <div
+        class="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--color-primary)_0%,_transparent_60%)] opacity-10"
+      ></div>
+
+      <div class="relative text-center">
+        <img
+          src="/spaceduck-logo.png"
+          alt="Spaceduck"
+          width="144"
+          height="120"
+          class="mx-auto"
+        />
+
+        <h1 class="mt-6 text-4xl font-bold tracking-tight text-white md:text-5xl">
+          spaceduck
+        </h1>
+
+        <p class="mx-auto mt-4 max-w-md text-lg text-slate-300">
+          Your personal AI assistant, local or cloud.
+        </p>
+
+        <p class="mx-auto mt-2 max-w-sm text-sm text-slate-500">
+          A personal assistant that compounds over time and remains user-owned.
+        </p>
+
+        <HeroButtons client:load />
+      </div>
+    </section>
+
+    <!-- ═══ Works With ═══ -->
+    <section class="px-6 py-8 md:py-12">
+      <div class="mx-auto">
+        <h2 class="text-center text-sm font-semibold uppercase tracking-widest text-primary-light">
+          Works With
+        </h2>
+        <div class="mt-4">
+          <WorksWith client:load />
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Why Spaceduck ═══ -->
+    <section class="border-t border-white/5 px-6 py-20 md:py-28">
+      <div class="mx-auto">
+        <h2 class="text-center text-sm font-semibold uppercase tracking-widest text-primary-light">
+          Why Spaceduck
+        </h2>
+
+        <div class="mt-12 grid gap-8 sm:grid-cols-2">
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-white">Persistent memory</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">
+              Hybrid recall (vector + keyword) finds what you said even when you
+              don't use the same words. Facts are extracted eagerly after every
+              response.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-white">Provider freedom</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">
+              Swap between local models (llama.cpp, LM Studio) and cloud
+              providers (Bedrock, Gemini, OpenRouter) from the Settings
+              UI&nbsp;&mdash; no restart required.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-white">Agentic tools</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">
+              Web search, browser automation, document scanning, and HTTP fetch.
+              The agent loop chains tool calls automatically.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-white">Multi-channel</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">
+              Web UI, Desktop app (Tauri), WhatsApp, and CLI. Same memory, same
+              tools, any surface.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Quick Start ═══ -->
+    <section class="border-t border-white/5 px-6 py-20 md:py-28">
+      <div class="mx-auto">
+        <h2 class="text-center text-sm font-semibold uppercase tracking-widest text-primary-light">
+          Quick Start
+        </h2>
+
+        <div class="mt-12 overflow-hidden rounded-xl border border-white/10 bg-surface-light">
+          <div class="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+            <span class="h-3 w-3 rounded-full bg-red-500/60"></span>
+            <span class="h-3 w-3 rounded-full bg-yellow-500/60"></span>
+            <span class="h-3 w-3 rounded-full bg-green-500/60"></span>
+            <span class="ml-3 text-xs text-slate-500">Terminal</span>
+          </div>
+          <div class="space-y-1 px-5 py-5 font-mono text-sm">
+            <p class="text-slate-500"># clone &amp; install</p>
+            <p><span class="text-primary-light">$</span> <span class="text-slate-200">git clone https://github.com/maziarzamani/spaceduck.git</span></p>
+            <p><span class="text-primary-light">$</span> <span class="text-slate-200">cd spaceduck && bun install</span></p>
+            <p class="mt-3 text-slate-500"># configure</p>
+            <p><span class="text-primary-light">$</span> <span class="text-slate-200">cp .env.example .env</span></p>
+            <p class="mt-3 text-slate-500"># run</p>
+            <p><span class="text-primary-light">$</span> <span class="text-slate-200">bun run dev</span></p>
+            <p class="mt-3 text-slate-500"># open localhost:3000, pick a provider in Settings, and chat</p>
+          </div>
+        </div>
+
+        <p class="mt-6 text-center text-sm text-slate-500">
+          Works on macOS, Linux, and Windows. See the
+          <a
+            href="https://docs.spaceduck.ai/quickstart"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-primary-light underline decoration-primary-light/30 underline-offset-2 hover:decoration-primary-light"
+          >full quickstart guide</a> for provider setup and optional tools.
+        </p>
+      </div>
+    </section>
+
+    <!-- ═══ What It Does ═══ -->
+    <section class="border-t border-white/5 px-6 py-20 md:py-28">
+      <div class="mx-auto">
+        <h2 class="text-center text-sm font-semibold uppercase tracking-widest text-primary-light">
+          What It Does
+        </h2>
+
+        <div class="mt-12 grid gap-8 sm:grid-cols-2">
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </div>
+            <h3 class="font-semibold text-white">Remembers You</h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Automatic fact extraction with correction semantics. Memory is
+              inspectable, correctable, and yours.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </div>
+            <h3 class="font-semibold text-white">Hot-swap Providers</h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Switch between local and cloud models at runtime. Chat and
+              embeddings are independent subsystems.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <h3 class="font-semibold text-white">Web Search</h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Brave, Perplexity, or SearXNG. The agent decides when to search
+              and weaves results into the conversation.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </div>
+            <h3 class="font-semibold text-white">Browser Automation</h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Playwright-powered browsing. Navigate, click, extract data, and
+              interact with any website.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3 class="font-semibold text-white">Document Scanning</h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Upload PDFs via the chat UI. Marker converts them to markdown so
+              the assistant can read and discuss them.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </div>
+            <h3 class="font-semibold text-white">Voice Input</h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Whisper-powered speech-to-text. Hold the mic button to record,
+              release to transcribe. Runs locally.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Footer ═══ -->
+    <footer class="border-t border-white/5 px-6 py-8">
+      <div class="mx-auto flex flex-col items-center justify-between gap-4 sm:flex-row">
+        <div class="flex items-center gap-6">
+          <a href="https://docs.spaceduck.ai" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 transition-colors hover:text-slate-300">Docs</a>
+          <a href="https://github.com/maziarzamani/spaceduck" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 transition-colors hover:text-slate-300">GitHub</a>
+          <a href="https://github.com/maziarzamani/spaceduck/issues" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 transition-colors hover:text-slate-300">Issues</a>
+          <a href="https://github.com/maziarzamani/spaceduck/releases" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 transition-colors hover:text-slate-300">Releases</a>
+          <a href="https://github.com/maziarzamani/spaceduck/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 transition-colors hover:text-slate-300">MIT License</a>
+        </div>
+        <span class="text-xs text-slate-600">&copy; {new Date().getFullYear()} Spaceduck</span>
+      </div>
+    </footer>
+
+  </div>
+</Base>

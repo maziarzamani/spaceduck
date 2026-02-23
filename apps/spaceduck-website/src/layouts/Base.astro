@@ -1,0 +1,52 @@
+---
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = "spaceduck — Your personal AI assistant, local or cloud",
+  description = "A personal AI assistant that compounds over time and remains user-owned. Run locally with llama.cpp or connect to cloud providers.",
+} = Astro.props;
+
+const ogImage = new URL("/og-image.svg", Astro.site);
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang="en" class="antialiased">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="/spaceduck-logo.png" />
+    <link rel="canonical" href={canonicalURL} />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      body { font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    </style>
+  </head>
+  <body class="bg-surface text-text-body">
+    <slot />
+  </body>
+</html>
