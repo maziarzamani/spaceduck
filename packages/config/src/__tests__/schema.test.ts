@@ -125,7 +125,7 @@ describe("OnboardingSchema", () => {
   });
 
   test("accepts valid mode values", () => {
-    for (const mode of ["local", "cloud", "advanced"]) {
+    for (const mode of ["local", "cloud", "advanced"] as const) {
       const config = SpaceduckConfigSchema.parse({ onboarding: { mode } });
       expect(config.onboarding.mode).toBe(mode);
     }
