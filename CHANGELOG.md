@@ -6,6 +6,20 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.16.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.15.0...spaceduck-v0.16.0) (2026-02-23)
+
+
+### Features
+
+* add cross-platform installer scripts and release pipeline ([b17f36f](https://github.com/maziarzamani/spaceduck/commit/b17f36fce581263f6f65b01a0c03185456bace7d))
+* restructure docs around installer, remove Get Started button ([a125295](https://github.com/maziarzamani/spaceduck/commit/a125295c5ddbd6ea709278471a9f2b6a190d18f6))
+
+
+### Bug Fixes
+
+* set SPACEDUCK_HOME in Windows CI verify steps ([708f19d](https://github.com/maziarzamani/spaceduck/commit/708f19db709385c0c8bc47ce6af5a1a3786a91b7))
+* use Start-Process with health check for Windows mock server ([c1fe55e](https://github.com/maziarzamani/spaceduck/commit/c1fe55e15f6662c514fb3ab07f6341cab3dcb9b5))
+
 ## [0.15.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.14.1...spaceduck-v0.15.0) (2026-02-23)
 
 
