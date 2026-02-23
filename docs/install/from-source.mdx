@@ -1,55 +1,16 @@
 ---
-title: "Install"
-description: "Install Spaceduck using the one-line installer or from source."
+title: "From Source"
+description: "Clone and build Spaceduck from source for development or manual control."
 ---
 
-## Installer
+For contributors or if you prefer manual control over the installation.
 
-The fastest way to get Spaceduck running. The installer handles Bun, system dependencies, and configuration automatically.
-
-<Tabs>
-  <Tab title="macOS / Linux">
-    ```bash
-    curl -fsSL https://spaceduck.ai/install.sh | bash
-    ```
-  </Tab>
-  <Tab title="Windows">
-    ```powershell
-    irm https://spaceduck.ai/install.ps1 | iex
-    ```
-  </Tab>
-</Tabs>
-
-The installer will:
-
-1. Install [Bun](https://bun.sh) if not already present
-2. Clone the repository and install dependencies
-3. Set up SQLite with extension support
-4. Create a default `.env` file
-5. Start the gateway
-
-Once complete, open [http://localhost:3000](http://localhost:3000) and head to **Settings** to pick a provider.
-
-<Tip>
-  Want to inspect the script before running it?
-
-  ```bash
-  curl -fsSL https://spaceduck.ai/install.sh -o install.sh
-  less install.sh
-  bash install.sh
-  ```
-</Tip>
-
-## From source
-
-For contributors or if you prefer manual control.
-
-### Prerequisites
+## Prerequisites
 
 - [Bun](https://bun.sh) v1.3 or later
 - A chat model — either a local server (llama.cpp, LM Studio) or a cloud API key (Bedrock, Gemini, OpenRouter)
 
-### Steps
+## Steps
 
 <Steps>
   <Step title="Clone and install">
