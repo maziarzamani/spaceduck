@@ -285,7 +285,7 @@ describe("Auth HTTP endpoints", () => {
     const pairPageRes = await fetch(`http://localhost:${PORT}/pair`);
     expect(pairPageRes.status).toBe(200);
     const html = await pairPageRes.text();
-    const codeMatch = html.match(/<div class="code">(\d{6})<\/div>/);
+    const codeMatch = html.match(/<div class="code"[^>]*>(\d{6})<\/div>/);
     expect(codeMatch).toBeTruthy();
     const code = codeMatch![1];
 
@@ -335,7 +335,7 @@ describe("Auth HTTP endpoints", () => {
     const { pairingId } = await startRes.json() as { pairingId: string };
     const pairPage = await fetch(`http://localhost:${PORT}/pair`);
     const html = await pairPage.text();
-    const code = html.match(/<div class="code">(\d{6})<\/div>/)![1];
+    const code = html.match(/<div class="code"[^>]*>(\d{6})<\/div>/)![1];
 
     const confirmRes = await fetch(`http://localhost:${PORT}/api/pair/confirm`, {
       method: "POST",
