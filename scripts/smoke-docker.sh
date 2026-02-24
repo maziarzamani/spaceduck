@@ -89,7 +89,7 @@ echo "$HEALTH_JSON" | bun -e "
 
 echo ""
 echo "=== CLI smoke: --help ==="
-docker exec "$CID" bun /app/spaceduck-cli.js --help
+docker exec "$CID" bun /app/apps/cli/src/index.ts --help
 echo "  CLI --help OK"
 
 echo ""

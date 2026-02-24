@@ -81,9 +81,9 @@ Pass provider API keys as environment variables:
 The image includes the CLI bundle. If your container is named `spaceduck`:
 
 ```bash
-docker exec -it spaceduck bun /app/spaceduck-cli.js status
-docker exec -it spaceduck bun /app/spaceduck-cli.js version
-docker exec -it spaceduck bun /app/spaceduck-cli.js config paths
+docker exec -it spaceduck bun /app/apps/cli/src/index.ts status
+docker exec -it spaceduck bun /app/apps/cli/src/index.ts version
+docker exec -it spaceduck bun /app/apps/cli/src/index.ts config paths
 ```
 
 ## Local AI providers
