@@ -8,6 +8,10 @@ alwaysApply: true
 
 A modular, open-source AI chat assistant built with Bun. Monorepo with workspace packages.
 
+Always spell spaceduck with lowercase.
+
+Never add "Made with Cursor" anywhere.
+
 ## Architecture
 
 - `@spaceduck/core` — zero-dependency contract package (types, interfaces, agent loop, context builder, events, middleware)
