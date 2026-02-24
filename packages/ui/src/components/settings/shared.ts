@@ -24,3 +24,20 @@ export function isSecretSet(
 ): boolean {
   return secrets.find((s) => s.path === path)?.isSet ?? false;
 }
+
+/** Validate and normalize an HTTP(S) URL. UI owns normalization (trim + strip trailing slash). */
+export function validateHttpUrl(
+  value: string,
+): { ok: true; normalized: string } | { ok: false; message: string } {
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, normalized: "" };
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { ok: false, message: "URL must start with http:// or https://" };
+    }
+    return { ok: true, normalized: trimmed.replace(/\/+$/, "") };
+  } catch {
+    return { ok: false, message: "Enter a valid URL (e.g. http://localhost:8080)" };
+  }
+}

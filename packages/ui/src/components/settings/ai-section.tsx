@@ -15,7 +15,7 @@ import {
 } from "../../ui/select";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { SectionProps } from "./shared";
-import { isSecretSet } from "./shared";
+import { isSecretSet, validateHttpUrl } from "./shared";
 import { SecretInput } from "../shared/secret-input";
 import { DebouncedInput, DebouncedTextarea, SavedBadge, useSaveFlash } from "../shared/debounced-input";
 import { DEFAULT_SYSTEM_PROMPT } from "@spaceduck/config/constants";
@@ -178,6 +178,7 @@ export function AiSection({ cfg }: SectionProps) {
     [cfg],
   );
 
+  const [baseUrlError, setBaseUrlError] = useState<string | null>(null);
   const { saved: tempSaved, flash: tempFlash } = useSaveFlash();
   const { status: providerStatus, errorMsg: providerError, check: checkProvider } =
     useProviderStatus(provider, model, hasKey);
@@ -198,13 +199,14 @@ export function AiSection({ cfg }: SectionProps) {
             <Label htmlFor="provider">Provider</Label>
             <Select
               value={provider}
-              onValueChange={(v) =>
+              onValueChange={(v) => {
+                setBaseUrlError(null);
                 cfg.patchConfig([
                   { op: "replace", path: "/ai/provider", value: v },
                   { op: "replace", path: "/ai/model", value: null },
                   { op: "replace", path: "/ai/baseUrl", value: null },
-                ])
-              }
+                ]);
+              }}
             >
               <SelectTrigger id="provider">
                 <SelectValue />
@@ -245,9 +247,17 @@ export function AiSection({ cfg }: SectionProps) {
                 id="base-url"
                 value={baseUrl}
                 placeholder={BASE_URL_PLACEHOLDER[provider] ?? "http://localhost/v1"}
-                onCommit={async (v) =>
-                  cfg.patchConfig([{ op: "replace", path: "/ai/baseUrl", value: v || null }])
-                }
+                error={baseUrlError}
+                onLocalChange={() => setBaseUrlError(null)}
+                onCommit={async (v) => {
+                  const result = validateHttpUrl(v);
+                  if (!result.ok) {
+                    setBaseUrlError(result.message);
+                    return false;
+                  }
+                  setBaseUrlError(null);
+                  return cfg.patchConfig([{ op: "replace", path: "/ai/baseUrl", value: result.normalized || null }]);
+                }}
               />
             </div>
           )}

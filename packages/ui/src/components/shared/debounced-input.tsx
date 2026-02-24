@@ -29,10 +29,14 @@ export { useSaveFlash };
 export function DebouncedInput({
   value: externalValue,
   onCommit,
+  error,
+  onLocalChange,
   ...props
 }: Omit<React.InputHTMLAttributes<HTMLInputElement>, "value"> & {
   value: string;
   onCommit: (value: string) => Promise<boolean>;
+  error?: string | null;
+  onLocalChange?: (value: string) => void;
 }) {
   const [local, setLocal] = useState(externalValue);
   const { saved, flash } = useSaveFlash();
@@ -46,18 +50,24 @@ export function DebouncedInput({
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <Input
-        {...props}
-        value={local}
-        onChange={(e) => setLocal(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        className={`flex-1 ${props.className ?? ""}`}
-      />
-      <SavedBadge visible={saved} />
+    <div>
+      <div className="flex items-center gap-2">
+        <Input
+          {...props}
+          value={local}
+          onChange={(e) => {
+            setLocal(e.target.value);
+            onLocalChange?.(e.target.value);
+          }}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          className={`flex-1 ${error ? "border-destructive" : ""} ${props.className ?? ""}`}
+        />
+        <SavedBadge visible={saved} />
+      </div>
+      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
     </div>
   );
 }

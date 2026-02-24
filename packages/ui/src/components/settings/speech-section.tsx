@@ -1,38 +1,11 @@
-import { useState, useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Label } from "../../ui/label";
-import { Input } from "../../ui/input";
 import { Switch } from "../../ui/switch";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../../ui/select";
+import { DebouncedInput } from "../shared/debounced-input";
 import type { SectionProps } from "./shared";
 import { getPath } from "./shared";
-
-function DebouncedInput({
-  value: externalValue,
-  onCommit,
-  ...props
-}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "value"> & {
-  value: string;
-  onCommit: (value: string) => void;
-}) {
-  const [local, setLocal] = useState(externalValue);
-  useEffect(() => setLocal(externalValue), [externalValue]);
-
-  return (
-    <Input
-      {...props}
-      value={local}
-      onChange={(e) => setLocal(e.target.value)}
-      onBlur={() => {
-        if (local !== externalValue) onCommit(local);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
-    />
-  );
-}
 
 export function SpeechSection({ cfg }: SectionProps) {
   const config = cfg.config;
@@ -86,12 +59,21 @@ export function SpeechSection({ cfg }: SectionProps) {
           <CardContent className="pt-6 flex flex-col gap-4">
             <div className="grid gap-2">
               <Label htmlFor="stt-model">Whisper Model</Label>
-              <DebouncedInput
-                id="stt-model"
+              <Select
                 value={model}
-                placeholder="tiny, base, small, medium, large"
-                onCommit={(v) => patch("/stt/model", v || "small")}
-              />
+                onValueChange={(v) => patch("/stt/model", v)}
+              >
+                <SelectTrigger id="stt-model">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tiny">tiny</SelectItem>
+                  <SelectItem value="base">base</SelectItem>
+                  <SelectItem value="small">small</SelectItem>
+                  <SelectItem value="medium">medium</SelectItem>
+                  <SelectItem value="large">large</SelectItem>
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground">
                 Larger models are more accurate but slower. "small" is a good balance.
               </p>
@@ -103,7 +85,10 @@ export function SpeechSection({ cfg }: SectionProps) {
                 id="stt-lang"
                 value={languageHint}
                 placeholder="e.g. en, da, de (auto-detect if empty)"
-                onCommit={(v) => patch("/stt/languageHint", v || null)}
+                onCommit={async (v) => {
+                  patch("/stt/languageHint", v || null);
+                  return true;
+                }}
               />
               <p className="text-xs text-muted-foreground">
                 ISO 639-1 code. Leave empty for auto-detection.
