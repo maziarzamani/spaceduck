@@ -235,19 +235,12 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         break;
 
       case "stream.done": {
-        const finalContent = streamBufferRef.current;
         setPendingStream(null);
         streamBufferRef.current = "";
         setToolActivities([]);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: envelope.messageId,
-            role: "assistant" as const,
-            content: finalContent,
-            timestamp: Date.now(),
-          },
-        ]);
+        if (activeConvIdRef.current) {
+          send({ v: 1, type: "conversation.history", conversationId: activeConvIdRef.current });
+        }
         send({ v: 1, type: "conversation.list" });
         break;
       }
