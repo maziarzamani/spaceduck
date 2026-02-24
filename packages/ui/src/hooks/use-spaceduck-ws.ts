@@ -6,6 +6,7 @@ import type {
   Message,
   Attachment,
 } from "@spaceduck/core";
+import type { ToolActivity } from "../lib/tool-types";
 
 function getWsUrl(): string {
   const stored = localStorage.getItem("spaceduck.gatewayUrl");
@@ -49,6 +50,8 @@ export interface UseSpaceduckWs {
   messages: Message[];
   activeConversationId: string | null;
   pendingStream: PendingStream | null;
+  toolActivities: ToolActivity[];
+  connectionEpoch: number;
   sendMessage: (content: string, conversationId?: string, attachments?: Attachment[]) => string;
   createConversation: (title?: string) => void;
   deleteConversation: (conversationId: string) => void;
@@ -65,6 +68,8 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [pendingStream, setPendingStream] = useState<PendingStream | null>(null);
+  const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
+  const [connectionEpoch, setConnectionEpoch] = useState(0);
 
   const streamBufferRef = useRef<string>("");
   const retriesRef = useRef(0);
@@ -112,6 +117,8 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
       retriesRef.current = 0;
       consecutiveFailsRef.current = 0;
       setStatus("connected");
+      setConnectionEpoch((prev) => prev + 1);
+      setToolActivities([]);
       send({ v: 1, type: "conversation.list" });
     };
 
@@ -231,6 +238,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         const finalContent = streamBufferRef.current;
         setPendingStream(null);
         streamBufferRef.current = "";
+        setToolActivities([]);
         setMessages((prev) => [
           ...prev,
           {
@@ -247,6 +255,36 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
       case "stream.error":
         setPendingStream(null);
         streamBufferRef.current = "";
+        setToolActivities([]);
+        break;
+
+      case "tool.calling":
+        setToolActivities((prev) => {
+          const activity: ToolActivity = {
+            toolCallId: envelope.toolCall.id,
+            toolName: envelope.toolCall.name,
+            startedAt: Date.now(),
+          };
+          const next = [...prev, activity];
+          return next.length > 20 ? next.slice(-20) : next;
+        });
+        break;
+
+      case "tool.result":
+        setToolActivities((prev) =>
+          prev.map((a) =>
+            a.toolCallId === envelope.toolResult.toolCallId
+              ? {
+                  ...a,
+                  result: {
+                    content: envelope.toolResult.content,
+                    isError: !!envelope.toolResult.isError,
+                  },
+                  completedAt: Date.now(),
+                }
+              : a,
+          ),
+        );
         break;
 
       case "error":
@@ -330,6 +368,8 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
     messages,
     activeConversationId,
     pendingStream,
+    toolActivities,
+    connectionEpoch,
     sendMessage,
     createConversation,
     deleteConversation,

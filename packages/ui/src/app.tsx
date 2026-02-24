@@ -6,6 +6,7 @@ import { ChatView } from "./components/chat-view";
 import { OnboardingView } from "./components/onboarding-view";
 import { SettingsView } from "./components/settings-view";
 import { TooltipProvider } from "./ui/tooltip";
+import { Toaster } from "sonner";
 
 export type AppView = "onboarding" | "chat" | "settings";
 
@@ -36,6 +37,7 @@ export function App() {
   return (
     <ThemeProvider>
       <AppInner />
+      <Toaster position="bottom-right" richColors closeButton />
     </ThemeProvider>
   );
 }

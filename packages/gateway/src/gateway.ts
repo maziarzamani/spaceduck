@@ -41,6 +41,8 @@ import {
 import { RunLock } from "./run-lock";
 import { createWsHandler, type WsConnectionData } from "./ws-handler";
 import { createToolRegistry } from "./tool-registrations";
+import { ToolStatusService } from "./tools/tools-status";
+import type { ToolName } from "./tools/tools-status";
 import { createEmbeddingProvider } from "./embedding-factory";
 import { AttachmentStore } from "./attachment-store";
 import { SwappableProvider } from "./swappable-provider";
@@ -147,6 +149,7 @@ export class Gateway implements Lifecycle {
   };
 
   readonly deps: GatewayDeps;
+  toolStatusService: ToolStatusService | null = null;
 
   constructor(deps: GatewayDeps, db?: Database) {
     this.deps = deps;
@@ -877,6 +880,40 @@ export class Gateway implements Lifecycle {
               { status: 400 },
             );
           }
+        }
+      }
+
+      // GET /api/tools/status (authenticated) — cheap cached tool status
+      if (req.method === "GET" && url.pathname === "/api/tools/status") {
+        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        if (!this.toolStatusService) {
+          return Response.json({ tools: [] });
+        }
+        return Response.json({ tools: this.toolStatusService.getStatus() });
+      }
+
+      // POST /api/tools/test (authenticated) — active probe
+      if (req.method === "POST" && url.pathname === "/api/tools/test") {
+        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        if (!this.toolStatusService) {
+          return Response.json({ ok: false, message: "Tool status service not available" }, { status: 503 });
+        }
+        try {
+          const body = (await req.json()) as { tool?: string };
+          const tool = body.tool as ToolName | undefined;
+          if (!tool || !["web_search", "web_answer", "marker_scan"].includes(tool)) {
+            return Response.json(
+              { ok: false, message: "Invalid tool name. Expected: web_search, web_answer, or marker_scan" },
+              { status: 400 },
+            );
+          }
+          const result = await this.toolStatusService.probe(tool);
+          return Response.json({ tool, ...result });
+        } catch {
+          return Response.json(
+            { ok: false, message: "Invalid request body" },
+            { status: 400 },
+          );
         }
       }
     }
@@ -1677,6 +1714,8 @@ export async function createGateway(overrides?: {
   }, db);
 
   await gateway.initStt();
+
+  gateway.toolStatusService = new ToolStatusService(toolRegistry, configStore ?? undefined);
 
   return gateway;
 }

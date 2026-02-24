@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { Sidebar } from "./sidebar";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
@@ -30,6 +31,24 @@ interface ChatViewProps {
 
 export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
   const [stt, setStt] = useState<SttStatus>({ available: false });
+  const toastDedupeRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    toastDedupeRef.current.clear();
+  }, [ws.connectionEpoch]);
+
+  useEffect(() => {
+    for (const activity of ws.toolActivities) {
+      if (!activity.result?.isError) continue;
+      const fingerprint = `${activity.toolCallId}:${activity.toolName}:${activity.result.content.slice(0, 100)}`;
+      if (toastDedupeRef.current.has(fingerprint)) continue;
+      toastDedupeRef.current.add(fingerprint);
+      const msg = activity.result.content.length > 120
+        ? activity.result.content.slice(0, 120) + "…"
+        : activity.result.content;
+      toast.error(`${activity.toolName} failed`, { description: msg, duration: 6000 });
+    }
+  }, [ws.toolActivities]);
 
   useEffect(() => {
     let cancelled = false;
