@@ -1,5 +1,6 @@
 import { CliError, type GlobalOpts } from "../index";
 import { apiFetch } from "../lib/api";
+import { ensureCompatible } from "../lib/compat";
 
 export async function configSecret(opts: GlobalOpts, args: string[]) {
   const [action, path] = args;
@@ -14,6 +15,8 @@ export async function configSecret(opts: GlobalOpts, args: string[]) {
     console.error("  spaceduck config secret set /ai/secrets/bedrockApiKey  (prompts for input)");
     process.exit(1);
   }
+
+  await ensureCompatible(opts);
 
   if (!path.startsWith("/")) {
     throw new CliError(`Path must start with /  (got: ${path})`);

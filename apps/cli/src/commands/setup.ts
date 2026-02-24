@@ -1,6 +1,7 @@
 import type { GlobalOpts } from "../index";
 import { CliError } from "../index";
 import { apiFetch } from "../lib/api";
+import { ensureCompatible } from "../lib/compat";
 import {
   CLOUD_PROVIDERS,
   LOCAL_PROVIDERS,
@@ -36,6 +37,8 @@ export function parseSetupFlags(args: string[]): SetupFlags {
 
 export async function setup(opts: GlobalOpts, args: string[]) {
   const flags = parseSetupFlags(args);
+
+  await ensureCompatible(opts);
 
   if (flags.skip) {
     await applyPatches(opts, buildOnboardingSkipPatch());

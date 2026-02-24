@@ -2,6 +2,7 @@ import { describe, test, expect } from "bun:test";
 import { parseGlobalOpts } from "../index";
 import { parseSetupFlags } from "../commands/setup";
 import { formatUptime } from "../commands/status";
+import { CLI_VERSION, API_VERSION } from "@spaceduck/core";
 
 describe("parseGlobalOpts", () => {
   test("defaults with no args", () => {
@@ -114,5 +115,19 @@ describe("CliError", () => {
     expect(err).toBeInstanceOf(Error);
     expect(err.name).toBe("CliError");
     expect(err.message).toBe("test error");
+  });
+});
+
+describe("version command output", () => {
+  test("CLI_VERSION and API_VERSION are available", () => {
+    expect(typeof CLI_VERSION).toBe("string");
+    expect(CLI_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+    expect(Number.isInteger(API_VERSION)).toBe(true);
+    expect(API_VERSION).toBeGreaterThan(0);
+  });
+
+  test("version output format matches expected pattern", () => {
+    const output = `spaceduck-cli ${CLI_VERSION} (api: ${API_VERSION})`;
+    expect(output).toMatch(/^spaceduck-cli \d+\.\d+\.\d+ \(api: \d+\)$/);
   });
 });

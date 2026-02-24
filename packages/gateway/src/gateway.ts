@@ -25,6 +25,9 @@ import {
   FactExtractor,
   loadConfig,
   ToolRegistry,
+  GATEWAY_VERSION,
+  API_VERSION,
+  GIT_SHA,
 } from "@spaceduck/core";
 import type { EventBus } from "@spaceduck/core";
 import {
@@ -386,6 +389,9 @@ export class Gateway implements Lifecycle {
         this.deps.swappableEmbeddingProvider ?? this.deps.embeddingProvider;
       return Response.json({
         status: "ok",
+        version: GATEWAY_VERSION,
+        apiVersion: API_VERSION,
+        commit: GIT_SHA,
         uptime: process.uptime(),
         provider: this.deps.provider.name,
         model: this.deps.configStore?.current?.ai.model ?? this.deps.config.provider.model,

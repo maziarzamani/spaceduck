@@ -21,6 +21,7 @@
     "cli": "bun run apps/cli/src/index.ts",
     "dev:mock": "bun --watch run packages/gateway/src/dev-mock.ts",
     "build": "bun build --target=bun --production --outdir=dist --external=playwright-core --external=electron --external=chromium-bidi packages/gateway/src/index.ts",
+    "build:cli": "bun build --target=bun --production --outdir=dist/cli apps/cli/src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test --recursive",
     "test:unit": "bun test --recursive packages/core/",
