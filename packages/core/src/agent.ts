@@ -69,6 +69,7 @@ export class AgentLoop {
   private readonly pipeline: Middleware | null;
   private readonly logger: Logger;
   private readonly maxToolRounds: number;
+  private _toolRegistry?: ToolRegistry;
 
   constructor(private readonly deps: AgentDeps) {
     this.logger = deps.logger.child({ component: "AgentLoop" });
@@ -77,6 +78,15 @@ export class AgentLoop {
         ? composeMiddleware(deps.middleware)
         : null;
     this.maxToolRounds = deps.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
+    this._toolRegistry = deps.toolRegistry;
+  }
+
+  get toolRegistry(): ToolRegistry | undefined {
+    return this._toolRegistry;
+  }
+
+  setToolRegistry(next?: ToolRegistry): void {
+    this._toolRegistry = next;
   }
 
   /**
@@ -137,7 +147,7 @@ export class AgentLoop {
     }
 
     // Get tool definitions if a registry is available
-    const toolDefs = this.deps.toolRegistry?.getDefinitions() ?? [];
+    const toolDefs = this._toolRegistry?.getDefinitions() ?? [];
     let totalToolCalls = 0;
 
     // ── Agentic loop: call provider, execute tools, repeat ──
@@ -269,8 +279,8 @@ export class AgentLoop {
         const toolStart = Date.now();
         let result: ToolResult;
 
-        if (this.deps.toolRegistry) {
-          result = await this.deps.toolRegistry.execute(tc);
+        if (this._toolRegistry) {
+          result = await this._toolRegistry.execute(tc);
         } else {
           result = {
             toolCallId: tc.id,

@@ -25,7 +25,7 @@ export class ToolStatusService {
   private errors: ToolErrorEvent[] = [];
 
   constructor(
-    private readonly toolRegistry: ToolRegistry,
+    private readonly getToolRegistry: () => ToolRegistry | undefined,
     private readonly configStore?: ConfigStore,
   ) {}
 
@@ -70,7 +70,8 @@ export class ToolStatusService {
       return { tool: "web_search", status: "not_configured", message: "No search provider selected" };
     }
 
-    const registered = this.toolRegistry.has("web_search");
+    const registry = this.getToolRegistry();
+    const registered = registry?.has("web_search") ?? false;
     if (!registered) {
       if (provider === "brave") {
         return { tool: "web_search", status: "not_configured", message: "Brave API key not set (env: BRAVE_API_KEY)" };
@@ -102,7 +103,7 @@ export class ToolStatusService {
       return { tool: "web_answer", status: "disabled" };
     }
 
-    const registered = this.toolRegistry.has("web_answer");
+    const registered = this.getToolRegistry()?.has("web_answer") ?? false;
     if (!registered) {
       return { tool: "web_answer", status: "not_configured", message: "API key not set (env: PERPLEXITY_API_KEY or OPENROUTER_API_KEY)" };
     }
@@ -124,7 +125,7 @@ export class ToolStatusService {
       return { tool: "marker_scan", status: "disabled" };
     }
 
-    const registered = this.toolRegistry.has("marker_scan");
+    const registered = this.getToolRegistry()?.has("marker_scan") ?? false;
     if (!registered) {
       return { tool: "marker_scan", status: "unavailable", message: "marker_single binary not found on PATH" };
     }
@@ -139,14 +140,15 @@ export class ToolStatusService {
 
   async probe(tool: ToolName): Promise<{ ok: boolean; message?: string; durationMs: number }> {
     const start = Date.now();
+    const registry = this.getToolRegistry();
 
     switch (tool) {
       case "web_search": {
-        if (!this.toolRegistry.has("web_search")) {
+        if (!registry?.has("web_search")) {
           return { ok: false, message: "Tool not registered", durationMs: Date.now() - start };
         }
         try {
-          const result = await this.toolRegistry.execute({
+          const result = await registry.execute({
             id: `probe-${Date.now()}`,
             name: "web_search",
             args: { query: "test", count: 1 },
@@ -164,11 +166,11 @@ export class ToolStatusService {
       }
 
       case "web_answer": {
-        if (!this.toolRegistry.has("web_answer")) {
+        if (!registry?.has("web_answer")) {
           return { ok: false, message: "Tool not registered", durationMs: Date.now() - start };
         }
         try {
-          const result = await this.toolRegistry.execute({
+          const result = await registry.execute({
             id: `probe-${Date.now()}`,
             name: "web_answer",
             args: { query: "ping" },

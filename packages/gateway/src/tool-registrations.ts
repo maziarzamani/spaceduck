@@ -13,15 +13,19 @@ import { isSecretPath, decodePointer } from "@spaceduck/config";
 
 /**
  * Build a ToolRegistry pre-loaded with all built-in tools.
- * Lazily launches the browser only on first use.
+ * Reads config store first, falls back to env vars for backwards compat.
+ * Pure function: only depends on configStore.current, Bun.env, and injected deps.
  */
-export function createToolRegistry(
+export function buildToolRegistry(
   logger: Logger,
   attachmentStore?: AttachmentStore,
   configStore?: ConfigStore,
 ): ToolRegistry {
   const registry = new ToolRegistry();
   const log = logger.child({ component: "ToolRegistry" });
+
+  let cfg: import("@spaceduck/config").SpaceduckProductConfig | undefined;
+  try { cfg = configStore?.current; } catch { /* not loaded yet, fall back to env */ }
 
   // ── web_fetch ──────────────────────────────────────────────────────
   const webFetch = new WebFetchTool();
@@ -213,13 +217,16 @@ export function createToolRegistry(
   );
 
   // ── web_search (Brave / SearXNG) ──────────────────────────────────
-  const braveApiKey = Bun.env.BRAVE_API_KEY;
-  const searxngUrl = Bun.env.SEARXNG_URL;
-  const searchProvider = (Bun.env.SEARCH_PROVIDER ?? "brave") as SearchProvider;
+  const braveApiKey = cfg?.tools?.webSearch?.secrets?.braveApiKey ?? Bun.env.BRAVE_API_KEY;
+  const searxngUrl = cfg?.tools?.webSearch?.searxngUrl ?? Bun.env.SEARXNG_URL;
+  const envSearchProvider = Bun.env.SEARCH_PROVIDER;
+  const searchProvider: SearchProvider | null =
+    cfg?.tools?.webSearch?.provider ??
+    (envSearchProvider === "brave" || envSearchProvider === "searxng" ? envSearchProvider : null);
 
-  if (braveApiKey || searxngUrl) {
+  if ((braveApiKey || searxngUrl) && searchProvider) {
     const webSearch = new WebSearchTool({
-      provider: searxngUrl && !braveApiKey ? "searxng" : searchProvider,
+      provider: searchProvider,
       braveApiKey,
       searxngUrl,
       searxngUserAgent: Bun.env.SEARXNG_USER_AGENT,
@@ -274,14 +281,17 @@ export function createToolRegistry(
 
     log.info("web_search registered", { provider: webSearch["provider"] });
   } else {
-    log.debug("web_search not registered (no BRAVE_API_KEY or SEARXNG_URL)");
+    log.debug("web_search not registered", {
+      hasKey: !!braveApiKey, hasSearxng: !!searxngUrl, provider: searchProvider,
+    });
   }
 
   // ── web_answer (Perplexity Sonar) ───────────────────────────────────
-  const perplexityApiKey = Bun.env.PERPLEXITY_API_KEY;
-  const openrouterApiKey = Bun.env.OPENROUTER_API_KEY;
+  const webAnswerEnabled = cfg?.tools?.webAnswer?.enabled ?? true;
+  const perplexityApiKey = cfg?.tools?.webAnswer?.secrets?.perplexityApiKey ?? Bun.env.PERPLEXITY_API_KEY;
+  const openrouterApiKey = cfg?.ai?.secrets?.openrouterApiKey ?? Bun.env.OPENROUTER_API_KEY;
 
-  if (perplexityApiKey || openrouterApiKey) {
+  if (webAnswerEnabled && (perplexityApiKey || openrouterApiKey)) {
     const webAnswer = new WebAnswerTool({
       perplexityApiKey,
       openrouterApiKey,
@@ -319,11 +329,17 @@ export function createToolRegistry(
       provider: perplexityApiKey ? "perplexity-direct" : "openrouter",
     });
   } else {
-    log.debug("web_answer not registered (no PERPLEXITY_API_KEY or OPENROUTER_API_KEY)");
+    log.debug("web_answer not registered", {
+      enabled: webAnswerEnabled,
+      hasPerplexity: !!perplexityApiKey,
+      hasOpenrouter: !!openrouterApiKey,
+    });
   }
 
-  // ── marker_scan (conditional — only if marker_single is on PATH) ────
-  if (attachmentStore) {
+  // ── marker_scan (conditional — only if enabled, marker_single on PATH, and attachmentStore) ────
+  const markerEnabled = cfg?.tools?.marker?.enabled ?? true;
+
+  if (markerEnabled && attachmentStore) {
     MarkerTool.isAvailable().then((available) => {
       if (!available) {
         log.debug("marker_scan not registered (marker_single not on PATH)");
@@ -467,3 +483,6 @@ export function createToolRegistry(
   log.info("Tool registry initialized", { tools: registry.size });
   return registry;
 }
+
+/** @deprecated Use buildToolRegistry — kept for one release cycle */
+export const createToolRegistry = buildToolRegistry;
