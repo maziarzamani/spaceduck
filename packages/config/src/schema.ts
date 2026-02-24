@@ -85,10 +85,20 @@ const MarkerSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
+const BrowserSchema = z.object({
+  enabled: z.boolean().default(true),
+});
+
+const WebFetchSchema = z.object({
+  enabled: z.boolean().default(true),
+});
+
 const ToolsSchema = z.object({
   marker: MarkerSchema.default({}),
   webSearch: WebSearchSchema.default({}),
   webAnswer: WebAnswerSchema.default({}),
+  browser: BrowserSchema.default({}),
+  webFetch: WebFetchSchema.default({}),
 });
 
 const WhatsAppSchema = z.object({

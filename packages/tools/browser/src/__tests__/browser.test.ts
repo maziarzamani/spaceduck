@@ -2,6 +2,13 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { BrowserTool } from "..";
 
+describe("BrowserTool.isAvailable", () => {
+  it("returns available: true when Chromium is installed", () => {
+    const result = BrowserTool.isAvailable();
+    expect(result.available).toBe(true);
+  });
+});
+
 describe("BrowserTool", () => {
   let browser: BrowserTool;
 

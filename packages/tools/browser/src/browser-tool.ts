@@ -18,6 +18,18 @@ export class BrowserTool {
   private readonly maxChars: number;
   private readonly defaultTimeout: number;
 
+  static isAvailable(): { available: true } | { available: false; reason: string } {
+    try {
+      const executablePath: string = chromium.executablePath();
+      const { existsSync } = require("node:fs") as typeof import("node:fs");
+      return existsSync(executablePath)
+        ? { available: true }
+        : { available: false, reason: "Chromium not installed — run: npx playwright install chromium" };
+    } catch {
+      return { available: false, reason: "playwright chromium binary not found" };
+    }
+  }
+
   constructor(options: BrowserToolOptions = {}) {
     this.headless = options.headless ?? true;
     this.maxChars = options.maxResultChars ?? DEFAULT_MAX_CHARS;

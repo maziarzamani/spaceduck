@@ -12,6 +12,8 @@ const TOOL_REBUILD_PATHS = new Set([
   "/tools/webSearch/searxngUrl",
   "/tools/webAnswer/enabled",
   "/tools/marker/enabled",
+  "/tools/browser/enabled",
+  "/tools/webFetch/enabled",
 ]);
 
 const TOOL_SECRET_PATHS = new Set([
@@ -62,6 +64,14 @@ describe("shouldRebuildTools", () => {
 
   it("triggers on /tools/marker/enabled change", () => {
     expect(shouldRebuildTools(new Set(["/tools/marker/enabled"]))).toBe(true);
+  });
+
+  it("triggers on /tools/browser/enabled change", () => {
+    expect(shouldRebuildTools(new Set(["/tools/browser/enabled"]))).toBe(true);
+  });
+
+  it("triggers on /tools/webFetch/enabled change", () => {
+    expect(shouldRebuildTools(new Set(["/tools/webFetch/enabled"]))).toBe(true);
   });
 
   it("does not trigger on unrelated path", () => {
@@ -129,6 +139,7 @@ describe("ToolStatusService with getter", () => {
     const service = new ToolStatusService(() => undefined);
     const status = service.getStatus();
 
+    expect(status.length).toBe(5);
     for (const entry of status) {
       expect(["not_configured", "unavailable", "disabled"]).toContain(entry.status);
     }
@@ -145,7 +156,7 @@ describe("ToolStatusService with getter", () => {
 
     const fakeConfigStore = {
       get current() {
-        return { tools: { webSearch: { provider: "brave", searxngUrl: null, secrets: { braveApiKey: "key" } }, webAnswer: { enabled: true, secrets: { perplexityApiKey: null } }, marker: { enabled: true } }, channels: { whatsapp: { enabled: false } } } as any;
+        return { tools: { webSearch: { provider: "brave", searxngUrl: null, secrets: { braveApiKey: "key" } }, webAnswer: { enabled: true, secrets: { perplexityApiKey: null } }, marker: { enabled: true }, browser: { enabled: true }, webFetch: { enabled: true } }, channels: { whatsapp: { enabled: false } } } as any;
       },
     } as any;
 
@@ -165,6 +176,78 @@ describe("ToolStatusService with getter", () => {
   it("probe returns 'Tool not registered' when registry is undefined", async () => {
     const service = new ToolStatusService(() => undefined);
     const result = await service.probe("web_search");
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("Tool not registered");
+  });
+
+  it("reports browser as disabled when config says disabled", () => {
+    const fakeConfig = {
+      get current() {
+        return { tools: { webSearch: { provider: null, searxngUrl: null, secrets: {} }, webAnswer: { enabled: true, secrets: {} }, marker: { enabled: true }, browser: { enabled: false }, webFetch: { enabled: true } } } as any;
+      },
+    } as any;
+    const service = new ToolStatusService(() => undefined, fakeConfig);
+    const status = service.getStatus();
+    const br = status.find((e) => e.tool === "browser_navigate");
+    expect(br?.status).toBe("disabled");
+  });
+
+  it("reports web_fetch as disabled when config says disabled", () => {
+    const fakeConfig = {
+      get current() {
+        return { tools: { webSearch: { provider: null, searxngUrl: null, secrets: {} }, webAnswer: { enabled: true, secrets: {} }, marker: { enabled: true }, browser: { enabled: true }, webFetch: { enabled: false } } } as any;
+      },
+    } as any;
+    const service = new ToolStatusService(() => undefined, fakeConfig);
+    const status = service.getStatus();
+    const wf = status.find((e) => e.tool === "web_fetch");
+    expect(wf?.status).toBe("disabled");
+  });
+
+  it("reports browser as ok when registered and enabled", () => {
+    const reg = new ToolRegistry();
+    reg.register(
+      { name: "browser_navigate", description: "test", parameters: { type: "object", properties: {} } },
+      async () => "ok",
+    );
+    const fakeConfig = {
+      get current() {
+        return { tools: { webSearch: { provider: null, searxngUrl: null, secrets: {} }, webAnswer: { enabled: true, secrets: {} }, marker: { enabled: true }, browser: { enabled: true }, webFetch: { enabled: true } } } as any;
+      },
+    } as any;
+    const service = new ToolStatusService(() => reg, fakeConfig);
+    const status = service.getStatus();
+    const br = status.find((e) => e.tool === "browser_navigate");
+    expect(br?.status).toBe("ok");
+  });
+
+  it("reports web_fetch as ok when registered and enabled", () => {
+    const reg = new ToolRegistry();
+    reg.register(
+      { name: "web_fetch", description: "test", parameters: { type: "object", properties: {} } },
+      async () => "ok",
+    );
+    const fakeConfig = {
+      get current() {
+        return { tools: { webSearch: { provider: null, searxngUrl: null, secrets: {} }, webAnswer: { enabled: true, secrets: {} }, marker: { enabled: true }, browser: { enabled: true }, webFetch: { enabled: true } } } as any;
+      },
+    } as any;
+    const service = new ToolStatusService(() => reg, fakeConfig);
+    const status = service.getStatus();
+    const wf = status.find((e) => e.tool === "web_fetch");
+    expect(wf?.status).toBe("ok");
+  });
+
+  it("probe returns 'Tool not registered' for browser when registry is undefined", async () => {
+    const service = new ToolStatusService(() => undefined);
+    const result = await service.probe("browser_navigate");
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("Tool not registered");
+  });
+
+  it("probe returns 'Tool not registered' for web_fetch when registry is undefined", async () => {
+    const service = new ToolStatusService(() => undefined);
+    const result = await service.probe("web_fetch");
     expect(result.ok).toBe(false);
     expect(result.message).toBe("Tool not registered");
   });
@@ -265,5 +348,51 @@ describe("buildToolRegistry config-driven behavior", () => {
 
     const registry = buildToolRegistry(logger, undefined, store);
     expect(registry.has("web_answer")).toBe(false);
+  });
+
+  it("does not register browser tools when disabled in config", async () => {
+    const { buildToolRegistry } = await import("../tool-registrations");
+    const { ConfigStore } = await import("../config/config-store");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+
+    const store = new ConfigStore(join(tmpdir(), `test-${Date.now()}`));
+    await store.load();
+
+    await store.patch(
+      [{ op: "replace", path: "/tools/browser/enabled", value: false }],
+      store.rev(),
+    );
+
+    const registry = buildToolRegistry(logger, undefined, store);
+    expect(registry.has("browser_navigate")).toBe(false);
+    expect(registry.has("browser_snapshot")).toBe(false);
+    expect(registry.has("browser_click")).toBe(false);
+  });
+
+  it("does not register web_fetch when disabled in config", async () => {
+    const { buildToolRegistry } = await import("../tool-registrations");
+    const { ConfigStore } = await import("../config/config-store");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+
+    const store = new ConfigStore(join(tmpdir(), `test-${Date.now()}`));
+    await store.load();
+
+    await store.patch(
+      [{ op: "replace", path: "/tools/webFetch/enabled", value: false }],
+      store.rev(),
+    );
+
+    const registry = buildToolRegistry(logger, undefined, store);
+    expect(registry.has("web_fetch")).toBe(false);
+  });
+
+  it("registers browser tools and web_fetch by default", () => {
+    const { buildToolRegistry } = require("../tool-registrations");
+    const registry = buildToolRegistry(logger);
+    expect(registry.has("browser_navigate")).toBe(true);
+    expect(registry.has("browser_snapshot")).toBe(true);
+    expect(registry.has("web_fetch")).toBe(true);
   });
 });

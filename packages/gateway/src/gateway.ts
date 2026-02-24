@@ -1021,9 +1021,9 @@ export class Gateway implements Lifecycle {
         try {
           const body = (await req.json()) as { tool?: string };
           const tool = body.tool as ToolName | undefined;
-          if (!tool || !["web_search", "web_answer", "marker_scan"].includes(tool)) {
+          if (!tool || !["web_search", "web_answer", "marker_scan", "browser_navigate", "web_fetch"].includes(tool)) {
             return Response.json(
-              { ok: false, message: "Invalid tool name. Expected: web_search, web_answer, or marker_scan" },
+              { ok: false, message: "Invalid tool name. Expected: web_search, web_answer, marker_scan, browser_navigate, or web_fetch" },
               { status: 400 },
             );
           }
@@ -1361,6 +1361,8 @@ const TOOL_REBUILD_PATHS = new Set([
   "/tools/webSearch/searxngUrl",
   "/tools/webAnswer/enabled",
   "/tools/marker/enabled",
+  "/tools/browser/enabled",
+  "/tools/webFetch/enabled",
 ]);
 
 const TOOL_SECRET_PATHS = new Set([

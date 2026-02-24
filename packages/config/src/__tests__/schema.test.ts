@@ -16,6 +16,8 @@ describe("SpaceduckConfigSchema", () => {
     expect(config.stt.model).toBe("small");
     expect(config.tools.marker.enabled).toBe(true);
     expect(config.tools.webAnswer.enabled).toBe(true);
+    expect(config.tools.browser.enabled).toBe(true);
+    expect(config.tools.webFetch.enabled).toBe(true);
     expect(config.channels.whatsapp.enabled).toBe(false);
     expect(config.onboarding.completed).toBe(false);
     expect(config.onboarding.version).toBe(1);
@@ -234,6 +236,32 @@ describe("HttpUrlSchema", () => {
       embedding: { baseUrl: "http://localhost:1234/v1" },
     });
     expect(config.embedding.baseUrl).toBe("http://localhost:1234/v1");
+  });
+});
+
+describe("BrowserSchema and WebFetchSchema", () => {
+  test("browser defaults to enabled", () => {
+    const config = SpaceduckConfigSchema.parse({});
+    expect(config.tools.browser.enabled).toBe(true);
+  });
+
+  test("browser can be disabled", () => {
+    const config = SpaceduckConfigSchema.parse({
+      tools: { browser: { enabled: false } },
+    });
+    expect(config.tools.browser.enabled).toBe(false);
+  });
+
+  test("webFetch defaults to enabled", () => {
+    const config = SpaceduckConfigSchema.parse({});
+    expect(config.tools.webFetch.enabled).toBe(true);
+  });
+
+  test("webFetch can be disabled", () => {
+    const config = SpaceduckConfigSchema.parse({
+      tools: { webFetch: { enabled: false } },
+    });
+    expect(config.tools.webFetch.enabled).toBe(false);
   });
 });
 
