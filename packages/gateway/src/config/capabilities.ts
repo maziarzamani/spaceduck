@@ -10,6 +10,7 @@ export interface EnvCapabilities {
   stt: { available: boolean; reason?: string };
   marker: { available: boolean; reason?: string };
   embedding: { available: boolean; reason?: string };
+  browser: { available: boolean; reason?: string };
 }
 
 /**
@@ -27,11 +28,12 @@ export function getCapabilities(): Promise<EnvCapabilities> {
   if (capabilitiesPromise) return capabilitiesPromise;
 
   capabilitiesPromise = (async () => {
-    const [stt, marker] = await Promise.all([
+    const [stt, marker, browser] = await Promise.all([
       detectStt(),
       detectMarker(),
+      detectBrowser(),
     ]);
-    cachedCapabilities = { stt, marker, embedding: { available: true } };
+    cachedCapabilities = { stt, marker, embedding: { available: true }, browser };
     capabilitiesPromise = null;
     return cachedCapabilities;
   })();
@@ -63,12 +65,26 @@ async function detectMarker(): Promise<{ available: boolean; reason?: string }> 
   }
 }
 
+async function detectBrowser(): Promise<{ available: boolean; reason?: string }> {
+  try {
+    const { BrowserTool } = await import("@spaceduck/tool-browser");
+    const result = BrowserTool.isAvailable();
+    return result.available
+      ? { available: true }
+      : { available: false, reason: result.reason };
+  } catch {
+    return { available: false, reason: "browser tool module not loadable" };
+  }
+}
+
 // ── Authenticated: configured readiness signals ──────────────────
 
 export interface ConfiguredStatus {
   aiProviderReady: boolean;
   webSearchReady: boolean;
   webAnswerReady: boolean;
+  browserReady: boolean;
+  webFetchReady: boolean;
 }
 
 /**
@@ -101,7 +117,7 @@ export function getConfiguredStatus(
     secretIsSet("/tools/webAnswer/secrets/perplexityApiKey") ||
     secretIsSet("/ai/secrets/openrouterApiKey");
 
-  return { aiProviderReady, webSearchReady, webAnswerReady };
+  return { aiProviderReady, webSearchReady, webAnswerReady, browserReady: true, webFetchReady: true };
 }
 
 // ── System profile (unauthenticated -- safe fields only) ─────────

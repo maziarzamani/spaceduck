@@ -40,7 +40,8 @@ import {
 } from "@spaceduck/memory-sqlite";
 import { RunLock } from "./run-lock";
 import { createWsHandler, type WsConnectionData } from "./ws-handler";
-import { createToolRegistry } from "./tool-registrations";
+import { buildToolRegistry } from "./tool-registrations";
+import { buildChannels } from "./channel-registrations";
 import { ToolStatusService } from "./tools/tools-status";
 import type { ToolName } from "./tools/tools-status";
 import { createEmbeddingProvider } from "./embedding-factory";
@@ -150,11 +151,13 @@ export class Gateway implements Lifecycle {
 
   readonly deps: GatewayDeps;
   toolStatusService: ToolStatusService | null = null;
+  private channels: Channel[] = [];
 
   constructor(deps: GatewayDeps, db?: Database) {
     this.deps = deps;
     this.db = db ?? null;
     this.authRequired = (Bun.env.SPACEDUCK_REQUIRE_AUTH ?? "1") !== "0";
+    this.channels = deps.channels ?? [];
   }
 
   get status(): LifecycleStatus {
@@ -250,20 +253,25 @@ export class Gateway implements Lifecycle {
     this._status = "stopped";
   }
 
+  private async startChannel(channel: Channel): Promise<void> {
+    channel.onMessage(async (msg) => {
+      await this.handleChannelMessage(channel, msg);
+    });
+    await channel.start();
+    this.deps.logger.info("Channel started", { channel: channel.name });
+  }
+
+  private async stopChannel(channel: Channel): Promise<void> {
+    await channel.stop();
+    this.deps.logger.info("Channel stopped", { channel: channel.name });
+  }
+
   private async startChannels(): Promise<void> {
-    const channels = this.deps.channels ?? [];
-    const { logger, agent, conversationStore, sessionManager, runLock } = this.deps;
-
-    for (const channel of channels) {
-      channel.onMessage(async (msg) => {
-        await this.handleChannelMessage(channel, msg);
-      });
-
+    for (const channel of this.channels) {
       try {
-        await channel.start();
-        logger.info("Channel started", { channel: channel.name });
+        await this.startChannel(channel);
       } catch (err) {
-        logger.error("Failed to start channel", {
+        this.deps.logger.error("Failed to start channel", {
           channel: channel.name,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -272,14 +280,104 @@ export class Gateway implements Lifecycle {
   }
 
   private async stopChannels(): Promise<void> {
-    const channels = this.deps.channels ?? [];
-    for (const channel of channels) {
+    for (const channel of this.channels) {
       try {
-        await channel.stop();
+        await this.stopChannel(channel);
       } catch {
         // Best-effort
       }
     }
+  }
+
+  private rebuildAndSwapTools(reason: string, changedPaths?: string[]): SwapResult {
+    const startMs = Date.now();
+    const configStore = this.deps.configStore;
+    const prevSize = this.deps.agent.toolRegistry?.size ?? 0;
+    try {
+      const next = buildToolRegistry(this.deps.logger, this.deps.attachmentStore, configStore);
+      this.deps.agent.setToolRegistry(next);
+      this.deps.logger.info("Tool registry hot-swapped", {
+        reason, changedPaths,
+        prevTools: prevSize, newTools: next.size,
+        elapsedMs: Date.now() - startMs,
+      });
+      return { ok: true };
+    } catch (err) {
+      this.deps.logger.error("Tool registry hot-swap failed, keeping previous", {
+        reason, changedPaths,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return {
+        ok: false,
+        code: "TOOL_SWAP_FAILED",
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  private async rebuildAndSwapChannels(reason: string, changedPaths?: string[]): Promise<SwapResult> {
+    const startMs = Date.now();
+    const configStore = this.deps.configStore;
+    if (!configStore) {
+      return { ok: false, code: "CHANNEL_SWAP_FAILED", message: "No config store available" };
+    }
+    const oldChannels = this.channels;
+
+    const newChannels = buildChannels(configStore.current, this.deps.logger);
+
+    // Phase 2: stop old (required for exclusive resources like WhatsApp sessions)
+    const stoppedOld: Channel[] = [];
+    for (const ch of oldChannels) {
+      try {
+        await this.stopChannel(ch);
+        stoppedOld.push(ch);
+      } catch (err) {
+        this.deps.logger.error("Channel stop failed, aborting swap", {
+          reason, channel: ch.name, error: err instanceof Error ? err.message : String(err),
+        });
+        for (const stopped of stoppedOld) {
+          try { await this.startChannel(stopped); } catch {}
+        }
+        return {
+          ok: false,
+          code: "CHANNEL_SWAP_FAILED",
+          message: `Failed to stop ${ch.name}: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+    }
+
+    // Phase 3: start new
+    try {
+      for (const ch of newChannels) { await this.startChannel(ch); }
+    } catch (err) {
+      let rollbackFailed = 0;
+      for (const ch of oldChannels) {
+        try { await this.startChannel(ch); }
+        catch { rollbackFailed++; }
+      }
+      this.channels = oldChannels;
+      this.deps.logger.error("Channel swap failed, rolled back", {
+        reason, changedPaths,
+        rollbackAttempted: true,
+        rollbackSucceeded: rollbackFailed === 0,
+        rollbackFailedChannels: rollbackFailed,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return {
+        ok: false,
+        code: "CHANNEL_SWAP_FAILED",
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    // Phase 4: swap refs (old channels already stopped in Phase 2)
+    this.channels = newChannels;
+    this.deps.logger.info("Channels hot-swapped", {
+      reason, changedPaths,
+      prevChannels: oldChannels.length, newChannels: newChannels.length,
+      elapsedMs: Date.now() - startMs,
+    });
+    return { ok: true };
   }
 
   private async handleChannelMessage(channel: Channel, msg: import("@spaceduck/core").ChannelMessage): Promise<void> {
@@ -799,6 +897,18 @@ export class Gateway implements Lifecycle {
                 }
               }
 
+              // Hot-swap tool registry if tool config changed
+              if (shouldRebuildTools(changedPaths)) {
+                const r = this.rebuildAndSwapTools("config_patch", [...changedPaths]);
+                if (!r.ok) warnings.push({ code: r.code, message: r.message });
+              }
+
+              // Hot-swap channels if channel config changed
+              if (shouldRebuildChannels(changedPaths)) {
+                const r = await this.rebuildAndSwapChannels("config_patch", [...changedPaths]);
+                if (!r.ok) warnings.push({ code: r.code, message: r.message });
+              }
+
               const response: Record<string, unknown> = {
                 config: result.config,
                 rev: result.rev,
@@ -876,7 +986,17 @@ export class Gateway implements Lifecycle {
                 }
               }
 
-              return Response.json({ ok: true });
+              // Hot-swap tool registry if a tool-affecting secret changed
+              const secretWarnings: Array<{ code: string; message: string }> = [];
+              if (shouldRebuildToolsForSecret(body.path!)) {
+                const r = this.rebuildAndSwapTools("secret_update", [body.path!]);
+                if (!r.ok) secretWarnings.push({ code: r.code, message: r.message });
+              }
+
+              return Response.json({
+                ok: true,
+                ...(secretWarnings.length > 0 ? { warnings: secretWarnings } : {}),
+              });
             });
           } catch {
             return Response.json(
@@ -905,9 +1025,9 @@ export class Gateway implements Lifecycle {
         try {
           const body = (await req.json()) as { tool?: string };
           const tool = body.tool as ToolName | undefined;
-          if (!tool || !["web_search", "web_answer", "marker_scan"].includes(tool)) {
+          if (!tool || !["web_search", "web_answer", "marker_scan", "browser_navigate", "web_fetch"].includes(tool)) {
             return Response.json(
-              { ok: false, message: "Invalid tool name. Expected: web_search, web_answer, or marker_scan" },
+              { ok: false, message: "Invalid tool name. Expected: web_search, web_answer, marker_scan, browser_navigate, or web_fetch" },
               { status: 400 },
             );
           }
@@ -1235,6 +1355,50 @@ const EMBEDDING_REBUILD_PATHS = new Set([
   "/embedding/baseUrl",
   "/embedding/dimensions",
 ]);
+
+// ── Tool and channel hot-swap path sets ─────────────────────────────
+
+type SwapResult = { ok: true } | { ok: false; code: string; message: string };
+
+const TOOL_REBUILD_PATHS = new Set([
+  "/tools/webSearch/provider",
+  "/tools/webSearch/searxngUrl",
+  "/tools/webAnswer/enabled",
+  "/tools/marker/enabled",
+  "/tools/browser/enabled",
+  "/tools/webFetch/enabled",
+]);
+
+const TOOL_SECRET_PATHS = new Set([
+  "/tools/webSearch/secrets/braveApiKey",
+  "/tools/webAnswer/secrets/perplexityApiKey",
+]);
+
+const AI_SECRETS_AFFECTING_TOOLS = new Set([
+  "/ai/secrets/openrouterApiKey",
+]);
+
+const CHANNEL_REBUILD_PATHS = new Set([
+  "/channels/whatsapp/enabled",
+]);
+
+function shouldRebuildTools(changedPaths: Set<string>): boolean {
+  for (const p of TOOL_REBUILD_PATHS) {
+    if (changedPaths.has(p)) return true;
+  }
+  return false;
+}
+
+function shouldRebuildToolsForSecret(path: string): boolean {
+  return TOOL_SECRET_PATHS.has(path) || AI_SECRETS_AFFECTING_TOOLS.has(path);
+}
+
+function shouldRebuildChannels(changedPaths: Set<string>): boolean {
+  for (const p of CHANNEL_REBUILD_PATHS) {
+    if (changedPaths.has(p)) return true;
+  }
+  return false;
+}
 
 // ── Provider factory ─────────────────────────────────────────────────
 
@@ -1665,7 +1829,7 @@ export async function createGateway(overrides?: {
   const attachmentStore = new AttachmentStore();
 
   // Create tool registry with built-in tools
-  const toolRegistry = createToolRegistry(logger, attachmentStore, configStore);
+  const toolRegistry = buildToolRegistry(logger, attachmentStore, configStore);
 
   // Wire fact extractor to extract durable facts from assistant responses
   // Uses the LLM provider for intelligent extraction (falls back to regex if unavailable)
@@ -1686,17 +1850,7 @@ export async function createGateway(overrides?: {
   });
 
   // Create external channels (opt-in via product config)
-  const channels: Channel[] = [];
-
-  if (productConfig.channels.whatsapp.enabled) {
-    const { WhatsAppChannel } = require("@spaceduck/channel-whatsapp");
-    channels.push(
-      new WhatsAppChannel({
-        logger,
-        authDir: Bun.env.WHATSAPP_AUTH_DIR,
-      }),
-    );
-  }
+  const channels = buildChannels(productConfig, logger);
 
   const gateway = new Gateway({
     config,
@@ -1719,7 +1873,7 @@ export async function createGateway(overrides?: {
 
   await gateway.initStt();
 
-  gateway.toolStatusService = new ToolStatusService(toolRegistry, configStore ?? undefined);
+  gateway.toolStatusService = new ToolStatusService(() => agent.toolRegistry, configStore ?? undefined);
 
   return gateway;
 }

@@ -109,11 +109,15 @@ export function ToolsSection({ cfg }: SectionProps) {
 
   const webSearch = (getPath(config, "tools/webSearch") ?? {}) as Record<string, unknown>;
   const webAnswer = (getPath(config, "tools/webAnswer") ?? {}) as Record<string, unknown>;
+  const browserCfg = (getPath(config, "tools/browser") ?? {}) as Record<string, unknown>;
+  const webFetchCfg = (getPath(config, "tools/webFetch") ?? {}) as Record<string, unknown>;
   const marker = (getPath(config, "tools/marker") ?? {}) as Record<string, unknown>;
 
   const searchProvider = (webSearch.provider as string | null) ?? null;
   const searxngUrl = (webSearch.searxngUrl as string | null) ?? "";
   const webAnswerEnabled = (webAnswer.enabled as boolean) ?? true;
+  const browserEnabled = (browserCfg.enabled as boolean) ?? true;
+  const webFetchEnabled = (webFetchCfg.enabled as boolean) ?? true;
   const markerEnabled = (marker.enabled as boolean) ?? true;
 
   const hasBraveKey = isSecretSet(cfg.secrets, "/tools/webSearch/secrets/braveApiKey");
@@ -124,6 +128,8 @@ export function ToolsSection({ cfg }: SectionProps) {
   const { entries: toolStatus, testing, testResult, test: testTool } = useToolStatus();
   const wsStatus = toolStatus.find((e) => e.tool === "web_search");
   const waStatus = toolStatus.find((e) => e.tool === "web_answer");
+  const brStatus = toolStatus.find((e) => e.tool === "browser_navigate");
+  const wfStatus = toolStatus.find((e) => e.tool === "web_fetch");
   const mkStatus = toolStatus.find((e) => e.tool === "marker_scan");
 
   const patch = useCallback(
@@ -251,6 +257,75 @@ export function ToolsSection({ cfg }: SectionProps) {
                 onClick={() => testTool("web_answer")}
               >
                 {testing === "web_answer" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Test
+              </Button>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Browser */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div className="space-y-1">
+            <CardTitle className="text-base">Browser</CardTitle>
+            <CardDescription>
+              Headless browser for JavaScript-rendered pages.
+              {cfg.capabilities.browser && !cfg.capabilities.browser.available && (
+                <span className="block text-xs text-yellow-500 mt-1">
+                  {cfg.capabilities.browser.reason ?? "Chromium not installed."}
+                </span>
+              )}
+            </CardDescription>
+          </div>
+          <Switch
+            checked={browserEnabled}
+            onCheckedChange={(v) => patch("/tools/browser/enabled", v)}
+          />
+        </CardHeader>
+        {browserEnabled && (
+          <CardContent>
+            <div className="flex items-center justify-between pt-2 border-t">
+              <StatusBadge entry={brStatus} testResult={testResult["browser_navigate"]} />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={testing === "browser_navigate"}
+                onClick={() => testTool("browser_navigate")}
+              >
+                {testing === "browser_navigate" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Test
+              </Button>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Web Fetch */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div className="space-y-1">
+            <CardTitle className="text-base">Web Fetch</CardTitle>
+            <CardDescription>
+              Fetch and read web pages as plain text (no JavaScript).
+            </CardDescription>
+          </div>
+          <Switch
+            checked={webFetchEnabled}
+            onCheckedChange={(v) => patch("/tools/webFetch/enabled", v)}
+          />
+        </CardHeader>
+        {webFetchEnabled && (
+          <CardContent>
+            <div className="flex items-center justify-between pt-2 border-t">
+              <StatusBadge entry={wfStatus} testResult={testResult["web_fetch"]} />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={testing === "web_fetch"}
+                onClick={() => testTool("web_fetch")}
+              >
+                {testing === "web_fetch" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
                 Test
               </Button>
             </div>
