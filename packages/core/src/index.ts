@@ -32,3 +32,6 @@ export { type AgentDeps, type AgentRunResult, type AgentChunk, AgentLoop } from 
 
 // Tool registry
 export { type ToolHandler, ToolRegistry } from "./tool-registry";
+
+// Version
+export { GATEWAY_VERSION, CLI_VERSION, API_VERSION, GIT_SHA } from "./version";

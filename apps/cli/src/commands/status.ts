@@ -1,8 +1,12 @@
 import type { GlobalOpts } from "../index";
 import { apiFetch } from "../lib/api";
+import { API_VERSION } from "@spaceduck/core";
 
 interface HealthResponse {
   status: string;
+  version?: string;
+  apiVersion?: number;
+  commit?: string;
   uptime: number;
   provider: string;
   model: string;
@@ -14,7 +18,6 @@ interface ProviderStatusResponse {
 }
 
 export async function status(opts: GlobalOpts) {
-  // Gateway health
   let health: HealthResponse;
   try {
     const result = await apiFetch<HealthResponse>(opts, "/api/health");
@@ -39,10 +42,18 @@ export async function status(opts: GlobalOpts) {
     providerError = err instanceof Error ? err.message : "check failed";
   }
 
+  // Compatibility check
+  const compatible = health.apiVersion === undefined || health.apiVersion === API_VERSION;
+
   if (opts.json) {
     console.log(JSON.stringify({
       gateway: "connected",
       url: opts.gateway,
+      version: health.version ?? null,
+      apiVersion: health.apiVersion ?? null,
+      commit: health.commit ?? null,
+      cliApiVersion: API_VERSION,
+      compatible,
       uptime: health.uptime,
       provider: health.provider,
       model: health.model,
@@ -57,6 +68,13 @@ export async function status(opts: GlobalOpts) {
   const providerLabel = providerOk ? "responding" : (providerError ?? "error");
 
   console.log(`Gateway  ● connected  (${opts.gateway})`);
+  if (health.version) {
+    const commitStr = health.commit && health.commit !== "dev" ? ` [${health.commit.slice(0, 7)}]` : "";
+    console.log(`         v${health.version} (api: ${health.apiVersion ?? "??"})${commitStr}`);
+  }
+  if (!compatible) {
+    console.log(`         ○ incompatible (gateway api: ${health.apiVersion}, cli supports: ${API_VERSION})`);
+  }
   console.log(`Uptime   ${uptime}`);
   console.log(`Chat     ${health.provider} / ${health.model}`);
   console.log(`Provider ${providerDot} ${providerLabel}`);

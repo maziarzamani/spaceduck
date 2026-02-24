@@ -1,0 +1,42 @@
+services:
+  spaceduck:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
+    container_name: spaceduck
+    ports:
+      - "3000:3000"
+    volumes:
+      - spaceduck-data:/data
+    environment:
+      PORT: "3000"
+      MEMORY_CONNECTION_STRING: "/data/spaceduck.db"
+
+      LOG_LEVEL: "info"
+
+      # Provider is configured via the Settings UI or `spaceduck setup`.
+      # To override via env vars instead, uncomment one of the blocks below.
+
+      # Cloud provider:
+      # PROVIDER_NAME: "gemini"
+      # GEMINI_API_KEY: "${GEMINI_API_KEY}"
+
+      # PROVIDER_NAME: "openrouter"
+      # OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
+
+      # PROVIDER_NAME: "bedrock"
+      # AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      # AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      # AWS_REGION: "${AWS_REGION}"
+
+      # Local model server on the host machine:
+      # PROVIDER_NAME: "llamacpp"
+      # PROVIDER_BASE_URL: "http://host.docker.internal:8080/v1"   # macOS/Windows
+      # On Linux, use --network=host or your host IP (see docs)
+    restart: unless-stopped
+
+volumes:
+  spaceduck-data:
+    driver: local

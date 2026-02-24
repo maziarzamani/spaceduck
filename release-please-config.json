@@ -1,11 +1,18 @@
 {
   "packages": {
-    ".": {
+    "packages/gateway": {
       "release-type": "node",
-      "package-name": "spaceduck",
+      "package-name": "@spaceduck/gateway",
+      "component": "gateway",
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "exclude-paths": ["apps/spaceduck-website"]
+      "bump-patch-for-minor-pre-major": false
+    },
+    "apps/cli": {
+      "release-type": "node",
+      "package-name": "@spaceduck/cli",
+      "component": "cli",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false
     }
   },
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"

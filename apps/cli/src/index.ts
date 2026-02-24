@@ -6,6 +6,7 @@ import { configSecret } from "./commands/config-secret";
 import { configPaths } from "./commands/config-paths";
 import { status } from "./commands/status";
 import { setup } from "./commands/setup";
+import { CLI_VERSION, API_VERSION } from "@spaceduck/core";
 
 const USAGE = `
 spaceduck — CLI for managing your Spaceduck gateway
@@ -15,6 +16,7 @@ Usage:
   spaceduck setup --mode local|cloud|advanced  Setup with a specific mode
   spaceduck setup --skip                    Skip setup for now
   spaceduck status                          Check gateway and provider health
+  spaceduck version                         Print CLI and API version
   spaceduck config get [path]               Read config (optionally a specific path)
   spaceduck config set <path> <value>       Update a config value
   spaceduck config paths                    List all config paths and current values
@@ -31,6 +33,7 @@ Examples:
   spaceduck setup
   spaceduck setup --mode cloud
   spaceduck status
+  spaceduck version
   spaceduck config get /ai/provider
   spaceduck config set /ai/model us.amazon.nova-2-pro-v1:0
   spaceduck config secret set /ai/secrets/bedrockApiKey
@@ -85,6 +88,10 @@ async function main() {
     switch (command) {
       case "status":
         await status(opts);
+        break;
+
+      case "version":
+        console.log(`spaceduck-cli ${CLI_VERSION} (api: ${API_VERSION})`);
         break;
 
       case "setup":

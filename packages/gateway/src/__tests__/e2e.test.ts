@@ -51,6 +51,11 @@ describe("Gateway E2E smoke", () => {
     expect(body.provider).toBe("smoke-test");
     expect(body.memory).toBe("sqlite");
     expect(typeof body.uptime).toBe("number");
+    expect(typeof body.version).toBe("string");
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(typeof body.apiVersion).toBe("number");
+    expect(body.apiVersion).toBeGreaterThan(0);
+    expect(typeof body.commit).toBe("string");
   });
 
   it("should return 404 for unknown routes", async () => {

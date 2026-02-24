@@ -1,5 +1,6 @@
 import { CliError, type GlobalOpts } from "../index";
 import { apiFetch } from "../lib/api";
+import { ensureCompatible } from "../lib/compat";
 
 interface ConfigResponse {
   config: Record<string, unknown>;
@@ -18,6 +19,8 @@ export async function configSet(opts: GlobalOpts, args: string[]) {
     console.error("Example: spaceduck config set /ai/model us.amazon.nova-2-pro-v1:0");
     process.exit(1);
   }
+
+  await ensureCompatible(opts);
 
   const [path, rawValue] = args;
 
