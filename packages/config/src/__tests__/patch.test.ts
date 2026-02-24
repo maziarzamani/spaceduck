@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { applyPatch, PatchError } from "../patch";
 import { defaultConfig } from "../defaults";
+import { SpaceduckConfigSchema } from "../schema";
 import type { ConfigPatchOp } from "../types";
 
 describe("applyPatch", () => {
@@ -133,5 +134,30 @@ describe("applyPatch", () => {
         { op: "remove" as "replace", path: "/ai/systemPrompt", value: undefined },
       ]),
     ).toThrow(/unsupported op/i);
+  });
+
+  // ── URL validation through patch pipeline ─────────────────────
+
+  test("replace: invalid URL is structurally accepted by applyPatch but rejected by safeParse", () => {
+    const config = defaultConfig();
+    const patched = applyPatch(config, [
+      { op: "replace", path: "/tools/webSearch/searxngUrl", value: "nope" },
+    ]);
+    expect(patched.tools.webSearch.searxngUrl).toBe("nope");
+
+    const result = SpaceduckConfigSchema.safeParse(patched);
+    expect(result.success).toBe(false);
+  });
+
+  test("replace: valid URL passes both applyPatch and safeParse", () => {
+    const config = defaultConfig();
+    const patched = applyPatch(config, [
+      { op: "replace", path: "/tools/webSearch/searxngUrl", value: "http://localhost:8080" },
+    ]);
+
+    const result = SpaceduckConfigSchema.safeParse(patched);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.tools.webSearch.searxngUrl).toBe("http://localhost:8080");
   });
 });

@@ -2,6 +2,19 @@ import { z } from "zod";
 import { hostname } from "node:os";
 import { DEFAULT_SYSTEM_PROMPT } from "./constants";
 
+export const HttpUrlSchema = z
+  .string()
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "http:" || url.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }, "Invalid URL (expected http:// or https://)");
+
+export const SttModelEnum = z.enum(["tiny", "base", "small", "medium", "large"]);
+
 const AiProviderEnum = z.enum(["gemini", "bedrock", "openrouter", "lmstudio", "llamacpp"]);
 
 const AiSecretsSchema = z.object({
@@ -15,7 +28,7 @@ const AiSecretsSchema = z.object({
 const AiSchema = z.object({
   provider: AiProviderEnum.default("gemini"),
   model: z.string().nullable().default("gemini-2.5-flash"),
-  baseUrl: z.string().nullable().default(null),
+  baseUrl: HttpUrlSchema.nullable().default(null),
   temperature: z.number().min(0).max(2).default(0.7),
   systemPrompt: z.string().nullable().default(DEFAULT_SYSTEM_PROMPT),
   region: z.string().nullable().default(null),
@@ -37,13 +50,13 @@ const EmbeddingSchema = z.object({
   enabled: z.boolean().default(true),
   provider: EmbeddingProviderEnum.nullable().default(null),
   model: z.string().nullable().default(null),
-  baseUrl: z.string().nullable().default(null),
+  baseUrl: HttpUrlSchema.nullable().default(null),
   dimensions: z.number().int().positive().nullable().default(null),
 });
 
 const SttSchema = z.object({
   enabled: z.boolean().default(true),
-  model: z.string().default("small"),
+  model: SttModelEnum.default("small"),
   languageHint: z.string().nullable().default(null),
 });
 
@@ -55,7 +68,7 @@ const WebSearchProviderEnum = z.enum(["brave", "searxng"]);
 
 const WebSearchSchema = z.object({
   provider: WebSearchProviderEnum.nullable().default(null),
-  searxngUrl: z.string().nullable().default(null),
+  searxngUrl: HttpUrlSchema.nullable().default(null),
   secrets: WebSearchSecretsSchema.default({}),
 });
 

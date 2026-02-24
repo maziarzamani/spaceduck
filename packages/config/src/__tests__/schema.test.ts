@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { SpaceduckConfigSchema } from "../schema";
+import { SpaceduckConfigSchema, HttpUrlSchema, SttModelEnum } from "../schema";
 import { defaultConfig } from "../defaults";
 import type { ConfigPatchOp } from "../types";
 
@@ -45,12 +45,12 @@ describe("SpaceduckConfigSchema", () => {
   test("accepts partial overrides", () => {
     const config = SpaceduckConfigSchema.parse({
       ai: { provider: "bedrock", model: "us.anthropic.claude-sonnet-4-20250514:0", region: "us-east-1" },
-      stt: { model: "turbo", languageHint: "da" },
+      stt: { model: "medium", languageHint: "da" },
     });
     expect(config.ai.provider).toBe("bedrock");
     expect(config.ai.model).toBe("us.anthropic.claude-sonnet-4-20250514:0");
     expect(config.ai.region).toBe("us-east-1");
-    expect(config.stt.model).toBe("turbo");
+    expect(config.stt.model).toBe("medium");
     expect(config.stt.languageHint).toBe("da");
     // Other fields still have defaults
     expect(config.ai.temperature).toBe(0.7);
@@ -153,5 +153,111 @@ describe("OnboardingSchema", () => {
     expect(config.onboarding.completedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(config.onboarding.versionCompleted).toBe(1);
     expect(config.onboarding.skippedAt).toBeNull();
+  });
+});
+
+describe("HttpUrlSchema", () => {
+  const schema = HttpUrlSchema.nullable();
+
+  test("accepts http://localhost:8080", () => {
+    expect(schema.parse("http://localhost:8080")).toBe("http://localhost:8080");
+  });
+
+  test("accepts https://example.com", () => {
+    expect(schema.parse("https://example.com")).toBe("https://example.com");
+  });
+
+  test("accepts http://searxng:8080 (Docker service name)", () => {
+    expect(schema.parse("http://searxng:8080")).toBe("http://searxng:8080");
+  });
+
+  test("accepts http://127.0.0.1:8080/v1 (IP with path)", () => {
+    expect(schema.parse("http://127.0.0.1:8080/v1")).toBe("http://127.0.0.1:8080/v1");
+  });
+
+  test("accepts null (nullable wrapper)", () => {
+    expect(schema.parse(null)).toBeNull();
+  });
+
+  test("rejects plain string", () => {
+    expect(() => schema.parse("not-a-url")).toThrow();
+  });
+
+  test("rejects ftp:// protocol", () => {
+    expect(() => schema.parse("ftp://example.com")).toThrow();
+  });
+
+  test("rejects empty string", () => {
+    expect(() => schema.parse("")).toThrow();
+  });
+
+  test("rejects string with only whitespace (no trim in schema)", () => {
+    expect(() => schema.parse("  ")).toThrow();
+  });
+
+  test("accepts untrimmed URL (new URL() is whitespace-tolerant)", () => {
+    expect(schema.parse("  http://localhost:8080  ")).toBe("  http://localhost:8080  ");
+  });
+
+  test("works through full config parse for searxngUrl", () => {
+    const config = SpaceduckConfigSchema.parse({
+      tools: { webSearch: { searxngUrl: "http://localhost:8080" } },
+    });
+    expect(config.tools.webSearch.searxngUrl).toBe("http://localhost:8080");
+  });
+
+  test("rejects invalid searxngUrl through full config parse", () => {
+    expect(() =>
+      SpaceduckConfigSchema.parse({
+        tools: { webSearch: { searxngUrl: "nope" } },
+      }),
+    ).toThrow();
+  });
+
+  test("works through full config parse for ai.baseUrl", () => {
+    const config = SpaceduckConfigSchema.parse({
+      ai: { baseUrl: "http://localhost:1234/v1" },
+    });
+    expect(config.ai.baseUrl).toBe("http://localhost:1234/v1");
+  });
+
+  test("rejects invalid ai.baseUrl through full config parse", () => {
+    expect(() =>
+      SpaceduckConfigSchema.parse({
+        ai: { baseUrl: "not-valid" },
+      }),
+    ).toThrow();
+  });
+
+  test("works through full config parse for embedding.baseUrl", () => {
+    const config = SpaceduckConfigSchema.parse({
+      embedding: { baseUrl: "http://localhost:1234/v1" },
+    });
+    expect(config.embedding.baseUrl).toBe("http://localhost:1234/v1");
+  });
+});
+
+describe("SttModelEnum", () => {
+  test("accepts all valid Whisper model sizes", () => {
+    for (const size of ["tiny", "base", "small", "medium", "large"] as const) {
+      expect(SttModelEnum.parse(size)).toBe(size);
+    }
+  });
+
+  test("rejects invalid model names", () => {
+    expect(() => SttModelEnum.parse("huge")).toThrow();
+    expect(() => SttModelEnum.parse("turbo")).toThrow();
+    expect(() => SttModelEnum.parse("")).toThrow();
+  });
+
+  test("default is 'small' through full config parse", () => {
+    const config = SpaceduckConfigSchema.parse({});
+    expect(config.stt.model).toBe("small");
+  });
+
+  test("rejects invalid model through full config parse", () => {
+    expect(() =>
+      SpaceduckConfigSchema.parse({ stt: { model: "xlarge" } }),
+    ).toThrow();
   });
 });

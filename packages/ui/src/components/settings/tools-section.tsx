@@ -1,9 +1,7 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Label } from "../../ui/label";
-import { Input } from "../../ui/input";
 import { Switch } from "../../ui/switch";
-import { Separator } from "../../ui/separator";
 import {
   Select,
   SelectTrigger,
@@ -11,36 +9,9 @@ import {
   SelectContent,
   SelectItem,
 } from "../../ui/select";
+import { DebouncedInput } from "../shared/debounced-input";
 import type { SectionProps } from "./shared";
-import { getPath, isSecretSet } from "./shared";
-
-function DebouncedInput({
-  value: externalValue,
-  onCommit,
-  ...props
-}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "value"> & {
-  value: string;
-  onCommit: (value: string) => void;
-}) {
-  const [local, setLocal] = useState(externalValue);
-  useEffect(() => setLocal(externalValue), [externalValue]);
-
-  return (
-    <Input
-      {...props}
-      value={local}
-      onChange={(e) => setLocal(e.target.value)}
-      onBlur={() => {
-        if (local !== externalValue) onCommit(local);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
-    />
-  );
-}
+import { getPath, isSecretSet, validateHttpUrl } from "./shared";
 
 export function ToolsSection({ cfg }: SectionProps) {
   const config = cfg.config;
@@ -57,6 +28,8 @@ export function ToolsSection({ cfg }: SectionProps) {
 
   const hasBraveKey = isSecretSet(cfg.secrets, "/tools/webSearch/secrets/braveApiKey");
   const hasPerplexityKey = isSecretSet(cfg.secrets, "/tools/webAnswer/secrets/perplexityApiKey");
+
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   const patch = useCallback(
     (path: string, value: unknown) => {
@@ -107,7 +80,19 @@ export function ToolsSection({ cfg }: SectionProps) {
                 id="searxng-url"
                 value={searxngUrl}
                 placeholder="http://localhost:8080"
-                onCommit={(v) => patch("/tools/webSearch/searxngUrl", v || null)}
+                error={urlError}
+                onLocalChange={() => setUrlError(null)}
+                onCommit={async (v) => {
+                  const result = validateHttpUrl(v);
+                  if (!result.ok) {
+                    setUrlError(result.message);
+                    return false;
+                  }
+                  setUrlError(null);
+                  return cfg.patchConfig([
+                    { op: "replace", path: "/tools/webSearch/searxngUrl", value: result.normalized || null },
+                  ]);
+                }}
               />
             </div>
           )}

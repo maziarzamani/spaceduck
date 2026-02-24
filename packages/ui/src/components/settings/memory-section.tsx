@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Label } from "../../ui/label";
-import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
 import { Separator } from "../../ui/separator";
@@ -12,67 +11,10 @@ import {
   SelectContent,
   SelectItem,
 } from "../../ui/select";
-import { Check, AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { DebouncedInput } from "../shared/debounced-input";
+import { validateHttpUrl } from "./shared";
 import type { SectionProps } from "./shared";
-
-// ── Save flash ──────────────────────────────────────────────────────
-
-function useSaveFlash() {
-  const [saved, setSaved] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const flash = useCallback(() => {
-    setSaved(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setSaved(false), 1500);
-  }, []);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  return { saved, flash };
-}
-
-function SavedBadge({ visible }: { visible: boolean }) {
-  if (!visible) return null;
-  return (
-    <span className="inline-flex items-center gap-1 text-xs text-green-500 animate-in fade-in">
-      <Check size={12} /> Saved
-    </span>
-  );
-}
-
-function DebouncedInput({
-  value: externalValue,
-  onCommit,
-  ...props
-}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "value"> & {
-  value: string;
-  onCommit: (value: string) => Promise<boolean>;
-}) {
-  const [local, setLocal] = useState(externalValue);
-  const { saved, flash } = useSaveFlash();
-  useEffect(() => setLocal(externalValue), [externalValue]);
-
-  const commit = async () => {
-    if (local !== externalValue) {
-      const ok = await onCommit(local);
-      if (ok) flash();
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <Input
-        {...props}
-        value={local}
-        onChange={(e) => setLocal(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        className={`flex-1 ${props.className ?? ""}`}
-      />
-      <SavedBadge visible={saved} />
-    </div>
-  );
-}
 
 // ── Embedding status hook ────────────────────────────────────────────
 
@@ -129,6 +71,7 @@ export function MemorySection({ cfg }: SectionProps) {
   const patch = (path: string, value: unknown) =>
     cfg.patchConfig([{ op: "replace", path, value }]);
 
+  const [baseUrlError, setBaseUrlError] = useState<string | null>(null);
   const { status: embeddingStatus, errorMsg: embeddingError, check: checkEmbedding } =
     useEmbeddingStatus();
 
@@ -189,11 +132,19 @@ export function MemorySection({ cfg }: SectionProps) {
                 <DebouncedInput
                   value={embeddingBaseUrl}
                   placeholder="http://localhost:1234/v1"
-                  onCommit={async (v) =>
-                    cfg.patchConfig([
-                      { op: "replace", path: "/embedding/baseUrl", value: v || null },
-                    ])
-                  }
+                  error={baseUrlError}
+                  onLocalChange={() => setBaseUrlError(null)}
+                  onCommit={async (v) => {
+                    const result = validateHttpUrl(v);
+                    if (!result.ok) {
+                      setBaseUrlError(result.message);
+                      return false;
+                    }
+                    setBaseUrlError(null);
+                    return cfg.patchConfig([
+                      { op: "replace", path: "/embedding/baseUrl", value: result.normalized || null },
+                    ]);
+                  }}
                 />
                 <p className="text-xs text-muted-foreground">
                   Set this to use a different server for embeddings than for chat.
