@@ -9,9 +9,12 @@ interface ConfigCapabilities {
   stt?: { available: boolean; reason?: string };
   marker?: { available: boolean; reason?: string };
   embedding?: { available: boolean; reason?: string };
+  browser?: { available: boolean; reason?: string };
   aiProviderReady?: boolean;
   webSearchReady?: boolean;
   webAnswerReady?: boolean;
+  browserReady?: boolean;
+  webFetchReady?: boolean;
 }
 
 interface ConfigResponse {
