@@ -41,7 +41,8 @@
         "group": "Install",
         "pages": [
           "install/installer",
-          "install/from-source"
+          "install/from-source",
+          "install/docker"
         ]
       },
       {

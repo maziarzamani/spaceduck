@@ -1,0 +1,36 @@
+# Dependencies / builds
+node_modules
+dist
+**/node_modules
+**/dist
+
+# VCS / CI
+.git
+.github
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Desktop app / heavy local artifacts
+apps/desktop
+**/target
+**/*.rs.bk
+
+# Website and docs (not needed for gateway image)
+apps/spaceduck-website
+docs
+
+# Misc
+*.tgz
+*.log
+coverage
+tmp
+temp
