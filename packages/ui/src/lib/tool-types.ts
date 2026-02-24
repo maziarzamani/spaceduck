@@ -1,4 +1,4 @@
-export type ToolName = "web_search" | "web_answer" | "marker_scan" | "browser_navigate" | "web_fetch";
+export type ToolName = "web_search" | "web_answer" | "marker_scan" | "browser_navigate" | "web_fetch" | "render_chart";
 
 export type ToolStatus = "ok" | "error" | "not_configured" | "disabled" | "unavailable";
 

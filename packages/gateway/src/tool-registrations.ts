@@ -37,7 +37,7 @@ export function buildToolRegistry(
       {
         name: "web_fetch",
         description:
-          "Fetch a URL and return its content as readable text. When the user provides a specific URL, ALWAYS try this tool first. Works for HTML pages, JSON APIs, and plain text. Only fall back to browser_navigate if content requires JavaScript.",
+          "Fetch a URL and return readable text content (HTML, JSON, or plain text). Prefer this when the user gives a specific URL. Returns raw fetched content, not JavaScript-rendered DOM. If the page requires JavaScript, login, or heavy client-side rendering, use browser_navigate instead.",
         parameters: {
           type: "object",
           properties: {
@@ -74,7 +74,7 @@ export function buildToolRegistry(
       {
         name: "browser_navigate",
         description:
-          "Navigate the headless browser to a URL. Use for pages that require JavaScript rendering. Returns navigation status.",
+          "Navigate the headless browser to a URL and make it the current page. Use for pages that require JavaScript rendering. After navigation, usually call browser_snapshot to inspect interactive elements.",
         parameters: {
           type: "object",
           properties: {
@@ -111,7 +111,7 @@ export function buildToolRegistry(
       {
         name: "browser_click",
         description:
-          "Click an element by its ref number from the most recent snapshot.",
+          "Click an element by ref from the most recent browser_snapshot. If refs are stale after navigation or page updates, take a new snapshot first.",
         parameters: {
           type: "object",
           properties: {
@@ -131,7 +131,7 @@ export function buildToolRegistry(
       {
         name: "browser_type",
         description:
-          "Type text into an input element by its ref number. Set clear=true to replace existing content.",
+          "Type text into an input by ref from the most recent browser_snapshot. Use clear=true to replace existing content. If the page changed since the snapshot, take a new snapshot first.",
         parameters: {
           type: "object",
           properties: {
@@ -182,7 +182,7 @@ export function buildToolRegistry(
       {
         name: "browser_wait",
         description:
-          "Wait for a condition: a time delay, a CSS selector to appear, a URL match, a load state, or a JS expression to become truthy.",
+          "Wait for one condition on the current page: a time delay (timeMs), CSS selector (selector), URL match (url), load state (state), or JavaScript condition (jsCondition). Prefer passing exactly one condition unless you intentionally need combined waiting.",
         parameters: {
           type: "object",
           properties: {
@@ -249,10 +249,7 @@ export function buildToolRegistry(
       {
         name: "web_search",
         description:
-          "Find web pages about a query and return a ranked list of results (title, URL, snippet, optional published date). " +
-          "Use this when you need sources, links, or to compare multiple pages. " +
-          "Do NOT use this tool to write a final answer; it returns search results, not a synthesized response. " +
-          "If the user asks for a direct answer with citations, prefer the web_answer tool.",
+          "Search the web and return ranked results (title, URL, snippet, optional date). Use this to find sources, compare pages, or gather links. This tool does not synthesize a final answer. For a direct cited answer, use web_answer.",
         parameters: {
           type: "object",
           properties: {
@@ -314,9 +311,7 @@ export function buildToolRegistry(
       {
         name: "web_answer",
         description:
-          "Answer a factual question using real-time web search and return a concise answer with sources. " +
-          "Use this when the user wants a direct answer with citations. " +
-          "If sources/citations are missing (provider limitation), say so explicitly and suggest using web_search to verify.",
+          "Answer a factual question using live web search and return a concise response with sources when available. Use this when the user wants a direct answer. Prefer web_search when you need to inspect or compare sources manually.",
         parameters: {
           type: "object",
           properties: {
@@ -437,8 +432,7 @@ export function buildToolRegistry(
       {
         name: "config_set",
         description:
-          "Change a single Spaceduck configuration value. Uses a JSON Pointer path and the new value. " +
-          "Cannot set secret paths (API keys) — tell the user to use Settings > Secrets instead.",
+          "Replace a single non-secret config value using a JSON Pointer path. Path must already exist. Secret paths (API keys) cannot be set via chat tools and must be managed in Settings > Secrets.",
         parameters: {
           type: "object",
           properties: {
@@ -492,6 +486,107 @@ export function buildToolRegistry(
 
     log.info("config_get + config_set registered");
   }
+
+  // ── render_chart ──────────────────────────────────────────────────
+  // Validates chart data and returns a formatted chart code block.
+  // The UI renders ```chart blocks as interactive Recharts visualizations.
+
+  registry.register(
+    {
+      name: "render_chart",
+      description:
+        "Render a visual chart in the conversation. Call this tool with the chart specification and include the returned code block verbatim in your response. " +
+        "Supported types: bar, line, area, pie. Data values for series must be numbers. Max 50 rows, max 8 series.",
+      parameters: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["bar", "line", "area", "pie"],
+            description: "Chart type.",
+          },
+          title: { type: "string", description: "Chart title (optional)." },
+          description: { type: "string", description: "Short description below the title (optional)." },
+          data: {
+            type: "array",
+            items: { type: "object" },
+            description: "Array of data objects. Each object is a row with string keys and string/number values.",
+          },
+          xKey: {
+            type: "string",
+            description: "Key for the X axis / category axis (required for bar, line, area).",
+          },
+          series: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                key: { type: "string", description: "Data key for this series." },
+                label: { type: "string", description: "Display label (optional)." },
+              },
+              required: ["key"],
+            },
+            description: "Series to plot (required for bar, line, area). Max 8.",
+          },
+          nameKey: { type: "string", description: "Key for slice names (required for pie)." },
+          valueKey: { type: "string", description: "Key for slice values (required for pie)." },
+          stacked: { type: "boolean", description: "Stack series (bar/area only, default false)." },
+          donut: { type: "boolean", description: "Donut style (pie only, default false)." },
+          height: { type: "number", description: "Chart height in pixels (100-400, default 240)." },
+        },
+        required: ["type", "data"],
+      },
+    },
+    async (args) => {
+      const type = args.type as string;
+      const data = args.data as unknown[];
+
+      if (!Array.isArray(data) || data.length === 0) {
+        return "Error: data must be a non-empty array of objects.";
+      }
+      if (data.length > 50) {
+        return `Error: too many data rows (${data.length}). Maximum is 50.`;
+      }
+
+      const spec: Record<string, unknown> = { version: 1, type, data };
+
+      if (args.title) spec.title = args.title;
+      if (args.description) spec.description = args.description;
+      if (args.height) spec.height = args.height;
+
+      if (type === "pie") {
+        if (!args.nameKey || !args.valueKey) {
+          return "Error: pie charts require nameKey and valueKey.";
+        }
+        spec.nameKey = args.nameKey;
+        spec.valueKey = args.valueKey;
+        if (args.donut) spec.donut = true;
+      } else {
+        if (!args.xKey) {
+          return `Error: ${type} charts require xKey.`;
+        }
+        if (!args.series || !Array.isArray(args.series) || (args.series as unknown[]).length === 0) {
+          return `Error: ${type} charts require at least one series.`;
+        }
+        if ((args.series as unknown[]).length > 8) {
+          return `Error: too many series (${(args.series as unknown[]).length}). Maximum is 8.`;
+        }
+        spec.xKey = args.xKey;
+        spec.series = args.series;
+        if (args.stacked) spec.stacked = true;
+      }
+
+      const json = JSON.stringify(spec);
+      log.debug("render_chart", { type, rows: data.length });
+
+      return (
+        "Chart rendered. Include this code block verbatim in your response:\n\n" +
+        "```chart\n" + json + "\n```"
+      );
+    },
+  );
+
+  log.info("render_chart registered");
 
   log.info("Tool registry initialized", { tools: registry.size });
   return registry;

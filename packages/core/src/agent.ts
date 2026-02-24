@@ -59,7 +59,7 @@ export type AgentChunk =
   | { type: "tool_call"; toolCall: ToolCall }
   | { type: "tool_result"; toolResult: ToolResult };
 
-const DEFAULT_MAX_TOOL_ROUNDS = 10;
+const DEFAULT_MAX_TOOL_ROUNDS = 20;
 
 /**
  * The agent loop: receives a user message, builds context, calls the provider,
@@ -169,12 +169,10 @@ export class AgentLoop {
       const pendingToolCalls: ToolCall[] = [];
       let status: "completed" | "failed_partial" | "failed_empty" = "failed_empty";
 
-      // After executing tools, omit the tools array so the model responds
-      // with text instead of calling tools again.  This follows the LM Studio
-      // recommended multi-turn tool-use flow and prevents infinite tool loops
-      // with local models (Qwen, Llama, etc.).
-      const hasToolResults = round > 0 && totalToolCalls > 0;
-      const roundTools = hasToolResults ? undefined : (toolDefs.length > 0 ? toolDefs : undefined);
+      // Always send tool definitions on every round. The model signals
+      // completion via stop_reason/finish_reason, and maxToolRounds acts
+      // as the safety cap against infinite loops.
+      const roundTools = toolDefs.length > 0 ? toolDefs : undefined;
 
       try {
         for await (const chunk of this.deps.provider.chat(contextResult.value, {

@@ -23,6 +23,11 @@
   --sd-ring: 262 55% 57% / 0.3;
   --sd-popover: 0 0% 100%;
   --sd-popover-foreground: 240 10% 4%;
+  --sd-chart-1: 262 55% 57%;
+  --sd-chart-2: 173 58% 39%;
+  --sd-chart-3: 43 74% 66%;
+  --sd-chart-4: 12 76% 61%;
+  --sd-chart-5: 197 37% 46%;
 }
 
 .dark {
@@ -45,6 +50,11 @@
   --sd-ring: 262 55% 63% / 0.3;
   --sd-popover: 240 10% 8%;
   --sd-popover-foreground: 0 0% 98%;
+  --sd-chart-1: 262 55% 63%;
+  --sd-chart-2: 173 58% 52%;
+  --sd-chart-3: 43 74% 70%;
+  --sd-chart-4: 12 76% 65%;
+  --sd-chart-5: 197 37% 58%;
 }
 
 @theme inline {

@@ -98,6 +98,7 @@ export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
         <MessageList
           messages={ws.messages}
           pendingStream={ws.pendingStream}
+          toolActivities={ws.toolActivities}
         />
 
         <ChatInput
