@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Label } from "../../ui/label";
+import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
 import {
   Select,
@@ -9,9 +10,98 @@ import {
   SelectContent,
   SelectItem,
 } from "../../ui/select";
+import { Loader2 } from "lucide-react";
 import { DebouncedInput } from "../shared/debounced-input";
 import type { SectionProps } from "./shared";
 import { getPath, isSecretSet, validateHttpUrl } from "./shared";
+import type { ToolName, ToolStatusEntry, ToolTestResponse } from "../../lib/tool-types";
+
+function getApiBase(): string {
+  const stored = localStorage.getItem("spaceduck.gatewayUrl");
+  if (stored) return stored;
+  if (typeof window !== "undefined" && "__TAURI__" in window) return "http://localhost:3000";
+  return window.location.origin;
+}
+
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem("spaceduck.token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function useToolStatus() {
+  const [entries, setEntries] = useState<ToolStatusEntry[]>([]);
+  const [testing, setTesting] = useState<ToolName | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, ToolTestResponse>>({});
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(`${getApiBase()}/api/tools/status`, {
+        headers: getAuthHeaders(),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const data = await res.json() as { tools: ToolStatusEntry[] };
+        setEntries(data.tools);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const test = useCallback(async (tool: ToolName) => {
+    setTesting(tool);
+    setTestResult((prev) => { const n = { ...prev }; delete n[tool]; return n; });
+    try {
+      const res = await fetch(`${getApiBase()}/api/tools/test`, {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ tool }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await res.json() as ToolTestResponse;
+      setTestResult((prev) => ({ ...prev, [tool]: data }));
+      refresh();
+    } catch {
+      setTestResult((prev) => ({ ...prev, [tool]: { tool, ok: false, message: "Request failed" } }));
+    } finally {
+      setTesting(null);
+    }
+  }, [refresh]);
+
+  return { entries, testing, testResult, test, refresh };
+}
+
+function StatusBadge({ entry, testResult }: { entry?: ToolStatusEntry; testResult?: ToolTestResponse }) {
+  if (testResult) {
+    return (
+      <span className={`text-xs font-medium ${testResult.ok ? "text-green-500" : "text-destructive"}`}>
+        {testResult.ok ? "OK" : testResult.message ? `Error: ${testResult.message.slice(0, 60)}` : "Error"}
+        {testResult.durationMs != null && ` (${testResult.durationMs}ms)`}
+      </span>
+    );
+  }
+  if (!entry) return null;
+  const colors: Record<string, string> = {
+    ok: "text-green-500",
+    error: "text-destructive",
+    not_configured: "text-muted-foreground",
+    disabled: "text-muted-foreground",
+    unavailable: "text-yellow-500",
+  };
+  const labels: Record<string, string> = {
+    ok: "Ready",
+    error: "Error",
+    not_configured: "Not configured",
+    disabled: "Disabled",
+    unavailable: "Unavailable",
+  };
+  return (
+    <span className={`text-xs font-medium ${colors[entry.status] ?? "text-muted-foreground"}`}>
+      {labels[entry.status] ?? entry.status}
+      {entry.message && ` — ${entry.message.slice(0, 60)}`}
+    </span>
+  );
+}
 
 export function ToolsSection({ cfg }: SectionProps) {
   const config = cfg.config;
@@ -30,6 +120,11 @@ export function ToolsSection({ cfg }: SectionProps) {
   const hasPerplexityKey = isSecretSet(cfg.secrets, "/tools/webAnswer/secrets/perplexityApiKey");
 
   const [urlError, setUrlError] = useState<string | null>(null);
+
+  const { entries: toolStatus, testing, testResult, test: testTool } = useToolStatus();
+  const wsStatus = toolStatus.find((e) => e.tool === "web_search");
+  const waStatus = toolStatus.find((e) => e.tool === "web_answer");
+  const mkStatus = toolStatus.find((e) => e.tool === "marker_scan");
 
   const patch = useCallback(
     (path: string, value: unknown) => {
@@ -105,6 +200,21 @@ export function ToolsSection({ cfg }: SectionProps) {
               </span>
             </div>
           )}
+
+          {searchProvider && (
+            <div className="flex items-center justify-between pt-2 border-t">
+              <StatusBadge entry={wsStatus} testResult={testResult["web_search"]} />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={testing === "web_search"}
+                onClick={() => testTool("web_search")}
+              >
+                {testing === "web_search" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Test
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -123,7 +233,7 @@ export function ToolsSection({ cfg }: SectionProps) {
           />
         </CardHeader>
         {webAnswerEnabled && (
-          <CardContent>
+          <CardContent className="flex flex-col gap-3">
             <div className="flex items-center justify-between rounded-md border border-input px-3 py-2">
               <span className="text-sm">Perplexity API Key</span>
               <span
@@ -131,6 +241,18 @@ export function ToolsSection({ cfg }: SectionProps) {
               >
                 {hasPerplexityKey ? "Configured" : "Not set"}
               </span>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t">
+              <StatusBadge entry={waStatus} testResult={testResult["web_answer"]} />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={testing === "web_answer"}
+                onClick={() => testTool("web_answer")}
+              >
+                {testing === "web_answer" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Test
+              </Button>
             </div>
           </CardContent>
         )}
@@ -155,6 +277,22 @@ export function ToolsSection({ cfg }: SectionProps) {
             onCheckedChange={(v) => patch("/tools/marker/enabled", v)}
           />
         </CardHeader>
+        {markerEnabled && (
+          <CardContent>
+            <div className="flex items-center justify-between pt-2 border-t">
+              <StatusBadge entry={mkStatus} testResult={testResult["marker_scan"]} />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={testing === "marker_scan"}
+                onClick={() => testTool("marker_scan")}
+              >
+                {testing === "marker_scan" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Test
+              </Button>
+            </div>
+          </CardContent>
+        )}
       </Card>
     </div>
   );
