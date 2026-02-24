@@ -1,0 +1,145 @@
+---
+title: "Docker"
+description: "Run Spaceduck in Docker with persistent storage using a single container for the gateway and CLI."
+---
+
+The Docker image packages the gateway and CLI into a single container using Bun as the runtime.
+
+## Quick start
+
+<Steps>
+  <Step title="Build the image">
+    ```bash
+    docker build -t spaceduck .
+    ```
+  </Step>
+
+  <Step title="Run the container">
+    ```bash
+    docker run -d \
+      -p 3000:3000 \
+      -v spaceduck-data:/data \
+      spaceduck
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000) to launch the Settings UI and configure your AI provider.
+  </Step>
+</Steps>
+
+## Docker Compose
+
+A `docker-compose.yml` is included for the common case.
+
+```bash
+# Start
+docker compose up --build -d
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
+
+Data persists in the `spaceduck-data` volume across restarts and upgrades.
+
+## Persistence
+
+The container stores its SQLite database at `/data/spaceduck.db`. The compose file mounts a named volume at `/data`, so your data survives container restarts.
+
+Default database path inside the container:
+
+```
+/data/spaceduck.db
+```
+
+## Environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | Gateway listen port |
+| `LOG_LEVEL` | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`) |
+| `PROVIDER_NAME` | *(unset)* | AI provider (configured via Settings UI or env) |
+| `PROVIDER_MODEL` | *(unset)* | Optional model override |
+| `MEMORY_BACKEND` | `sqlite` | Memory backend |
+| `MEMORY_CONNECTION_STRING` | `spaceduck.db` | SQLite file path (set to `/data/spaceduck.db` in Docker) |
+
+### API keys
+
+Pass provider API keys as environment variables:
+
+- `GEMINI_API_KEY`
+- `OPENROUTER_API_KEY`
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION`
+
+<Tip>
+  Use a local `.env` file with Docker Compose and keep it out of version control.
+</Tip>
+
+## Running the CLI inside the container
+
+The image includes the CLI bundle. If your container is named `spaceduck`:
+
+```bash
+docker exec -it spaceduck bun /app/spaceduck-cli.js status
+docker exec -it spaceduck bun /app/spaceduck-cli.js version
+docker exec -it spaceduck bun /app/spaceduck-cli.js config paths
+```
+
+## Local AI providers
+
+If you want Spaceduck inside Docker to connect to a model server running on your host machine (LM Studio, llama.cpp, etc.):
+
+<Tabs>
+  <Tab title="macOS / Windows">
+    Docker Desktop provides `host.docker.internal` to reach the host:
+
+    ```bash
+    docker run -d \
+      -p 3000:3000 \
+      -v spaceduck-data:/data \
+      -e PROVIDER_NAME=llamacpp \
+      -e PROVIDER_BASE_URL=http://host.docker.internal:8080/v1 \
+      spaceduck
+    ```
+  </Tab>
+  <Tab title="Linux">
+    `host.docker.internal` may not exist by default. Options:
+
+    **Host networking** (simplest for local dev):
+    ```bash
+    docker run -d \
+      --network=host \
+      -v spaceduck-data:/data \
+      -e PORT=3000 \
+      -e PROVIDER_NAME=llamacpp \
+      -e PROVIDER_BASE_URL=http://127.0.0.1:8080/v1 \
+      spaceduck
+    ```
+
+    **Explicit host mapping:**
+    ```bash
+    docker run -d \
+      --add-host=host.docker.internal:host-gateway \
+      -p 3000:3000 \
+      -v spaceduck-data:/data \
+      -e PROVIDER_NAME=llamacpp \
+      -e PROVIDER_BASE_URL=http://host.docker.internal:8080/v1 \
+      spaceduck
+    ```
+  </Tab>
+</Tabs>
+
+## Healthcheck
+
+The image includes a built-in healthcheck against `/api/health`. Verify manually:
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+## Notes
+
+- **Playwright/browser tooling** is not included in the default image to keep it lean.
+- The Docker image is intended for gateway-first usage. The CLI is included for setup and maintenance inside the container.
+- To add custom binaries or system packages, extend the image with your own Dockerfile.
