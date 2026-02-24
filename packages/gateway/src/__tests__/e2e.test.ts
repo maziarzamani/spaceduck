@@ -29,7 +29,6 @@ async function createTestGateway(port: number): Promise<Gateway> {
 
 describe("Gateway E2E smoke", () => {
   let gateway: Gateway;
-  const PORT = 49152 + Math.floor(Math.random() * 10000);
 
   afterEach(async () => {
     if (gateway?.status === "running") {
@@ -38,8 +37,9 @@ describe("Gateway E2E smoke", () => {
   });
 
   it("should start and respond to health check", async () => {
-    gateway = await createTestGateway(PORT);
+    gateway = await createTestGateway(0);
     await gateway.start();
+    const PORT = gateway.port;
 
     expect(gateway.status).toBe("running");
 
@@ -59,16 +59,18 @@ describe("Gateway E2E smoke", () => {
   });
 
   it("should return 404 for unknown routes", async () => {
-    gateway = await createTestGateway(PORT);
+    gateway = await createTestGateway(0);
     await gateway.start();
+    const PORT = gateway.port;
 
     const res = await fetch(`http://localhost:${PORT}/api/nope`);
     expect(res.status).toBe(404);
   });
 
   it("should list conversations (initially empty)", async () => {
-    gateway = await createTestGateway(PORT);
+    gateway = await createTestGateway(0);
     await gateway.start();
+    const PORT = gateway.port;
 
     const res = await fetch(`http://localhost:${PORT}/api/conversations`);
     expect(res.status).toBe(200);
@@ -78,8 +80,9 @@ describe("Gateway E2E smoke", () => {
   });
 
   it("should run agent loop and persist messages", async () => {
-    gateway = await createTestGateway(PORT);
+    gateway = await createTestGateway(0);
     await gateway.start();
+    const PORT = gateway.port;
 
     const { agent, conversationStore, sessionManager } = gateway.deps;
 
@@ -120,7 +123,7 @@ describe("Gateway E2E smoke", () => {
   });
 
   it("should be idempotent on start/stop", async () => {
-    gateway = await createTestGateway(PORT);
+    gateway = await createTestGateway(0);
 
     await gateway.start();
     await gateway.start(); // no-op

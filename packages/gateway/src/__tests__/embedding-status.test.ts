@@ -45,7 +45,7 @@ function baseConfig(port: number) {
   };
 }
 
-const BASE_PORT = 49800 + Math.floor(Math.random() * 1000);
+const TEST_PORT = 0;
 
 describe("GET /api/config/embedding-status", () => {
   let gateway: Gateway;
@@ -55,13 +55,12 @@ describe("GET /api/config/embedding-status", () => {
   });
 
   it("returns ok:false when no embedding provider is configured", async () => {
-    const port = BASE_PORT;
     gateway = await createGateway({
       provider: new StubProvider(),
-      config: baseConfig(port),
-      // no embeddingProvider
+      config: baseConfig(TEST_PORT),
     });
     await gateway.start();
+    const port = gateway.port;
 
     const res = await fetch(`http://localhost:${port}/api/config/embedding-status`);
     expect(res.status).toBe(200);
@@ -72,13 +71,13 @@ describe("GET /api/config/embedding-status", () => {
   });
 
   it("returns ok:true when embedding provider responds successfully", async () => {
-    const port = BASE_PORT + 1;
     gateway = await createGateway({
       provider: new StubProvider(),
-      config: baseConfig(port),
+      config: baseConfig(TEST_PORT),
       embeddingProvider: new OkEmbeddingProvider(),
     });
     await gateway.start();
+    const port = gateway.port;
 
     const res = await fetch(`http://localhost:${port}/api/config/embedding-status`);
     expect(res.status).toBe(200);
@@ -90,13 +89,13 @@ describe("GET /api/config/embedding-status", () => {
   });
 
   it("returns ok:false with error message when embedding provider throws", async () => {
-    const port = BASE_PORT + 2;
     gateway = await createGateway({
       provider: new StubProvider(),
-      config: baseConfig(port),
+      config: baseConfig(TEST_PORT),
       embeddingProvider: new FailingEmbeddingProvider(),
     });
     await gateway.start();
+    const port = gateway.port;
 
     const res = await fetch(`http://localhost:${port}/api/config/embedding-status`);
     expect(res.status).toBe(200);
@@ -109,14 +108,14 @@ describe("GET /api/config/embedding-status", () => {
   it("returns 401 when auth is required and no token is provided", async () => {
     const origAuth = process.env.SPACEDUCK_REQUIRE_AUTH;
     process.env.SPACEDUCK_REQUIRE_AUTH = "1";
-    const port = BASE_PORT + 3;
     try {
       gateway = await createGateway({
         provider: new StubProvider(),
-        config: baseConfig(port),
+        config: baseConfig(TEST_PORT),
         embeddingProvider: new OkEmbeddingProvider(),
       });
       await gateway.start();
+      const port = gateway.port;
 
       const res = await fetch(`http://localhost:${port}/api/config/embedding-status`);
       expect(res.status).toBe(401);
