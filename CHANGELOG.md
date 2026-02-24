@@ -6,6 +6,13 @@ From v0.1.0 onwards this file is updated automatically by release-please on ever
 
 ---
 
+## [0.16.1](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.16.0...spaceduck-v0.16.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* resolve typecheck errors in test files ([c59a370](https://github.com/maziarzamani/spaceduck/commit/c59a3702ca1c48cb32ebba1784740de3a55d5119))
+
 ## [0.16.0](https://github.com/maziarzamani/spaceduck/compare/spaceduck-v0.15.0...spaceduck-v0.16.0) (2026-02-23)
 
 
