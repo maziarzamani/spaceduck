@@ -21,6 +21,12 @@ function sseTextChunk(text: string): string {
   })}`;
 }
 
+function sseReasoningChunk(text: string): string {
+  return `data: ${JSON.stringify({
+    choices: [{ delta: { content: "", reasoning: text }, finish_reason: null }],
+  })}`;
+}
+
 function sseToolDelta(index: number, id?: string, name?: string, args?: string): string {
   const tc: Record<string, unknown> = { index };
   const fn: Record<string, unknown> = {};
@@ -286,5 +292,89 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
     const full = chunks.join("");
     expect(full).not.toContain("<think>");
     expect(full).toContain("visible text");
+  });
+
+  test("discards reasoning field when stripThinkTags is true", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        sseResponse([
+          sseReasoningChunk("Let me think about this..."),
+          sseTextChunk("The answer is 42."),
+          sseFinish("stop"),
+          sseDone,
+        ]),
+      ),
+    ) as any;
+
+    const p = new OpenAICompatibleProvider({
+      name: "test",
+      baseUrl: "http://localhost/v1",
+      model: "m1",
+      stripThinkTags: true,
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of p.chat([msg({ role: "user", content: "hi" })])) {
+      if (chunk.type === "text") chunks.push(chunk.text);
+    }
+
+    const full = chunks.join("");
+    expect(full).toBe("The answer is 42.");
+    expect(full).not.toContain("think");
+  });
+
+  test("emits reasoning as text when stripThinkTags is false", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        sseResponse([
+          sseReasoningChunk("Step 1: analyze"),
+          sseTextChunk("Done."),
+          sseFinish("stop"),
+          sseDone,
+        ]),
+      ),
+    ) as any;
+
+    const p = new OpenAICompatibleProvider({
+      name: "test",
+      baseUrl: "http://localhost/v1",
+      model: "m1",
+      stripThinkTags: false,
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of p.chat([msg({ role: "user", content: "hi" })])) {
+      if (chunk.type === "text") chunks.push(chunk.text);
+    }
+
+    const full = chunks.join("");
+    expect(full).toContain("Step 1: analyze");
+    expect(full).toContain("Done.");
+  });
+
+  test("handles reasoning_content field (DeepSeek/OpenRouter variant)", async () => {
+    const reasoningChunk = `data: ${JSON.stringify({
+      choices: [{ delta: { content: "", reasoning_content: "Deep thought" }, finish_reason: null }],
+    })}`;
+
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        sseResponse([reasoningChunk, sseTextChunk("Result"), sseFinish("stop"), sseDone]),
+      ),
+    ) as any;
+
+    const p = new OpenAICompatibleProvider({
+      name: "test",
+      baseUrl: "http://localhost/v1",
+      model: "m1",
+      stripThinkTags: true,
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of p.chat([msg({ role: "user", content: "hi" })])) {
+      if (chunk.type === "text") chunks.push(chunk.text);
+    }
+
+    expect(chunks.join("")).toBe("Result");
   });
 });

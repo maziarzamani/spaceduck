@@ -20,6 +20,8 @@ export type WireMessage =
 
 export interface WireDelta {
   content?: string | null;
+  reasoning?: string | null;
+  reasoning_content?: string | null;
   tool_calls?: Array<{
     index: number;
     id?: string;
@@ -30,7 +32,7 @@ export interface WireDelta {
 // Some "compatible" servers emit message instead of delta inside SSE chunks
 export interface WireChoice {
   delta?: WireDelta;
-  message?: { content?: string | null };
+  message?: { content?: string | null; reasoning?: string | null; reasoning_content?: string | null };
   finish_reason?: string | null;
 }
 
