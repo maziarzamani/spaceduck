@@ -180,6 +180,14 @@ function mergeConsecutive(messages: ConverseMessage[]): ConverseMessage[] {
       result.push({ role: msg.role, content: [...msg.content] });
     }
   }
+
+  // Bedrock requires the conversation to end with a user message.
+  // Strip any trailing assistant messages to avoid "does not support
+  // assistant message prefill" errors.
+  while (result.length > 0 && result[result.length - 1].role === "assistant") {
+    result.pop();
+  }
+
   return result;
 }
 
