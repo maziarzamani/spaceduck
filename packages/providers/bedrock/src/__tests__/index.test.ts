@@ -3,6 +3,11 @@ import { BedrockProvider, BedrockEmbeddingProvider } from "../index";
 import { ProviderError } from "@spaceduck/core";
 import type { ProviderChunk } from "@spaceduck/core";
 
+let _msgId = 0;
+function msg(m: { role: string; content: string; toolCalls?: any[]; toolCallId?: string; toolName?: string }): any {
+  return { id: `test-${++_msgId}`, timestamp: Date.now(), ...m };
+}
+
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
@@ -45,10 +50,10 @@ describe("BedrockProvider", () => {
           { status: 200 },
         ),
       ),
-    );
+    ) as any;
 
     const p = new BedrockProvider({ apiKey: "test-key" });
-    const chunks = await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
 
     expect(chunks).toEqual([{ type: "text", text: "Hello from Bedrock" }]);
   });
@@ -71,11 +76,11 @@ describe("BedrockProvider", () => {
           { status: 200 },
         ),
       ),
-    );
+    ) as any;
 
     const p = new BedrockProvider({ apiKey: "test-key" });
     const chunks = await collectChunks(
-      p.chat([{ role: "user", content: "search" }], {
+      p.chat([msg({ role: "user", content: "search" })], {
         tools: [{ name: "web_search", description: "Search", parameters: { type: "object" } }],
       }),
     );
@@ -99,13 +104,13 @@ describe("BedrockProvider", () => {
           { status: 200 },
         ),
       );
-    });
+    }) as any;
 
     const p = new BedrockProvider({ apiKey: "test-key" });
     await collectChunks(
       p.chat([
-        { role: "system", content: "Be helpful" },
-        { role: "user", content: "hi" },
+        msg({ role: "system", content: "Be helpful" }),
+        msg({ role: "user", content: "hi" }),
       ]),
     );
 
@@ -122,13 +127,13 @@ describe("BedrockProvider", () => {
           { status: 200 },
         ),
       );
-    });
+    }) as any;
 
     const p = new BedrockProvider({ apiKey: "test-key" });
     await collectChunks(
       p.chat([
-        { role: "user", content: "hello" },
-        { role: "user", content: "world" },
+        msg({ role: "user", content: "hello" }),
+        msg({ role: "user", content: "world" }),
       ]),
     );
 
@@ -140,11 +145,11 @@ describe("BedrockProvider", () => {
   test("throws ProviderError on HTTP error", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response("Bad request", { status: 400 })),
-    );
+    ) as any;
 
     const p = new BedrockProvider({ apiKey: "test-key" });
     try {
-      await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+      await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
       expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
@@ -152,11 +157,11 @@ describe("BedrockProvider", () => {
   });
 
   test("throws transient_network on connection failure", async () => {
-    globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED")));
+    globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED"))) as any;
 
     const p = new BedrockProvider({ apiKey: "test-key" });
     try {
-      await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+      await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
       expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
@@ -167,11 +172,11 @@ describe("BedrockProvider", () => {
   test("throws on non-JSON response", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response("not json", { status: 200 })),
-    );
+    ) as any;
 
     const p = new BedrockProvider({ apiKey: "test-key" });
     try {
-      await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+      await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
       expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
@@ -189,10 +194,10 @@ describe("BedrockProvider", () => {
           { status: 200 },
         ),
       );
-    });
+    }) as any;
 
     const p = new BedrockProvider({ apiKey: "my-token" });
-    await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+    await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
 
     expect(capturedHeaders["Authorization"]).toBe("Bearer my-token");
   });
@@ -218,7 +223,7 @@ describe("BedrockEmbeddingProvider", () => {
     const values = Array.from({ length: 1024 }, (_, i) => i * 0.001);
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response(JSON.stringify({ embedding: values }), { status: 200 })),
-    );
+    ) as any;
 
     const p = new BedrockEmbeddingProvider({ apiKey: "test" });
     const result = await p.embed("hello");
@@ -236,7 +241,7 @@ describe("BedrockEmbeddingProvider", () => {
           { status: 200 },
         ),
       ),
-    );
+    ) as any;
 
     const p = new BedrockEmbeddingProvider({
       apiKey: "test",
@@ -251,7 +256,7 @@ describe("BedrockEmbeddingProvider", () => {
   test("throws on auth failure", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response("Unauthorized", { status: 401 })),
-    );
+    ) as any;
 
     const p = new BedrockEmbeddingProvider({ apiKey: "bad" });
     try {
@@ -264,7 +269,7 @@ describe("BedrockEmbeddingProvider", () => {
   });
 
   test("throws on connection failure", async () => {
-    globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED")));
+    globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED"))) as any;
 
     const p = new BedrockEmbeddingProvider({ apiKey: "test" });
     try {
@@ -285,7 +290,7 @@ describe("BedrockEmbeddingProvider", () => {
   test("throws on Titan dimension mismatch", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response(JSON.stringify({ embedding: [0.1, 0.2] }), { status: 200 })),
-    );
+    ) as any;
 
     const p = new BedrockEmbeddingProvider({ apiKey: "test" });
     try {
@@ -300,7 +305,7 @@ describe("BedrockEmbeddingProvider", () => {
   test("throws on missing Titan embedding array", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
-    );
+    ) as any;
 
     const p = new BedrockEmbeddingProvider({ apiKey: "test" });
     try {

@@ -18,7 +18,7 @@ function mockFetchResponse(body: unknown, status = 200, headers: Record<string, 
         headers: { "content-type": "application/json", ...headers },
       }),
     ),
-  );
+  ) as any;
 }
 
 const defaultOpts: GlobalOpts = {
@@ -42,7 +42,7 @@ describe("apiFetch", () => {
     globalThis.fetch = mock((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>;
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
-    });
+    }) as any;
 
     await apiFetch({ ...defaultOpts, token: "my-token" }, "/api/test");
 
@@ -54,7 +54,7 @@ describe("apiFetch", () => {
     globalThis.fetch = mock((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>;
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
-    });
+    }) as any;
 
     await apiFetch(defaultOpts, "/api/test");
 
@@ -66,7 +66,7 @@ describe("apiFetch", () => {
     globalThis.fetch = mock((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>;
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
-    });
+    }) as any;
 
     await apiFetch(defaultOpts, "/api/test", {
       method: "PATCH",
@@ -113,7 +113,7 @@ describe("apiFetch", () => {
   });
 
   test("throws CliError when gateway is unreachable", async () => {
-    globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED")));
+    globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED"))) as any;
 
     try {
       await apiFetch(defaultOpts, "/api/test");
@@ -129,7 +129,7 @@ describe("apiFetch", () => {
     globalThis.fetch = mock((url: string) => {
       capturedUrl = url;
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
-    });
+    }) as any;
 
     await apiFetch(
       { ...defaultOpts, gateway: "http://myhost:4000" },

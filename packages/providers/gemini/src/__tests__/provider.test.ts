@@ -28,6 +28,11 @@ async function collectChunks(iter: AsyncIterable<ProviderChunk>): Promise<Provid
   return results;
 }
 
+let _msgId = 0;
+function msg(m: { role: string; content: string; toolCalls?: any[]; toolCallId?: string; toolName?: string }): any {
+  return { id: `test-${++_msgId}`, timestamp: Date.now(), ...m };
+}
+
 describe("GeminiProvider", () => {
   afterEach(() => {
     mockGenerateContentStream.mockReset();
@@ -54,7 +59,7 @@ describe("GeminiProvider", () => {
     );
 
     const p = makeProvider();
-    const chunks = await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
 
     expect(chunks).toEqual([
       { type: "text", text: "Hello " },
@@ -78,7 +83,7 @@ describe("GeminiProvider", () => {
 
     const p = makeProvider();
     const chunks = await collectChunks(
-      p.chat([{ role: "user", content: "search" }], {
+      p.chat([msg({ role: "user", content: "search" })], {
         tools: [{ name: "web_search", description: "Search", parameters: {} }],
       }),
     );
@@ -105,7 +110,7 @@ describe("GeminiProvider", () => {
     );
 
     const p = makeProvider();
-    const chunks = await collectChunks(p.chat([{ role: "user", content: "find" }]));
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "find" })]));
 
     expect(chunks[0]).toEqual({ type: "text", text: "Let me search for that." });
     expect(chunks[1].type).toBe("tool_call");
@@ -125,8 +130,8 @@ describe("GeminiProvider", () => {
     const p = makeProvider();
     await collectChunks(
       p.chat([
-        { role: "system", content: "Be helpful" },
-        { role: "user", content: "hi" },
+        msg({ role: "system", content: "Be helpful" }),
+        msg({ role: "user", content: "hi" }),
       ]),
     );
 
@@ -148,13 +153,13 @@ describe("GeminiProvider", () => {
     const p = makeProvider();
     await collectChunks(
       p.chat([
-        { role: "user", content: "search for cats" },
-        {
+        msg({ role: "user", content: "search for cats" }),
+        msg({
           role: "assistant",
           content: "",
           toolCalls: [{ id: "tc1", name: "web_search", args: { query: "cats" } }],
-        },
-        { role: "tool", content: "Found 10 results", toolCallId: "tc1", toolName: "web_search" },
+        }),
+        msg({ role: "tool", content: "Found 10 results", toolCallId: "tc1", toolName: "web_search" }),
       ]),
     );
 
@@ -173,7 +178,7 @@ describe("GeminiProvider", () => {
 
     const p = makeProvider();
     try {
-      await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+      await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
       expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
@@ -188,7 +193,7 @@ describe("GeminiProvider", () => {
 
     const p = makeProvider();
     try {
-      await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+      await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
       expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
@@ -203,7 +208,7 @@ describe("GeminiProvider", () => {
 
     const p = makeProvider();
     try {
-      await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+      await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
       expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
@@ -225,7 +230,7 @@ describe("GeminiProvider", () => {
 
     const p = makeProvider();
     const chunks = await collectChunks(
-      p.chat([{ role: "user", content: "hi" }], { signal: ac.signal }),
+      p.chat([msg({ role: "user", content: "hi" })], { signal: ac.signal }),
     );
 
     expect(chunks).toEqual([]);
@@ -244,7 +249,7 @@ describe("GeminiProvider", () => {
 
     const p = makeProvider();
     await collectChunks(
-      p.chat([{ role: "user", content: "search" }], {
+      p.chat([msg({ role: "user", content: "search" })], {
         tools: [
           {
             name: "web_search",

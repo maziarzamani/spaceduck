@@ -15,7 +15,7 @@ function makeProvider(opts: { model?: string; apiKey?: string } = {}) {
 function mockFetchOk(body: unknown) {
   globalThis.fetch = mock(() =>
     Promise.resolve(new Response(JSON.stringify(body), { status: 200 })),
-  );
+  ) as any;
 }
 
 describe("GeminiEmbeddingProvider", () => {
@@ -71,7 +71,7 @@ describe("GeminiEmbeddingProvider", () => {
     test("throws ProviderError on auth failure (401)", async () => {
       globalThis.fetch = mock(() =>
         Promise.resolve(new Response("Unauthorized", { status: 401 })),
-      );
+      ) as any;
 
       const p = makeProvider();
       try {
@@ -84,7 +84,7 @@ describe("GeminiEmbeddingProvider", () => {
     });
 
     test("throws transient_network on connection failure", async () => {
-      globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED")));
+      globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED"))) as any;
 
       const p = makeProvider();
       try {
@@ -130,7 +130,7 @@ describe("GeminiEmbeddingProvider", () => {
     });
 
     test("throws transient_network on batch connection failure", async () => {
-      globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED")));
+      globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED"))) as any;
 
       const p = makeProvider();
       try {

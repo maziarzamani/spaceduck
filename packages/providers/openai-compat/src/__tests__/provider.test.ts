@@ -41,6 +41,11 @@ function sseFinish(reason: string): string {
 
 const sseDone = "data: [DONE]";
 
+let _msgId = 0;
+function msg(m: { role: string; content: string; toolCalls?: any[]; toolCallId?: string; toolName?: string }): any {
+  return { id: `test-${++_msgId}`, timestamp: Date.now(), ...m };
+}
+
 describe("OpenAICompatibleProvider baseUrl normalization", () => {
   test("appends /v1 when missing", () => {
     const p = makeProvider("http://127.0.0.1:8080");
@@ -120,7 +125,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
       Promise.resolve(
         sseResponse([sseTextChunk("Hello "), sseTextChunk("world"), sseFinish("stop"), sseDone]),
       ),
-    );
+    ) as any;
 
     const p = new OpenAICompatibleProvider({
       name: "test",
@@ -130,7 +135,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
     });
 
     const chunks: string[] = [];
-    for await (const chunk of p.chat([{ role: "user", content: "hi" }])) {
+    for await (const chunk of p.chat([msg({ role: "user", content: "hi" })])) {
       if (chunk.type === "text") chunks.push(chunk.text);
     }
 
@@ -147,7 +152,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
           sseDone,
         ]),
       ),
-    );
+    ) as any;
 
     const p = new OpenAICompatibleProvider({
       name: "test",
@@ -157,7 +162,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
     });
 
     const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
-    for await (const chunk of p.chat([{ role: "user", content: "search" }])) {
+    for await (const chunk of p.chat([msg({ role: "user", content: "search" })])) {
       if (chunk.type === "tool_call") toolCalls.push(chunk.toolCall);
     }
 
@@ -170,7 +175,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
   test("throws ProviderError on non-OK response", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response("Server Error", { status: 500 })),
-    );
+    ) as any;
 
     const p = new OpenAICompatibleProvider({
       name: "testprov",
@@ -178,7 +183,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
       model: "m1",
     });
 
-    const iter = p.chat([{ role: "user", content: "hi" }]);
+    const iter = p.chat([msg({ role: "user", content: "hi" })]);
     try {
       for await (const _chunk of iter) {
         /* should not yield */
@@ -191,7 +196,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
   });
 
   test("throws ProviderError on network failure", async () => {
-    globalThis.fetch = mock(() => Promise.reject(new Error("fetch failed")));
+    globalThis.fetch = mock(() => Promise.reject(new Error("fetch failed"))) as any;
 
     const p = new OpenAICompatibleProvider({
       name: "testprov",
@@ -199,7 +204,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
       model: "m1",
     });
 
-    const iter = p.chat([{ role: "user", content: "hi" }]);
+    const iter = p.chat([msg({ role: "user", content: "hi" })]);
     try {
       for await (const _chunk of iter) {
         /* should not yield */
@@ -216,7 +221,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
     globalThis.fetch = mock((url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>;
       return Promise.resolve(sseResponse([sseFinish("stop"), sseDone]));
-    });
+    }) as any;
 
     const p = new OpenAICompatibleProvider({
       name: "test",
@@ -226,7 +231,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
       stripThinkTags: false,
     });
 
-    for await (const _chunk of p.chat([{ role: "user", content: "hi" }])) {
+    for await (const _chunk of p.chat([msg({ role: "user", content: "hi" })])) {
       /* consume */
     }
 
@@ -238,7 +243,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
     globalThis.fetch = mock((url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>;
       return Promise.resolve(sseResponse([sseFinish("stop"), sseDone]));
-    });
+    }) as any;
 
     const p = new OpenAICompatibleProvider({
       name: "test",
@@ -247,7 +252,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
       stripThinkTags: false,
     });
 
-    for await (const _chunk of p.chat([{ role: "user", content: "hi" }])) {
+    for await (const _chunk of p.chat([msg({ role: "user", content: "hi" })])) {
       /* consume */
     }
 
@@ -264,7 +269,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
           sseDone,
         ]),
       ),
-    );
+    ) as any;
 
     const p = new OpenAICompatibleProvider({
       name: "test",
@@ -274,7 +279,7 @@ describe("OpenAICompatibleProvider.chat streaming", () => {
     });
 
     const chunks: string[] = [];
-    for await (const chunk of p.chat([{ role: "user", content: "hi" }])) {
+    for await (const chunk of p.chat([msg({ role: "user", content: "hi" })])) {
       if (chunk.type === "text") chunks.push(chunk.text);
     }
 

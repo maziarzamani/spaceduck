@@ -10,7 +10,7 @@ afterEach(() => {
 function mockFetchOk(body: unknown, status = 200) {
   globalThis.fetch = mock(() =>
     Promise.resolve(new Response(JSON.stringify(body), { status })),
-  );
+  ) as any;
 }
 
 function makePerplexityAnswer(content: string, citations?: unknown[]) {
@@ -149,7 +149,7 @@ describe("WebAnswerTool", () => {
         return Promise.resolve(
           new Response(JSON.stringify(makePerplexityAnswer("ok")), { status: 200 }),
         );
-      });
+      }) as any;
 
       const tool = new WebAnswerTool({ openrouterApiKey: "or-key" });
       await tool.answer("question");
@@ -165,7 +165,7 @@ describe("WebAnswerTool", () => {
         return Promise.resolve(
           new Response(JSON.stringify(makePerplexityAnswer("cached answer")), { status: 200 }),
         );
-      });
+      }) as any;
 
       const tool = new WebAnswerTool({ perplexityApiKey: "key" });
       await tool.answer("what is TypeScript");
@@ -183,7 +183,7 @@ describe("WebAnswerTool", () => {
         return Promise.resolve(
           new Response(JSON.stringify(makePerplexityAnswer("ok")), { status: 200 }),
         );
-      });
+      }) as any;
 
       const tool = new WebAnswerTool({ perplexityApiKey: "key" });
       await tool.answer("question", { searchLang: "da-DK" });

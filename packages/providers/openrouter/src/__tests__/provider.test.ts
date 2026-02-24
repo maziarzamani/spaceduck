@@ -53,6 +53,11 @@ async function collectChunks(iter: AsyncIterable<ProviderChunk>): Promise<Provid
   return results;
 }
 
+let _msgId = 0;
+function msg(m: { role: string; content: string; toolCalls?: any[]; toolCallId?: string; toolName?: string }): any {
+  return { id: `test-${++_msgId}`, timestamp: Date.now(), ...m };
+}
+
 describe("OpenRouterProvider", () => {
   test("defaults model to free tier", () => {
     const p = makeProvider();
@@ -67,10 +72,10 @@ describe("OpenRouterProvider", () => {
   test("yields text chunks from SSE stream", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(sseResponse([sseTextChunk("Hello "), sseTextChunk("OpenRouter"), sseFinish("stop"), sseDone])),
-    );
+    ) as any;
 
     const p = makeProvider();
-    const chunks = await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
 
     const texts = chunks.filter((c) => c.type === "text").map((c) => (c as any).text);
     expect(texts).toEqual(["Hello ", "OpenRouter"]);
@@ -86,10 +91,10 @@ describe("OpenRouterProvider", () => {
           sseDone,
         ]),
       ),
-    );
+    ) as any;
 
     const p = makeProvider();
-    const chunks = await collectChunks(p.chat([{ role: "user", content: "go" }]));
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "go" })]));
 
     const toolCalls = chunks.filter((c) => c.type === "tool_call");
     expect(toolCalls).toHaveLength(1);
@@ -102,10 +107,10 @@ describe("OpenRouterProvider", () => {
     globalThis.fetch = mock((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>;
       return Promise.resolve(sseResponse([sseFinish("stop"), sseDone]));
-    });
+    }) as any;
 
     const p = makeProvider({ apiKey: "or-key" });
-    await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+    await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
 
     expect(capturedHeaders["Authorization"]).toBe("Bearer or-key");
     expect(capturedHeaders["HTTP-Referer"]).toBe("https://spaceduck.ai");
@@ -118,10 +123,10 @@ describe("OpenRouterProvider", () => {
     globalThis.fetch = mock((_url: string, init: RequestInit) => {
       capturedBody = JSON.parse(init.body as string);
       return Promise.resolve(sseResponse([sseFinish("stop"), sseDone]));
-    });
+    }) as any;
 
     const p = makeProvider();
-    await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+    await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
 
     expect((capturedBody.provider as any).require_parameters).toBe(true);
     expect(capturedBody.stream).toBe(true);
@@ -132,11 +137,11 @@ describe("OpenRouterProvider", () => {
     globalThis.fetch = mock((_url: string, init: RequestInit) => {
       capturedBody = JSON.parse(init.body as string);
       return Promise.resolve(sseResponse([sseFinish("stop"), sseDone]));
-    });
+    }) as any;
 
     const p = makeProvider();
     await collectChunks(
-      p.chat([{ role: "user", content: "search" }], {
+      p.chat([msg({ role: "user", content: "search" })], {
         tools: [{ name: "web_search", description: "Search", parameters: { type: "object" } }],
       }),
     );
@@ -152,20 +157,20 @@ describe("OpenRouterProvider", () => {
     globalThis.fetch = mock((_url: string, init: RequestInit) => {
       capturedBody = JSON.parse(init.body as string);
       return Promise.resolve(sseResponse([sseFinish("stop"), sseDone]));
-    });
+    }) as any;
 
     const p = makeProvider();
     await collectChunks(
       p.chat([
-        { role: "system", content: "Be helpful" },
-        { role: "user", content: "find cats" },
-        {
+        msg({ role: "system", content: "Be helpful" }),
+        msg({ role: "user", content: "find cats" }),
+        msg({
           role: "assistant",
           content: "",
           toolCalls: [{ id: "tc1", name: "search", args: { q: "cats" } }],
-        },
-        { role: "tool", content: "Results here", toolCallId: "tc1" },
-        { role: "assistant", content: "Here are the results." },
+        }),
+        msg({ role: "tool", content: "Results here", toolCallId: "tc1" }),
+        msg({ role: "assistant", content: "Here are the results." }),
       ]),
     );
 
@@ -182,11 +187,11 @@ describe("OpenRouterProvider", () => {
   test("throws ProviderError on HTTP error", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response("Internal Server Error", { status: 500 })),
-    );
+    ) as any;
 
     const p = makeProvider();
     try {
-      await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+      await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
       expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
@@ -196,11 +201,11 @@ describe("OpenRouterProvider", () => {
   test("classifies auth errors on fetch failure", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response("Unauthorized API key", { status: 401 })),
-    );
+    ) as any;
 
     const p = makeProvider();
     try {
-      await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+      await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
       expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
@@ -209,11 +214,11 @@ describe("OpenRouterProvider", () => {
   });
 
   test("classifies network errors", async () => {
-    globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED")));
+    globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED"))) as any;
 
     const p = makeProvider();
     try {
-      await collectChunks(p.chat([{ role: "user", content: "hi" }]));
+      await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
       expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
@@ -222,7 +227,6 @@ describe("OpenRouterProvider", () => {
   });
 
   test("flushes remaining tool calls at end of stream", async () => {
-    // Tool call without a finish_reason — should still be emitted at end
     globalThis.fetch = mock(() =>
       Promise.resolve(
         sseResponse([
@@ -230,10 +234,10 @@ describe("OpenRouterProvider", () => {
           sseDone,
         ]),
       ),
-    );
+    ) as any;
 
     const p = makeProvider();
-    const chunks = await collectChunks(p.chat([{ role: "user", content: "go" }]));
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "go" })]));
 
     const toolCalls = chunks.filter((c) => c.type === "tool_call");
     expect(toolCalls).toHaveLength(1);
