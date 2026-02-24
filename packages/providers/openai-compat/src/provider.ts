@@ -222,6 +222,13 @@ export class OpenAICompatibleProvider implements Provider {
             }
           }
 
+          if (event.type === "reasoning") {
+            if (!thinkStripper) {
+              yield { type: "text", text: event.text };
+            }
+            // When stripThinkTags is on, reasoning is silently discarded
+          }
+
           if (event.type === "tool_delta") {
             const existing = toolCallAccumulator.get(event.index);
             if (existing) {

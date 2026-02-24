@@ -83,4 +83,45 @@ describe("processSSEBuffer", () => {
     const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
     expect(events.filter((e) => e.type === "text")).toHaveLength(0);
   });
+
+  test("emits reasoning event from delta.reasoning", () => {
+    const chunk = JSON.stringify({
+      choices: [{ delta: { content: "", reasoning: "Let me think..." } }],
+    });
+    const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
+    expect(events).toContainEqual({ type: "reasoning", text: "Let me think..." });
+  });
+
+  test("emits reasoning event from delta.reasoning_content", () => {
+    const chunk = JSON.stringify({
+      choices: [{ delta: { content: "", reasoning_content: "Step 1: analyze" } }],
+    });
+    const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
+    expect(events).toContainEqual({ type: "reasoning", text: "Step 1: analyze" });
+  });
+
+  test("emits reasoning event from message.reasoning fallback", () => {
+    const chunk = JSON.stringify({
+      choices: [{ message: { content: "", reasoning: "Thinking deeply" } }],
+    });
+    const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
+    expect(events).toContainEqual({ type: "reasoning", text: "Thinking deeply" });
+  });
+
+  test("emits both text and reasoning when both present", () => {
+    const chunk = JSON.stringify({
+      choices: [{ delta: { content: "Hello", reasoning: "I should greet" } }],
+    });
+    const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
+    expect(events).toContainEqual({ type: "text", text: "Hello" });
+    expect(events).toContainEqual({ type: "reasoning", text: "I should greet" });
+  });
+
+  test("does not emit reasoning when field is null", () => {
+    const chunk = JSON.stringify({
+      choices: [{ delta: { content: "Hi", reasoning: null } }],
+    });
+    const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
+    expect(events.filter((e) => e.type === "reasoning")).toHaveLength(0);
+  });
 });

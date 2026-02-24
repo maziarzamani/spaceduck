@@ -11,6 +11,7 @@ import type { WireChunk } from "./wire";
 
 export type SSEEvent =
   | { type: "text"; text: string }
+  | { type: "reasoning"; text: string }
   | { type: "tool_delta"; index: number; id?: string; name?: string; arguments?: string }
   | { type: "finish"; reason: string | null }
   | { type: "done" };
@@ -60,6 +61,17 @@ export function processSSEBuffer(
     const text = choice.delta?.content ?? choice.message?.content ?? null;
     if (text) {
       events.push({ type: "text", text });
+    }
+
+    // Reasoning/thinking content (mlx_lm, vLLM, OpenRouter use separate fields)
+    const reasoning =
+      choice.delta?.reasoning ??
+      choice.delta?.reasoning_content ??
+      choice.message?.reasoning ??
+      choice.message?.reasoning_content ??
+      null;
+    if (reasoning) {
+      events.push({ type: "reasoning", text: reasoning });
     }
 
     // Streaming tool call deltas
