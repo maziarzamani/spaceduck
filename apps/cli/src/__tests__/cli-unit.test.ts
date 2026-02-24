@@ -106,3 +106,13 @@ describe("formatUptime", () => {
     expect(formatUptime(86400)).toBe("24h 0m");
   });
 });
+
+describe("CliError", () => {
+  test("is an instance of Error", () => {
+    const { CliError } = require("../index");
+    const err = new CliError("test error");
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe("CliError");
+    expect(err.message).toBe("test error");
+  });
+});

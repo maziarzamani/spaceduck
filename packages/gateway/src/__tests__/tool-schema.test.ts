@@ -10,6 +10,12 @@ function makeConfigStore() {
   return new ConfigStore(join(tmpdir(), `spaceduck-test-${Date.now()}`));
 }
 
+async function makeLoadedConfigStore() {
+  const store = makeConfigStore();
+  await store.load();
+  return store;
+}
+
 describe("config_set tool — JSON schema (llama.cpp compatibility)", () => {
   it("registers config_set with a typed 'value' property", () => {
     const logger = new ConsoleLogger("error");
@@ -76,5 +82,121 @@ describe("config_set tool — JSON schema (llama.cpp compatibility)", () => {
     });
 
     expect(result.content).toMatch(/[Ss]ecret/);
+  });
+});
+
+describe("tool handler execution", () => {
+  it("registers core tools without configStore or attachmentStore", () => {
+    const logger = new ConsoleLogger("error");
+    const registry = createToolRegistry(logger);
+
+    const defs = registry.getDefinitions();
+    const names = defs.map((d) => d.name);
+
+    expect(names).toContain("web_fetch");
+    expect(names).toContain("browser_navigate");
+    expect(names).toContain("browser_snapshot");
+    expect(names).toContain("browser_click");
+    expect(names).toContain("browser_type");
+    expect(names).toContain("browser_scroll");
+    expect(names).toContain("browser_wait");
+    expect(names).toContain("browser_evaluate");
+  });
+
+  it("does not register config_get/config_set without configStore", () => {
+    const logger = new ConsoleLogger("error");
+    const registry = createToolRegistry(logger);
+
+    expect(registry.has("config_get")).toBe(false);
+    expect(registry.has("config_set")).toBe(false);
+  });
+
+  it("registers config_get and config_set when configStore is provided", () => {
+    const logger = new ConsoleLogger("error");
+    const configStore = makeConfigStore();
+    const registry = createToolRegistry(logger, undefined, configStore);
+
+    expect(registry.has("config_get")).toBe(true);
+    expect(registry.has("config_set")).toBe(true);
+  });
+
+  it("config_get returns full config when no path given", async () => {
+    const logger = new ConsoleLogger("error");
+    const configStore = await makeLoadedConfigStore();
+    const registry = createToolRegistry(logger, undefined, configStore);
+
+    const result = await registry.execute({
+      id: "test-get-full",
+      name: "config_get",
+      args: {},
+    });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content);
+    expect(parsed.config).toBeDefined();
+    expect(parsed.rev).toBeDefined();
+  });
+
+  it("config_get resolves a specific path", async () => {
+    const logger = new ConsoleLogger("error");
+    const configStore = await makeLoadedConfigStore();
+    const registry = createToolRegistry(logger, undefined, configStore);
+
+    const result = await registry.execute({
+      id: "test-get-path",
+      name: "config_get",
+      args: { path: "/ai" },
+    });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content);
+    expect(parsed.path).toBe("/ai");
+    expect(parsed.value).toBeDefined();
+  });
+
+  it("config_get returns error for invalid path", async () => {
+    const logger = new ConsoleLogger("error");
+    const configStore = await makeLoadedConfigStore();
+    const registry = createToolRegistry(logger, undefined, configStore);
+
+    const result = await registry.execute({
+      id: "test-get-invalid",
+      name: "config_get",
+      args: { path: "/nonexistent/deep/path" },
+    });
+
+    expect(result.content).toContain("does not exist");
+  });
+
+  it("config_set updates a valid config path", async () => {
+    const logger = new ConsoleLogger("error");
+    const configStore = await makeLoadedConfigStore();
+    const registry = createToolRegistry(logger, undefined, configStore);
+
+    const result = await registry.execute({
+      id: "test-set",
+      name: "config_set",
+      args: { path: "/ai/model", value: "test-model" },
+    });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.path).toBe("/ai/model");
+    expect(parsed.value).toBe("test-model");
+  });
+
+  it("web_fetch returns error for unknown tool", async () => {
+    const logger = new ConsoleLogger("error");
+    const registry = createToolRegistry(logger);
+
+    const result = await registry.execute({
+      id: "test-unknown",
+      name: "nonexistent_tool",
+      args: {},
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("Unknown tool");
   });
 });
