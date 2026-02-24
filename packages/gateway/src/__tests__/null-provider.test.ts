@@ -21,7 +21,7 @@ class OkProvider implements Provider {
   }
 }
 
-const BASE_PORT = 49600 + Math.floor(Math.random() * 500);
+const TEST_PORT = 0;
 
 function baseConfig(port: number) {
   return {
@@ -43,14 +43,12 @@ describe("NullProvider — gateway starts without a configured provider", () => 
   });
 
   it("gateway starts and health check passes even when no provider override is given", async () => {
-    // We still need to pass a provider override for createGateway to avoid
-    // hitting disk config. Use OkProvider to confirm the normal path works.
-    const port = BASE_PORT;
     gateway = await createGateway({
       provider: new OkProvider(),
-      config: baseConfig(port),
+      config: baseConfig(TEST_PORT),
     });
     await gateway.start();
+    const port = gateway.port;
 
     expect(gateway.status).toBe("running");
     const res = await fetch(`http://localhost:${port}/api/health`);
@@ -58,12 +56,12 @@ describe("NullProvider — gateway starts without a configured provider", () => 
   });
 
   it("provider-status returns ok:false when the provider throws during chat", async () => {
-    const port = BASE_PORT + 1;
     gateway = await createGateway({
       provider: new FailingProvider(),
-      config: baseConfig(port),
+      config: baseConfig(TEST_PORT),
     });
     await gateway.start();
+    const port = gateway.port;
 
     const res = await fetch(`http://localhost:${port}/api/config/provider-status`);
     expect(res.status).toBe(200);
@@ -74,7 +72,6 @@ describe("NullProvider — gateway starts without a configured provider", () => 
   });
 
   it("gateway stays running when underlying provider yields unconfigured message", async () => {
-    const port = BASE_PORT + 2;
     const nullLike: Provider = {
       name: "unconfigured",
       async *chat(): AsyncIterable<ProviderChunk> {
@@ -84,9 +81,10 @@ describe("NullProvider — gateway starts without a configured provider", () => 
 
     gateway = await createGateway({
       provider: nullLike,
-      config: baseConfig(port),
+      config: baseConfig(TEST_PORT),
     });
     await gateway.start();
+    const port = gateway.port;
 
     expect(gateway.status).toBe("running");
 
@@ -97,7 +95,6 @@ describe("NullProvider — gateway starts without a configured provider", () => 
   });
 
   it("NullProvider response message tells the user to configure a provider", async () => {
-    const port = BASE_PORT + 3;
     const nullLike: Provider = {
       name: "unconfigured",
       async *chat(): AsyncIterable<ProviderChunk> {
@@ -107,15 +104,13 @@ describe("NullProvider — gateway starts without a configured provider", () => 
 
     gateway = await createGateway({
       provider: nullLike,
-      config: baseConfig(port),
+      config: baseConfig(TEST_PORT),
     });
     await gateway.start();
+    const port = gateway.port;
 
-    // provider-status pings chat() — it should get back a non-ok with the null message
     const res = await fetch(`http://localhost:${port}/api/config/provider-status`);
     const body = await res.json() as { ok: boolean };
-    // NullProvider yields text without throwing, so provider-status sees it as ok:true
-    // The important thing is that the gateway didn't crash on startup
     expect(res.status).toBe(200);
     expect(gateway.status).toBe("running");
   });

@@ -58,7 +58,7 @@ class BrokenEmbeddingProvider implements EmbeddingProvider {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const BASE_PORT = 49500 + Math.floor(Math.random() * 100);
+const TEST_PORT = 0;
 
 function baseConfig(port: number) {
   return {
@@ -102,15 +102,15 @@ describe("Embedding provider hot-swap", () => {
   });
 
   it("embedding provider is replaced (disabled) when embedding.enabled toggled off via config PATCH", async () => {
-    const port = BASE_PORT;
     const initialProvider = new TrackingEmbeddingProvider("initial", 4);
 
     gateway = await createGateway({
       provider: new StubProvider(),
-      config: baseConfig(port),
+      config: baseConfig(TEST_PORT),
       embeddingProvider: initialProvider,
     });
     await gateway.start();
+    const port = gateway.port;
 
     // Sanity: embedding-status should be ok with the initial provider
     const before = await fetch(`http://localhost:${port}/api/config/embedding-status`);
@@ -135,44 +135,37 @@ describe("Embedding provider hot-swap", () => {
   });
 
   it("gateway starts cleanly when initial embedding provider creation fails", async () => {
-    // Simulate a startup where the embedding factory would throw
-    // (e.g. missing API key). The gateway must NOT crash.
-    const port = BASE_PORT + 1;
     gateway = await createGateway({
       provider: new StubProvider(),
-      config: baseConfig(port),
-      // No embeddingProvider override — relies on gateway creating one from config.
-      // With :memory: config defaulting to gemini (no key), factory throws.
-      // Gateway should survive and report embeddings as disabled.
+      config: baseConfig(TEST_PORT),
     });
     await gateway.start();
+    const port = gateway.port;
 
     expect(gateway.status).toBe("running");
 
     const res = await fetch(`http://localhost:${port}/api/config/embedding-status`);
     const body = await res.json() as { ok: boolean; error?: string };
-    // Either disabled (no provider) or ok — but should never crash the gateway
     expect(res.status).toBe(200);
     expect(typeof body.ok).toBe("boolean");
   });
 
   it("after fix: embedding provider is replaced when provider config changes", async () => {
-    const port = BASE_PORT + 2;
     const initial = new TrackingEmbeddingProvider("before-swap", 4);
 
     gateway = await createGateway({
       provider: new StubProvider(),
-      config: baseConfig(port),
+      config: baseConfig(TEST_PORT),
       embeddingProvider: initial,
     });
     await gateway.start();
+    const port = gateway.port;
 
     const statusBefore = await fetch(`http://localhost:${port}/api/config/embedding-status`);
     const bodyBefore = await statusBefore.json() as { ok: boolean; dimensions?: number };
     expect(bodyBefore.ok).toBe(true);
     expect(bodyBefore.dimensions).toBe(4);
 
-    // Change embedding.enabled to false then back — this should cause a rebuild
     const { rev } = await getConfig(port);
     await patchConfig(port, rev, [
       { op: "replace", path: "/embedding/enabled", value: false },
@@ -185,14 +178,13 @@ describe("Embedding provider hot-swap", () => {
   });
 
   it("embedding-status returns ok:false with clear message after hot-swap to broken provider", async () => {
-    const port = BASE_PORT + 3;
-
     gateway = await createGateway({
       provider: new StubProvider(),
-      config: baseConfig(port),
+      config: baseConfig(TEST_PORT),
       embeddingProvider: new BrokenEmbeddingProvider(),
     });
     await gateway.start();
+    const port = gateway.port;
 
     const res = await fetch(`http://localhost:${port}/api/config/embedding-status`);
     const body = await res.json() as { ok: boolean; error?: string };

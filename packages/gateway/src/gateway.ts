@@ -158,6 +158,10 @@ export class Gateway implements Lifecycle {
     return this._status;
   }
 
+  get port(): number {
+    return this.server?.port ?? 0;
+  }
+
   async start(): Promise<void> {
     if (this._status === "running" || this._status === "starting") return;
     this._status = "starting";
