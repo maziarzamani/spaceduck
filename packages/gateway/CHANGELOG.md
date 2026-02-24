@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.18.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.17.0...gateway-v0.18.0) (2026-02-24)
+
+
+### Features
+
+* add browser and web fetch tools to settings UI ([d867d02](https://github.com/maziarzamani/spaceduck/commit/d867d02ff782b17bfd51b74b5dcd77e70b2e4da6))
+* chart rendering in conversations + collapsible thinking blocks ([fee7b37](https://github.com/maziarzamani/spaceduck/commit/fee7b3705301415014900705e4719645bc53ab81))
+* tool and channel hot-swap via config store ([46977a8](https://github.com/maziarzamani/spaceduck/commit/46977a8ae0e25771f177f252a3213ea0dc876431))
+* tool runtime error surfacing (PR B) ([81d2a83](https://github.com/maziarzamani/spaceduck/commit/81d2a837de32914c3fc28dae9d7239144d9f4065))
+
+
+### Bug Fixes
+
+* use OS-assigned ports in gateway tests to eliminate flaky port collisions ([6bce5d9](https://github.com/maziarzamani/spaceduck/commit/6bce5d903c34279eacd1f3f7b5e13d476d0118de))
+
 ## [0.17.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.16.0...gateway-v0.17.0) (2026-02-24)
 
 
