@@ -62,7 +62,7 @@ export async function status(opts: GlobalOpts) {
   console.log(`Provider ${providerDot} ${providerLabel}`);
 }
 
-function formatUptime(seconds: number): string {
+export function formatUptime(seconds: number): string {
   if (seconds < 60) return `${Math.floor(seconds)}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   const h = Math.floor(seconds / 3600);

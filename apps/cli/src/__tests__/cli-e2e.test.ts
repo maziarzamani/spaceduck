@@ -25,8 +25,27 @@ function run(...args: string[]) {
   });
 }
 
+function runWithStdin(stdin: Blob, ...args: string[]) {
+  return Bun.spawn([...CLI, "--gateway", GATEWAY, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin,
+    cwd: import.meta.dir + "/../../../..",
+  });
+}
+
 async function exec(...args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = run(...args);
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode };
+}
+
+async function execWithStdin(stdin: string, ...args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const proc = runWithStdin(new Blob([stdin]), ...args);
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -242,5 +261,225 @@ describe("CLI e2e", () => {
     const { stderr, exitCode } = await exec("config", "foobar");
     expect(exitCode).toBe(1);
     expect(stderr).toContain("Unknown config subcommand");
+  });
+
+  // ── Setup ────────────────────────────────────────────────────────
+
+  test("setup --skip exits 0 with skip message", async () => {
+    const { stdout, exitCode } = await exec("setup", "--skip");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("skipped");
+  });
+
+  test("setup --skip --json returns JSON", async () => {
+    const { stdout, exitCode } = await exec("setup", "--skip", "--json");
+    expect(exitCode).toBe(0);
+    const data = JSON.parse(stdout);
+    expect(data.status).toBe("skipped");
+  });
+
+  test("setup --mode invalid exits 1", async () => {
+    const { stderr, exitCode } = await exec("setup", "--mode", "invalid");
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Invalid mode");
+  });
+
+  test("setup --mode local with defaults exits 0", async () => {
+    // Pipe newlines to accept default runtime and default URL
+    const { stdout, exitCode } = await execWithStdin("\n\n", "setup", "--mode", "local");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Setup complete");
+  });
+
+  test("setup --mode local --json returns JSON", async () => {
+    const { stdout, exitCode } = await execWithStdin("\n\n", "setup", "--mode", "local", "--json");
+    expect(exitCode).toBe(0);
+    const match = stdout.match(/\{[^{}]*"status"\s*:\s*"complete"[^{}]*\}/);
+    expect(match).not.toBeNull();
+    const data = JSON.parse(match![0]);
+    expect(data.status).toBe("complete");
+    expect(data.mode).toBe("local");
+  });
+
+  test("setup --mode cloud with defaults exits 0", async () => {
+    // Pipe newlines: accept default provider, skip API key, accept default model
+    const { stdout, exitCode } = await execWithStdin("\n\n\n", "setup", "--mode", "cloud");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Setup complete");
+  });
+
+  test("setup --mode cloud --json returns JSON", async () => {
+    const { stdout, exitCode } = await execWithStdin("\n\n\n", "setup", "--mode", "cloud", "--json");
+    expect(exitCode).toBe(0);
+    const match = stdout.match(/\{[^{}]*"status"\s*:\s*"complete"[^{}]*\}/);
+    expect(match).not.toBeNull();
+    const data = JSON.parse(match![0]);
+    expect(data.status).toBe("complete");
+    expect(data.mode).toBe("cloud");
+  });
+
+  // ── Config secret set/unset ────────────────────────────────────
+
+  test("config secret set with piped value exits 0", async () => {
+    const { stdout, exitCode } = await execWithStdin(
+      "test-api-key-123\n",
+      "config", "secret", "set", "/ai/secrets/geminiApiKey",
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Secret");
+    expect(stdout).toContain("/ai/secrets/geminiApiKey");
+  });
+
+  test("config secret set --json returns JSON", async () => {
+    const { stdout, exitCode } = await execWithStdin(
+      "test-api-key-456\n",
+      "--json", "config", "secret", "set", "/ai/secrets/geminiApiKey",
+    );
+    expect(exitCode).toBe(0);
+    const data = JSON.parse(stdout);
+    expect(data.ok).toBe(true);
+    expect(data.path).toBe("/ai/secrets/geminiApiKey");
+  });
+
+  test("config secret unset exits 0", async () => {
+    const { stdout, exitCode } = await exec("config", "secret", "unset", "/ai/secrets/geminiApiKey");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Secret");
+    expect(stdout).toContain("removed");
+  });
+
+  test("config secret unset --json returns JSON", async () => {
+    const { stdout, exitCode } = await exec("--json", "config", "secret", "unset", "/ai/secrets/geminiApiKey");
+    expect(exitCode).toBe(0);
+    const data = JSON.parse(stdout);
+    expect(data.ok).toBe(true);
+    expect(data.path).toBe("/ai/secrets/geminiApiKey");
+  });
+
+  test("config secret set without leading slash fails", async () => {
+    const { stderr, exitCode } = await execWithStdin(
+      "key\n",
+      "config", "secret", "set", "ai/secrets/geminiApiKey",
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("must start with /");
+  });
+
+  test("config secret unknown action fails", async () => {
+    const { stderr, exitCode } = await exec("config", "secret", "blah", "/ai/secrets/geminiApiKey");
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Unknown secret action");
+  });
+
+  // ── --json flag coverage ───────────────────────────────────────
+
+  test("config get --json (no path) returns JSON without rev footer", async () => {
+    const { stdout, exitCode } = await exec("--json", "config", "get");
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout);
+    expect(parsed.ai).toBeDefined();
+    expect(stdout).not.toContain("\nrev:");
+  });
+
+  test("config get /ai --json returns valid JSON", async () => {
+    const { stdout, exitCode } = await exec("--json", "config", "get", "/ai");
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout);
+    expect(parsed.provider).toBeDefined();
+    expect(typeof parsed.temperature).toBe("number");
+  });
+
+  test("config set --json returns structured response", async () => {
+    const { stdout: orig } = await exec("config", "get", "/ai/temperature");
+    const temp = Number(orig);
+    const newTemp = temp === 0.8 ? 0.6 : 0.8;
+
+    const { stdout, exitCode } = await exec(
+      "--json", "config", "set", "/ai/temperature", String(newTemp),
+    );
+    expect(exitCode).toBe(0);
+    const data = JSON.parse(stdout);
+    expect(data.ok).toBe(true);
+    expect(data.rev).toBeDefined();
+
+    // Restore
+    await exec("config", "set", "/ai/temperature", String(temp));
+  });
+
+  // ── Auth / --token ─────────────────────────────────────────────
+
+  test("--token flag is accepted and forwarded", async () => {
+    const { stdout, exitCode } = await exec("--token", "test-tok", "status");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("connected");
+  });
+});
+
+// ── Auth-required gateway ─────────────────────────────────────────
+
+const AUTH_PORT = 49152 + Math.floor(Math.random() * 10000);
+const AUTH_GATEWAY = `http://localhost:${AUTH_PORT}`;
+
+describe("CLI e2e (auth required)", () => {
+  let authGateway: Gateway;
+
+  beforeAll(async () => {
+    const prev = process.env.SPACEDUCK_REQUIRE_AUTH;
+    process.env.SPACEDUCK_REQUIRE_AUTH = "1";
+
+    authGateway = await createGateway({
+      provider: new TestProvider(),
+      config: {
+        port: AUTH_PORT,
+        logLevel: "error",
+        provider: { name: "cli-test", model: "test-model" },
+        memory: { backend: "sqlite", connectionString: ":memory:" },
+        channels: ["web"],
+      },
+    });
+    await authGateway.start();
+
+    process.env.SPACEDUCK_REQUIRE_AUTH = prev;
+  });
+
+  afterAll(async () => {
+    if (authGateway?.status === "running") {
+      await authGateway.stop();
+    }
+  });
+
+  function authExec(...args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const proc = Bun.spawn([...CLI, "--gateway", AUTH_GATEWAY, ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: import.meta.dir + "/../../../..",
+    });
+    return Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]).then(([stdout, stderr, exitCode]) => ({
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+      exitCode,
+    }));
+  }
+
+  test("config get without token fails 401", async () => {
+    const { stderr, exitCode } = await authExec("config", "get");
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Unauthorized");
+  });
+
+  test("config set without token fails 401", async () => {
+    const { stderr, exitCode } = await authExec("config", "set", "/ai/temperature", "0.5");
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Unauthorized");
+  });
+
+  test("status still works (health endpoint is unauthenticated)", async () => {
+    const { stdout, exitCode } = await authExec("status");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("connected");
   });
 });

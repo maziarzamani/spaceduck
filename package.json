@@ -26,6 +26,7 @@
     "test:unit": "bun test --recursive packages/core/",
     "test:integration": "bun test --recursive packages/memory/ packages/channels/",
     "test:e2e": "bun test packages/gateway/src/__tests__/e2e.test.ts",
+    "test:cli": "bun test apps/cli/",
     "test:live": "RUN_LIVE_TESTS=1 bun test packages/gateway/src/__tests__/e2e-live.test.ts",
     "test:bedrock": "RUN_LIVE_TESTS=1 bun test packages/gateway/src/__tests__/e2e-bedrock.test.ts",
     "test:coverage": "bun test --recursive --coverage",
