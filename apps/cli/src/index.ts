@@ -42,7 +42,7 @@ interface GlobalOpts {
   json: boolean;
 }
 
-function parseGlobalOpts(args: string[]): { opts: GlobalOpts; rest: string[] } {
+export function parseGlobalOpts(args: string[]): { opts: GlobalOpts; rest: string[] } {
   let gateway = Bun.env.SPACEDUCK_GATEWAY_URL ?? "http://localhost:3000";
   let token = Bun.env.SPACEDUCK_TOKEN ?? null;
   let json = false;
@@ -137,4 +137,4 @@ export class CliError extends Error {
 
 export type { GlobalOpts };
 
-main();
+if (import.meta.main) main();
