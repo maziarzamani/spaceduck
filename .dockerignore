@@ -21,11 +21,13 @@ Thumbs.db
 
 # Desktop app / heavy local artifacts
 apps/desktop
+!apps/desktop/package.json
 **/target
 **/*.rs.bk
 
 # Website and docs (not needed for gateway image)
 apps/spaceduck-website
+!apps/spaceduck-website/package.json
 docs
 
 # Misc
