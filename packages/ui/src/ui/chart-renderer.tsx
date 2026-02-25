@@ -128,8 +128,8 @@ function PieChartComponent({ spec }: { spec: PieChartSpec }) {
         innerRadius={spec.donut ? "40%" : 0}
         outerRadius="75%"
         paddingAngle={spec.data.length > 1 ? 2 : 0}
-        label={({ name, percent }) =>
-          `${name} ${(percent * 100).toFixed(0)}%`
+        label={({ name, percent }: { name?: string; percent?: number }) =>
+          `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
         }
         labelLine={false}
         fontSize={11}

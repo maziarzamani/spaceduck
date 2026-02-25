@@ -7,10 +7,14 @@ alwaysApply: true
 
 After completing a feature or significant change, verify these before marking the task done:
 
-1. **`.env.example`** — If you added, renamed, or removed any `Bun.env` / `process.env` variables, update `.env.example` with the new entries (commented out, with defaults and a brief description). Group them under the appropriate section or add a new section.
+1. **Typecheck** — Run `bunx tsc --noEmit`. Zero errors. This is non-negotiable.
 
-2. **`README.md`** — If the feature is user-visible (new endpoint, new UI capability, new CLI dependency, new config knob), add or update the relevant section in the project README. Keep it concise — one paragraph or a bullet list is enough.
+2. **Tests** — Run `bun test --recursive`. All tests must pass.
 
-3. **`package.json` workspaces** — If you created a new package directory (e.g. `packages/stt/*`), make sure the glob is listed in the root `package.json` `"workspaces"` array.
+3. **`.env.example`** — If you added, renamed, or removed any `Bun.env` / `process.env` variables, update `.env.example` with the new entries (commented out, with defaults and a brief description). Group them under the appropriate section or add a new section.
 
-Do NOT skip these just because the code works. Config drift is the #1 source of "it works on my machine" bugs.
+4. **`README.md`** — If the feature is user-visible (new endpoint, new UI capability, new CLI dependency, new config knob), add or update the relevant section in the project README. Keep it concise — one paragraph or a bullet list is enough.
+
+5. **`package.json` workspaces** — If you created a new package directory (e.g. `packages/stt/*`), make sure the glob is listed in the root `package.json` `"workspaces"` array.
+
+Do NOT skip these just because the code works. Pushing type errors to CI is wasted time for everyone.
