@@ -33,11 +33,21 @@ Commits in this repo use `hi@spaceduck.ai` as the author email (set via local gi
 
 ## Commit Practices
 
-- **Run tests before committing.** All 101+ tests must pass. Run `bun test --recursive`.
+- **Typecheck before committing.** Run `bunx tsc --noEmit` and fix all errors before staging.
+- **Run tests before committing.** All tests must pass. Run `bun test --recursive`.
 - **Small, focused commits.** Each commit should do one logical thing.
 - **Never commit secrets.** The `.env` file is gitignored. Only `.env.example` is tracked.
 - **Never commit binaries or build artifacts.** `dist/`, `node_modules/`, `*.db` are gitignored.
 - **Don't skip hooks.** Never use `--no-verify`.
+
+## Pre-Push Checklist
+
+Before pushing any branch or creating a PR, **always** run these in order:
+
+1. `bunx tsc --noEmit` — must exit 0 (no type errors)
+2. `bun test --recursive` — must exit 0 (all tests pass)
+
+Do NOT push code that fails either check. Fix the issues first.
 
 ## Branch Strategy (GitHub Flow)
 
