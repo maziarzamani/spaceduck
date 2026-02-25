@@ -44,13 +44,17 @@ export function getCapabilities(): Promise<EnvCapabilities> {
 async function detectStt(): Promise<{ available: boolean; reason?: string }> {
   try {
     const { WhisperStt } = await import("@spaceduck/stt-whisper");
-    const result = await WhisperStt.isAvailable();
-    return result.ok
-      ? { available: true }
-      : { available: false, reason: result.reason };
-  } catch {
-    return { available: false, reason: "whisper module not loadable" };
-  }
+    const whisperResult = await WhisperStt.isAvailable();
+    if (whisperResult.ok) return { available: true };
+  } catch { /* whisper not loadable */ }
+
+  try {
+    const { AwsTranscribeStt } = await import("@spaceduck/stt-aws-transcribe");
+    const awsResult = await AwsTranscribeStt.isAvailable();
+    if (awsResult.ok) return { available: true };
+  } catch { /* aws transcribe not loadable */ }
+
+  return { available: false, reason: "No STT backend available (whisper not found, AWS credentials not configured)" };
 }
 
 async function detectMarker(): Promise<{ available: boolean; reason?: string }> {

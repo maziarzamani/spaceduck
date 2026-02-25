@@ -1,12 +1,15 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSpaceduckWs } from "./hooks/use-spaceduck-ws";
+import { useDictation } from "./hooks/use-dictation";
 import { ThemeProvider } from "./hooks/use-theme";
 import { Button } from "./ui/button";
 import { ChatView } from "./components/chat-view";
 import { OnboardingView } from "./components/onboarding-view";
 import { SettingsView } from "./components/settings-view";
+import { DictationOverlay } from "./components/dictation-overlay";
 import { TooltipProvider } from "./ui/tooltip";
 import { Toaster } from "sonner";
+import type { ChatInputRecorderHandle } from "./components/chat-input";
 
 export type AppView = "onboarding" | "chat" | "settings";
 
@@ -48,6 +51,45 @@ function AppInner() {
   const [setupBanner, setSetupBanner] = useState(false);
   const shouldConnect = view === "chat" || view === "settings";
   const ws = useSpaceduckWs(shouldConnect);
+  const chatRecorderRef = useRef<ChatInputRecorderHandle | null>(null);
+
+  const [dictationConfig, setDictationConfig] = useState<{
+    enabled: boolean;
+    hotkey: string;
+    languageHint?: string;
+  }>({ enabled: false, hotkey: "CommandOrControl+Shift+Space" });
+
+  const fetchDictationConfig = useCallback(() => {
+    const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
+    if (!isTauri) return;
+
+    const url = localStorage.getItem("spaceduck.gatewayUrl") ?? "http://localhost:3000";
+    fetch(`${url}/api/stt/status`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.dictation) {
+          setDictationConfig({
+            enabled: data.dictation.enabled ?? false,
+            hotkey: data.dictation.hotkey ?? "CommandOrControl+Shift+Space",
+            languageHint: data.language,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchDictationConfig();
+  }, [fetchDictationConfig]);
+
+  const dictation = useDictation({
+    enabled: dictationConfig.enabled,
+    hotkey: dictationConfig.hotkey,
+    languageHint: dictationConfig.languageHint,
+    maxSeconds: 120,
+    onError: (err) => console.error("[dictation]", err),
+    chatRecorderRef,
+  });
 
   useEffect(() => {
     if (view === "chat") {
@@ -106,7 +148,7 @@ function AppInner() {
     return (
       <TooltipProvider delayDuration={300}>
         <SettingsView
-          onBack={() => setView("chat")}
+          onBack={() => { fetchDictationConfig(); setView("chat"); }}
           onDisconnect={handleDisconnect}
         />
       </TooltipProvider>
@@ -118,7 +160,10 @@ function AppInner() {
       {setupBanner && (
         <SetupBanner onFinish={handleFinishSetup} onDismiss={handleDismissBanner} />
       )}
-      <ChatView ws={ws} onOpenSettings={() => setView("settings")} />
+      <ChatView ws={ws} onOpenSettings={() => setView("settings")} recorderRef={chatRecorderRef} />
+      {dictation.supported && (
+        <DictationOverlay state={dictation.state} durationMs={dictation.durationMs} />
+      )}
     </TooltipProvider>
   );
 }

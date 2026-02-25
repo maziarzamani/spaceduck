@@ -15,6 +15,19 @@ export const HttpUrlSchema = z
 
 export const SttModelEnum = z.enum(["tiny", "base", "small", "medium", "large"]);
 
+export const SttBackendEnum = z.enum(["whisper", "aws-transcribe"]);
+
+const AwsTranscribeSchema = z.object({
+  region: z.string().default("us-east-1"),
+  languageCode: z.string().default("en-US"),
+  profile: z.string().nullable().default(null),
+});
+
+const DictationSchema = z.object({
+  enabled: z.boolean().default(false),
+  hotkey: z.string().default("Fn"),
+});
+
 const AiProviderEnum = z.enum(["gemini", "bedrock", "openrouter", "lmstudio", "llamacpp"]);
 
 const AiSecretsSchema = z.object({
@@ -56,8 +69,11 @@ const EmbeddingSchema = z.object({
 
 const SttSchema = z.object({
   enabled: z.boolean().default(true),
+  backend: SttBackendEnum.default("whisper"),
   model: SttModelEnum.default("small"),
   languageHint: z.string().nullable().default(null),
+  awsTranscribe: AwsTranscribeSchema.default({}),
+  dictation: DictationSchema.default({}),
 });
 
 const WebSearchSecretsSchema = z.object({

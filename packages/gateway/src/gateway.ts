@@ -49,6 +49,7 @@ import { AttachmentStore } from "./attachment-store";
 import { SwappableProvider } from "./swappable-provider";
 import { SwappableEmbeddingProvider } from "./swappable-embedding-provider";
 import { WhisperStt, SttError } from "@spaceduck/stt-whisper";
+import { AwsTranscribeStt, SttError as AwsSttError } from "@spaceduck/stt-aws-transcribe";
 import { createWriteStream } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { Readable } from "node:stream";
@@ -130,6 +131,8 @@ export class Gateway implements Lifecycle {
   private authRequired: boolean;
   private gatewayInfo: GatewayInfo | null = null;
   private whisperStt: WhisperStt | null = null;
+  private awsTranscribeStt: AwsTranscribeStt | null = null;
+  private activeSttBackend: "whisper" | "aws-transcribe" = "whisper";
   private stt: {
     available: boolean;
     reason?: string;
@@ -380,6 +383,30 @@ export class Gateway implements Lifecycle {
     return { ok: true };
   }
 
+  private async rebuildAndSwapStt(reason: string, changedPaths?: string[]): Promise<SwapResult> {
+    const startMs = Date.now();
+    const prevBackend = this.activeSttBackend;
+    try {
+      await this.initStt();
+      this.deps.logger.info("STT hot-swapped", {
+        reason, changedPaths,
+        prevBackend, newBackend: this.activeSttBackend,
+        elapsedMs: Date.now() - startMs,
+      });
+      return { ok: true };
+    } catch (err) {
+      this.deps.logger.error("STT hot-swap failed, keeping previous", {
+        reason, changedPaths,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return {
+        ok: false,
+        code: "STT_SWAP_FAILED",
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
   private async handleChannelMessage(channel: Channel, msg: import("@spaceduck/core").ChannelMessage): Promise<void> {
     const { agent, conversationStore, sessionManager, runLock, logger } = this.deps;
     const log = logger.child({ component: channel.name });
@@ -507,6 +534,8 @@ export class Gateway implements Lifecycle {
 
     // STT status (unauthenticated — no secrets exposed)
     if (req.method === "GET" && url.pathname === "/api/stt/status") {
+      const productConfig = this.deps.configStore?.current;
+      const dictation = productConfig?.stt?.dictation;
       return Response.json(this.stt.available
         ? {
             available: true,
@@ -516,6 +545,10 @@ export class Gateway implements Lifecycle {
             maxSeconds: this.stt.maxSeconds,
             maxBytes: this.stt.maxBytes,
             timeoutMs: this.stt.timeoutMs,
+            dictation: dictation ? {
+              enabled: dictation.enabled,
+              hotkey: dictation.hotkey,
+            } : undefined,
           }
         : {
             available: false,
@@ -653,6 +686,12 @@ export class Gateway implements Lifecycle {
       if (req.method === "POST" && url.pathname === "/api/stt/transcribe") {
         if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
         return this.handleTranscribe(req);
+      }
+
+      // STT backend test
+      if (req.method === "GET" && url.pathname === "/api/stt/test") {
+        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        return this.handleSttTest();
       }
 
       // ── Config API routes ──────────────────────────────────────
@@ -909,6 +948,12 @@ export class Gateway implements Lifecycle {
                 if (!r.ok) warnings.push({ code: r.code, message: r.message });
               }
 
+              // Hot-swap STT backend if STT config changed
+              if (shouldRebuildStt(changedPaths)) {
+                const r = await this.rebuildAndSwapStt("config_patch", [...changedPaths]);
+                if (!r.ok) warnings.push({ code: r.code, message: r.message });
+              }
+
               const response: Record<string, unknown> = {
                 config: result.config,
                 rev: result.rev,
@@ -1159,29 +1204,107 @@ export class Gateway implements Lifecycle {
   }
 
   async initStt(): Promise<void> {
-    const model = Bun.env.SPACEDUCK_STT_MODEL ?? "small";
+    const productConfig = this.deps.configStore?.current;
+    const sttConfig = productConfig?.stt;
+    const backend = sttConfig?.backend ?? "whisper";
+    const model = Bun.env.SPACEDUCK_STT_MODEL ?? sttConfig?.model ?? "small";
     const maxSeconds = Number(Bun.env.SPACEDUCK_STT_MAX_SECONDS ?? "120");
     const maxBytes = Number(Bun.env.SPACEDUCK_STT_MAX_BYTES ?? String(15 * 1024 * 1024));
     const timeoutMs = Number(Bun.env.SPACEDUCK_STT_TIMEOUT_MS ?? "300000");
 
-    const availability = await WhisperStt.isAvailable();
+    this.activeSttBackend = backend;
 
-    this.stt = {
-      available: availability.ok,
-      reason: availability.reason,
-      backend: "whisper",
-      model,
-      language: Bun.env.SPACEDUCK_STT_LANGUAGE ?? "",
-      maxSeconds,
-      maxBytes,
-      timeoutMs,
-    };
+    if (backend === "aws-transcribe") {
+      const awsConfig = sttConfig?.awsTranscribe ?? { region: "us-east-1", languageCode: "en-US", profile: null };
+      const availability = await AwsTranscribeStt.isAvailable({
+        region: awsConfig.region,
+        profile: awsConfig.profile,
+      });
 
-    if (availability.ok) {
-      this.whisperStt = new WhisperStt({ model, timeoutMs });
-      this.deps.logger.info("STT enabled", { backend: "whisper", model });
+      this.stt = {
+        available: availability.ok,
+        reason: availability.reason,
+        backend: "aws-transcribe",
+        model: "",
+        language: awsConfig.languageCode ?? "en-US",
+        maxSeconds,
+        maxBytes,
+        timeoutMs,
+      };
+
+      if (availability.ok) {
+        this.awsTranscribeStt = new AwsTranscribeStt({
+          region: awsConfig.region,
+          languageCode: awsConfig.languageCode,
+          profile: awsConfig.profile,
+          timeoutMs,
+        });
+        this.deps.logger.info("STT enabled", {
+          backend: "aws-transcribe",
+          region: awsConfig.region,
+        });
+      } else {
+        this.deps.logger.warn("STT unavailable (aws-transcribe)", {
+          reason: availability.reason,
+        });
+      }
     } else {
-      this.deps.logger.warn("STT unavailable", { reason: availability.reason });
+      const availability = await WhisperStt.isAvailable();
+
+      this.stt = {
+        available: availability.ok,
+        reason: availability.reason,
+        backend: "whisper",
+        model,
+        language: Bun.env.SPACEDUCK_STT_LANGUAGE ?? "",
+        maxSeconds,
+        maxBytes,
+        timeoutMs,
+      };
+
+      if (availability.ok) {
+        this.whisperStt = new WhisperStt({ model, timeoutMs });
+        this.deps.logger.info("STT enabled", { backend: "whisper", model });
+      } else {
+        this.deps.logger.warn("STT unavailable (whisper)", {
+          reason: availability.reason,
+        });
+      }
+    }
+  }
+
+  private async handleSttTest(): Promise<Response> {
+    const backend = this.activeSttBackend;
+    const startMs = Date.now();
+
+    try {
+      if (backend === "aws-transcribe") {
+        const awsConfig = this.deps.configStore?.current?.stt?.awsTranscribe;
+        const availability = await AwsTranscribeStt.isAvailable({
+          region: awsConfig?.region,
+          profile: awsConfig?.profile,
+        });
+        const durationMs = Date.now() - startMs;
+        if (!availability.ok) {
+          return Response.json({ ok: false, backend, error: availability.reason, durationMs });
+        }
+        return Response.json({ ok: true, backend, durationMs });
+      }
+
+      const availability = await WhisperStt.isAvailable();
+      const durationMs = Date.now() - startMs;
+      if (!availability.ok) {
+        return Response.json({ ok: false, backend, error: availability.reason, durationMs });
+      }
+      return Response.json({ ok: true, backend, durationMs });
+    } catch (err) {
+      const durationMs = Date.now() - startMs;
+      return Response.json({
+        ok: false,
+        backend,
+        error: err instanceof Error ? err.message : String(err),
+        durationMs,
+      });
     }
   }
 
@@ -1189,9 +1312,9 @@ export class Gateway implements Lifecycle {
     const { logger } = this.deps;
     const requestId = `stt_${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
-    if (!this.stt.available || !this.whisperStt) {
+    if (!this.stt.available || (!this.whisperStt && !this.awsTranscribeStt)) {
       return Response.json(
-        { requestId, error: "STT_UNAVAILABLE", message: "whisper is not installed" },
+        { requestId, error: "STT_UNAVAILABLE", message: `STT backend (${this.activeSttBackend}) is not available` },
         { status: 503 },
       );
     }
@@ -1259,7 +1382,10 @@ export class Gateway implements Lifecycle {
       }
 
       const startTime = Date.now();
-      const result = await this.whisperStt.transcribeFile(tempPath, { languageHint });
+      const sttProvider = this.activeSttBackend === "aws-transcribe"
+        ? this.awsTranscribeStt!
+        : this.whisperStt!;
+      const result = await sttProvider.transcribeFile(tempPath, { languageHint });
       const durationMs = Date.now() - startTime;
 
       logger.info("STT transcribed", { requestId, durationMs, language: result.language, bytes });
@@ -1272,7 +1398,7 @@ export class Gateway implements Lifecycle {
         durationMs,
       });
     } catch (err) {
-      if (err instanceof SttError) {
+      if (err instanceof SttError || err instanceof AwsSttError) {
         const status = sttErrorToStatus(err.code);
         return Response.json(
           { requestId, error: err.code, message: err.message },
@@ -1321,6 +1447,8 @@ function sttErrorToStatus(code: string): number {
     case "TIMEOUT": return 504;
     case "MODEL_NOT_FOUND": return 503;
     case "BINARY_NOT_FOUND": return 503;
+    case "CREDENTIALS_MISSING": return 503;
+    case "SERVICE_ERROR": return 502;
     case "PARSE_ERROR": return 500;
     default: return 500;
   }
@@ -1382,6 +1510,14 @@ const CHANNEL_REBUILD_PATHS = new Set([
   "/channels/whatsapp/enabled",
 ]);
 
+const STT_REBUILD_PATHS = new Set([
+  "/stt/backend",
+  "/stt/model",
+  "/stt/awsTranscribe/region",
+  "/stt/awsTranscribe/languageCode",
+  "/stt/awsTranscribe/profile",
+]);
+
 function shouldRebuildTools(changedPaths: Set<string>): boolean {
   for (const p of TOOL_REBUILD_PATHS) {
     if (changedPaths.has(p)) return true;
@@ -1395,6 +1531,13 @@ function shouldRebuildToolsForSecret(path: string): boolean {
 
 function shouldRebuildChannels(changedPaths: Set<string>): boolean {
   for (const p of CHANNEL_REBUILD_PATHS) {
+    if (changedPaths.has(p)) return true;
+  }
+  return false;
+}
+
+function shouldRebuildStt(changedPaths: Set<string>): boolean {
+  for (const p of STT_REBUILD_PATHS) {
     if (changedPaths.has(p)) return true;
   }
   return false;

@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Sidebar } from "./sidebar";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
+import type { ChatInputRecorderHandle } from "./chat-input";
 import { StatusBar } from "./status-bar";
 import { Separator } from "../ui/separator";
 import type { UseSpaceduckWs } from "../hooks/use-spaceduck-ws";
@@ -27,9 +28,10 @@ interface SttStatus {
 interface ChatViewProps {
   ws: UseSpaceduckWs;
   onOpenSettings: () => void;
+  recorderRef?: React.MutableRefObject<ChatInputRecorderHandle | null>;
 }
 
-export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
+export function ChatView({ ws, onOpenSettings, recorderRef }: ChatViewProps) {
   const [stt, setStt] = useState<SttStatus>({ available: false });
   const toastDedupeRef = useRef<Set<string>>(new Set());
 
@@ -108,6 +110,7 @@ export function ChatView({ ws, onOpenSettings }: ChatViewProps) {
           sttAvailable={stt.available}
           sttLanguage={stt.language}
           sttMaxSeconds={stt.maxSeconds}
+          recorderRef={recorderRef}
         />
       </main>
     </div>
