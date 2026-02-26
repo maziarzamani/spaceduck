@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.18.0...gateway-v0.19.0) (2026-02-26)
+
+
+### Features
+
+* **desktop:** add Fn key dictation with CGEventTap health recovery ([d4eb622](https://github.com/maziarzamani/spaceduck/commit/d4eb6226767cee9ea874b0ddec68150a22a0f8f5))
+* unified brand tokens, dictation pill, and agent improvements ([85bb759](https://github.com/maziarzamani/spaceduck/commit/85bb75921429d208b9a6614e01693d62530b27bd))
+
 ## [0.18.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.17.0...gateway-v0.18.0) (2026-02-24)
 
 
