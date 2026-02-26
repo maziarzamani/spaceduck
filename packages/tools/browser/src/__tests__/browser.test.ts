@@ -1,7 +1,52 @@
-// Browser tool tests -- requires network access and Playwright Chromium
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { BrowserTool } from "..";
 import type { ScreencastFrame } from "../types";
+import type { Server } from "bun";
+
+const TEST_HTML = `<!DOCTYPE html>
+<html>
+<head><title>Test Page</title></head>
+<body>
+  <h1>Welcome</h1>
+  <nav>
+    <a href="/about">About</a>
+    <a href="/contact">Contact</a>
+  </nav>
+  <main>
+    <form>
+      <input type="search" aria-label="Search" placeholder="Search..." />
+      <button type="submit">Submit</button>
+    </form>
+    <div style="height:3000px"></div>
+  </main>
+</body>
+</html>`;
+
+const ABOUT_HTML = `<!DOCTYPE html>
+<html><head><title>About</title></head>
+<body><h1>About Page</h1><a href="/">Back</a></body>
+</html>`;
+
+let server: Server;
+let BASE: string;
+
+beforeAll(() => {
+  server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      const url = new URL(req.url);
+      if (url.pathname === "/about") {
+        return new Response(ABOUT_HTML, { headers: { "content-type": "text/html" } });
+      }
+      return new Response(TEST_HTML, { headers: { "content-type": "text/html" } });
+    },
+  });
+  BASE = `http://localhost:${server.port}`;
+});
+
+afterAll(() => {
+  server?.stop(true);
+});
 
 describe("BrowserTool.isAvailable", () => {
   it("returns available: true when Chromium is installed", () => {
@@ -24,7 +69,7 @@ describe("BrowserTool", () => {
 
   describe("navigate", () => {
     it("should navigate and return status", async () => {
-      const result = await browser.navigate("https://example.com");
+      const result = await browser.navigate(BASE);
       expect(result).toContain("Navigated to");
       expect(result).toContain("status: 200");
     });
@@ -32,12 +77,11 @@ describe("BrowserTool", () => {
 
   describe("snapshot", () => {
     it("should return numbered interactive elements", async () => {
-      await browser.navigate("https://example.com");
+      await browser.navigate(BASE);
       const snap = await browser.snapshot();
 
-      expect(snap).toContain("Page: https://example.com");
+      expect(snap).toContain(`Page: ${BASE}/`);
       expect(snap).toContain("Title:");
-      // example.com has a "More information..." link
       expect(snap).toMatch(/\[\d+\] Link/);
     });
 
@@ -49,11 +93,13 @@ describe("BrowserTool", () => {
 
   describe("click", () => {
     it("should click an element by ref", async () => {
-      await browser.navigate("https://news.ycombinator.com");
-      await browser.snapshot();
-      // Ref [1] is typically the "Hacker News" link
-      const result = await browser.click(1);
-      expect(result).toBe("Clicked [1]");
+      await browser.navigate(BASE);
+      const snap = await browser.snapshot();
+      const match = snap.match(/\[(\d+)\] Link "About"/);
+      expect(match).toBeTruthy();
+      const ref = parseInt(match![1], 10);
+      const result = await browser.click(ref);
+      expect(result).toBe(`Clicked [${ref}]`);
     });
 
     it("should throw on invalid ref", async () => {
@@ -63,11 +109,10 @@ describe("BrowserTool", () => {
 
   describe("type", () => {
     it("should type into an input with clear", async () => {
-      await browser.navigate("https://duckduckgo.com");
+      await browser.navigate(BASE);
       const snap = await browser.snapshot();
 
-      // Find the search combobox ref
-      const match = snap.match(/\[(\d+)\] Combobox/);
+      const match = snap.match(/\[(\d+)\] Searchbox/);
       expect(match).toBeTruthy();
       const ref = parseInt(match![1], 10);
 
@@ -98,7 +143,7 @@ describe("BrowserTool", () => {
 
   describe("screenshot", () => {
     it("should save a screenshot", async () => {
-      await browser.navigate("https://example.com");
+      await browser.navigate(BASE);
       const path = `/tmp/spaceduck-browser-test-${Date.now()}.png`;
       const result = await browser.screenshot(path);
       expect(result).toContain("Screenshot saved to");
@@ -106,16 +151,15 @@ describe("BrowserTool", () => {
       const file = Bun.file(path);
       expect(await file.exists()).toBe(true);
       expect(file.size).toBeGreaterThan(0);
-      // Clean up
       await Bun.write(path, "");
     });
   });
 
   describe("evaluate", () => {
     it("should run JS and return result", async () => {
-      await browser.navigate("https://example.com");
+      await browser.navigate(BASE);
       const result = await browser.evaluate("document.title");
-      expect(result).toBe("Example Domain");
+      expect(result).toBe("Test Page");
     });
 
     it("should handle object results as JSON", async () => {
@@ -128,7 +172,7 @@ describe("BrowserTool", () => {
 
   describe("screenshotBase64", () => {
     it("should return a base64 string", async () => {
-      await browser.navigate("https://example.com");
+      await browser.navigate(BASE);
       const b64 = await browser.screenshotBase64();
       expect(b64).toBeTruthy();
       expect(typeof b64).toBe("string");
@@ -144,9 +188,9 @@ describe("BrowserTool", () => {
 
   describe("currentUrl", () => {
     it("should return the current page URL", async () => {
-      await browser.navigate("https://example.com");
+      await browser.navigate(BASE);
       const url = browser.currentUrl();
-      expect(url).toContain("example.com");
+      expect(url).toContain("localhost");
     });
 
     it("should return null when no page is open", () => {
@@ -158,11 +202,10 @@ describe("BrowserTool", () => {
   describe("screencast", () => {
     it("should deliver frames via callback", async () => {
       const frames: ScreencastFrame[] = [];
-      await browser.navigate("https://example.com");
+      await browser.navigate(BASE);
       await browser.startScreencast((frame) => frames.push(frame));
 
-      // Trigger a visual change to produce at least one frame
-      await browser.navigate("https://example.com/");
+      await browser.navigate(`${BASE}/about`);
       await browser.wait({ timeMs: 1500 });
 
       await browser.stopScreencast();
@@ -171,7 +214,7 @@ describe("BrowserTool", () => {
       const frame = frames[0];
       expect(frame.base64).toBeTruthy();
       expect(frame.format).toBe("jpeg");
-      expect(frame.url).toContain("example.com");
+      expect(frame.url).toContain("localhost");
     });
 
     it("stopScreencast should be idempotent", async () => {
