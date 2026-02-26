@@ -15,6 +15,7 @@ describe("HOT_APPLY_PATHS", () => {
     expect(HOT_APPLY_PATHS.has("/onboarding/completedAt")).toBe(true);
     expect(HOT_APPLY_PATHS.has("/onboarding/skippedAt")).toBe(true);
     expect(HOT_APPLY_PATHS.has("/onboarding/versionCompleted")).toBe(true);
+    expect(HOT_APPLY_PATHS.has("/tools/browser/livePreview")).toBe(true);
   });
 
   test("does NOT contain restart-required paths", () => {
