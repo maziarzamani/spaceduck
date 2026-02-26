@@ -245,11 +245,24 @@ describe("BrowserSchema and WebFetchSchema", () => {
     expect(config.tools.browser.enabled).toBe(true);
   });
 
+  test("browser livePreview defaults to false", () => {
+    const config = SpaceduckConfigSchema.parse({});
+    expect(config.tools.browser.livePreview).toBe(false);
+  });
+
   test("browser can be disabled", () => {
     const config = SpaceduckConfigSchema.parse({
       tools: { browser: { enabled: false } },
     });
     expect(config.tools.browser.enabled).toBe(false);
+  });
+
+  test("browser livePreview can be enabled", () => {
+    const config = SpaceduckConfigSchema.parse({
+      tools: { browser: { livePreview: true } },
+    });
+    expect(config.tools.browser.livePreview).toBe(true);
+    expect(config.tools.browser.enabled).toBe(true);
   });
 
   test("webFetch defaults to enabled", () => {

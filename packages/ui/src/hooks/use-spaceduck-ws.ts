@@ -56,6 +56,8 @@ export interface UseSpaceduckWs {
   messages: Message[];
   activeConversationId: string | null;
   pendingStream: PendingStream | null;
+  streamingConversationId: string | null;
+  unreadConversationIds: ReadonlySet<string>;
   toolActivities: ToolActivity[];
   connectionEpoch: number;
   browserPreview: BrowserPreview | null;
@@ -75,6 +77,8 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [pendingStream, setPendingStream] = useState<PendingStream | null>(null);
+  const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
+  const [unreadConversationIds, setUnreadConversationIds] = useState<Set<string>>(new Set());
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
   const [connectionEpoch, setConnectionEpoch] = useState(0);
   const [browserPreview, setBrowserPreview] = useState<BrowserPreview | null>(null);
@@ -85,6 +89,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountedRef = useRef(false);
   const activeConvIdRef = useRef<string | null>(null);
+  const pendingConvIdRef = useRef<string | null>(null);
   const handleMessageRef = useRef<(envelope: WsServerEnvelope) => void>(() => {});
 
   activeConvIdRef.current = activeConversationId;
@@ -221,19 +226,23 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         break;
 
       case "message.accepted":
+        pendingConvIdRef.current = envelope.conversationId;
         if (!activeConvIdRef.current) {
           setActiveConversationId(envelope.conversationId);
         }
         break;
 
-      case "processing.started":
+      case "processing.started": {
+        const convId = pendingConvIdRef.current || activeConvIdRef.current || "";
         streamBufferRef.current = "";
+        setStreamingConversationId(convId);
         setPendingStream({
           requestId: envelope.requestId,
-          conversationId: activeConvIdRef.current || "",
+          conversationId: convId,
           content: "",
         });
         break;
+      }
 
       case "stream.delta":
         streamBufferRef.current += envelope.delta;
@@ -243,8 +252,14 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         break;
 
       case "stream.done": {
+        const finishedConvId = pendingConvIdRef.current;
+        if (finishedConvId && finishedConvId !== activeConvIdRef.current) {
+          setUnreadConversationIds((prev) => new Set(prev).add(finishedConvId));
+        }
         setPendingStream(null);
+        setStreamingConversationId(null);
         streamBufferRef.current = "";
+        pendingConvIdRef.current = null;
         setToolActivities([]);
         setBrowserPreview(null);
         if (activeConvIdRef.current) {
@@ -256,7 +271,9 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
 
       case "stream.error":
         setPendingStream(null);
+        setStreamingConversationId(null);
         streamBufferRef.current = "";
+        pendingConvIdRef.current = null;
         setToolActivities([]);
         setBrowserPreview(null);
         break;
@@ -367,6 +384,16 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
     (conversationId: string) => {
       setActiveConversationId(conversationId);
       setMessages([]);
+      setPendingStream(null);
+      streamBufferRef.current = "";
+      setToolActivities([]);
+      setBrowserPreview(null);
+      setUnreadConversationIds((prev) => {
+        if (!prev.has(conversationId)) return prev;
+        const next = new Set(prev);
+        next.delete(conversationId);
+        return next;
+      });
       send({ v: 1, type: "conversation.history", conversationId });
     },
     [send],
@@ -383,6 +410,8 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
     messages,
     activeConversationId,
     pendingStream,
+    streamingConversationId,
+    unreadConversationIds,
     toolActivities,
     connectionEpoch,
     browserPreview,
