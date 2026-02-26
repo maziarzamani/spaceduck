@@ -51,6 +51,7 @@ jobs:
           else
             bunx playwright install chromium
           fi
+          git checkout bun.lockb
 
       - name: Run tests
         run: bun test --recursive
