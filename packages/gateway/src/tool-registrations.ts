@@ -182,7 +182,9 @@ export function buildToolRegistry(
       {
         name: "browser_wait",
         description:
-          "Wait for one condition on the current page: a time delay (timeMs), CSS selector (selector), URL match (url), load state (state), or JavaScript condition (jsCondition). Prefer passing exactly one condition unless you intentionally need combined waiting.",
+          "Wait for a condition on the current page. Use timeMs for a simple delay (best for SPAs/JS-heavy sites), " +
+          "selector for a CSS element to appear, or jsCondition for custom checks. " +
+          "Avoid state: 'networkidle' on SPAs — they never stop making requests and it will timeout.",
         parameters: {
           type: "object",
           properties: {
@@ -209,7 +211,9 @@ export function buildToolRegistry(
       {
         name: "browser_evaluate",
         description:
-          "Execute JavaScript in the browser page context and return the result as a string.",
+          "Execute JavaScript in the browser page context and return the result as a string. " +
+          "Prefer this for extracting structured data from JS-heavy pages (e.g. product listings, search results, tables) — " +
+          "a single evaluate call with document.querySelectorAll is far faster than multiple snapshot/scroll cycles.",
         parameters: {
           type: "object",
           properties: {

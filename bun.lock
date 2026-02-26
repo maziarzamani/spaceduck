@@ -47,6 +47,7 @@
       "name": "spaceduck-website",
       "dependencies": {
         "@astrojs/react": "^4.4.2",
+        "@spaceduck/brand": "workspace:*",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "astro": "^5.17.3",
@@ -84,6 +85,10 @@
         "tailwindcss": "^4",
         "vite": "^7.3.1",
       },
+    },
+    "packages/brand": {
+      "name": "@spaceduck/brand",
+      "version": "0.1.0",
     },
     "packages/channels/whatsapp": {
       "name": "@spaceduck/channel-whatsapp",
@@ -290,6 +295,7 @@
         "@radix-ui/react-switch": "^1.2.6",
         "@radix-ui/react-tabs": "^1.1.13",
         "@radix-ui/react-tooltip": "^1.2.8",
+        "@spaceduck/brand": "workspace:*",
         "@spaceduck/config": "workspace:*",
         "@spaceduck/core": "workspace:*",
         "class-variance-authority": "^0.7.1",
@@ -977,6 +983,8 @@
     "@smithy/util-utf8": ["@smithy/util-utf8@4.2.1", "", { "dependencies": { "@smithy/util-buffer-from": "^4.2.1", "tslib": "^2.6.2" } }, "sha512-DSIwNaWtmzrNQHv8g7DBGR9mulSit65KSj5ymGEIAknmIN8IpbZefEep10LaMG/P/xquwbmJ1h9ectz8z6mV6g=="],
 
     "@smithy/uuid": ["@smithy/uuid@1.1.1", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-dSfDCeihDmZlV2oyr0yWPTUfh07suS+R5OB+FZGiv/hHyK3hrFBW5rR1UYjfa57vBsrP9lciFkRPzebaV1Qujw=="],
+
+    "@spaceduck/brand": ["@spaceduck/brand@workspace:packages/brand"],
 
     "@spaceduck/channel-whatsapp": ["@spaceduck/channel-whatsapp@workspace:packages/channels/whatsapp"],
 

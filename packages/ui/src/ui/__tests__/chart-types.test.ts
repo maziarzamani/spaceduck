@@ -385,5 +385,20 @@ describe("tryParseChartSpec", () => {
         "invalid_schema",
       );
     });
+
+    test("null series values accepted as missing data points", () => {
+      const result = tryParseChartSpec(
+        JSON.stringify({
+          type: "bar",
+          data: [
+            { month: "Jan", a: 10, b: null },
+            { month: "Feb", a: 20, b: 30 },
+          ],
+          xKey: "month",
+          series: [{ key: "a" }, { key: "b" }],
+        }),
+      );
+      expect(result.ok).toBe(true);
+    });
   });
 });

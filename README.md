@@ -114,6 +114,17 @@ Spaceduck supports both local and cloud providers. Chat and embeddings are indep
 
 > Details: [Docs → Platforms](https://docs.spaceduck.ai/platforms/gateway)
 
+## macOS Permissions (Desktop)
+
+The Desktop app uses a system-wide Fn (Globe) key listener for dictation. macOS requires two permissions for this to work:
+
+| Permission | Where to enable | Why |
+|---|---|---|
+| **Accessibility** | System Settings → Privacy & Security → Accessibility | Allows the app to observe keyboard events and simulate paste (Cmd+V) |
+| **Input Monitoring** | System Settings → Privacy & Security → Input Monitoring | Required for HID-level event tap to intercept the Fn/Globe key before macOS routes it to the emoji picker |
+
+Both permissions must be granted to the Spaceduck app (or the terminal running it during development). You will be prompted on first launch, or you can add the app manually in System Settings.
+
 ## Tools
 
 | Tool | What it does |

@@ -13,6 +13,8 @@
     "rootDir": ".",
     "baseUrl": ".",
     "paths": {
+      "@spaceduck/brand": ["packages/brand/src"],
+      "@spaceduck/brand/*": ["packages/brand/src/*"],
       "@spaceduck/core": ["packages/core/src"],
       "@spaceduck/core/*": ["packages/core/src/*"],
       "@spaceduck/gateway": ["packages/gateway/src"],

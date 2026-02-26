@@ -86,6 +86,93 @@ fn simulate_paste() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn make_window_transparent(window: &tauri::WebviewWindow) {
+    use cocoa::appkit::{NSColor, NSWindow};
+    use cocoa::base::{id, nil};
+
+    let ns_window = window.ns_window().unwrap() as id;
+    unsafe {
+        ns_window.setOpaque_(cocoa::base::NO);
+        let clear = NSColor::clearColor(nil);
+        ns_window.setBackgroundColor_(clear);
+    }
+
+    window.with_webview(|platform_webview| {
+        unsafe {
+            let wk_view: *mut objc2::runtime::AnyObject = platform_webview.inner().cast();
+            let _: () = objc2::msg_send![wk_view, _setDrawsBackground: false];
+        }
+    }).unwrap_or_else(|e| log::error!("Failed to set webview transparency: {e}"));
+}
+
+#[cfg(target_os = "macos")]
+pub fn reposition_pill_near_dock(app: &tauri::AppHandle) {
+    use cocoa::appkit::NSScreen;
+    use cocoa::base::{id, nil};
+    use tauri::Manager;
+
+    let pill = match app.get_webview_window("dictation") {
+        Some(w) => w,
+        None => return,
+    };
+
+    let pill_w = 280.0_f64;
+    let pill_h = 48.0_f64;
+
+    unsafe {
+        let mouse_loc: cocoa::foundation::NSPoint = cocoa::appkit::NSEvent::mouseLocation(nil);
+
+        let screens = NSScreen::screens(nil);
+        let count: usize = cocoa::foundation::NSArray::count(screens) as usize;
+
+        let mut target_frame = None;
+
+        for i in 0..count {
+            let scr: id = cocoa::foundation::NSArray::objectAtIndex(screens, i as u64);
+            let frame = NSScreen::frame(scr);
+            let contains = mouse_loc.x >= frame.origin.x
+                && mouse_loc.x <= frame.origin.x + frame.size.width
+                && mouse_loc.y >= frame.origin.y
+                && mouse_loc.y <= frame.origin.y + frame.size.height;
+            if contains {
+                target_frame = Some(frame);
+                break;
+            }
+        }
+
+        if target_frame.is_none() {
+            let scr = NSScreen::mainScreen(nil);
+            if scr != nil {
+                target_frame = Some(NSScreen::frame(scr));
+            }
+        }
+
+        if let Some(frame) = target_frame {
+            let x = (frame.size.width - pill_w) / 2.0 + frame.origin.x;
+            let bottom_gap = 100.0;
+            let y = frame.origin.y + bottom_gap;
+
+            // Find the true primary screen (origin 0,0) — NOT mainScreen which follows focus
+            let screen_h_total = {
+                let mut h = frame.size.height;
+                for i in 0..count {
+                    let scr: id = cocoa::foundation::NSArray::objectAtIndex(screens, i as u64);
+                    let f = NSScreen::frame(scr);
+                    if f.origin.x == 0.0 && f.origin.y == 0.0 {
+                        h = f.size.height;
+                        break;
+                    }
+                }
+                h
+            };
+            let tauri_y = screen_h_total - y - pill_h;
+
+            let _ = pill.set_position(tauri::LogicalPosition::new(x, tauri_y));
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -105,6 +192,57 @@ pub fn run() {
                         log::error!("Fn key monitor failed: {e}");
                     }
                 });
+            }
+
+            // Create floating dictation pill window
+            {
+                let url = if cfg!(debug_assertions) {
+                    tauri::WebviewUrl::External("http://localhost:1420/?window=dictation".parse().unwrap())
+                } else {
+                    tauri::WebviewUrl::App("index.html?window=dictation".into())
+                };
+
+                let pill_w = 280.0_f64;
+                let pill_h = 48.0_f64;
+
+                #[allow(unused_mut)]
+                let mut builder = tauri::WebviewWindowBuilder::new(app, "dictation", url)
+                    .title("Dictation")
+                    .inner_size(pill_w, pill_h)
+                    .resizable(false)
+                    .decorations(false)
+                    .always_on_top(true)
+                    .skip_taskbar(true)
+                    .shadow(false)
+                    .focused(false)
+                    .visible(true);
+
+                #[cfg(not(target_os = "macos"))]
+                if let Some(monitor) = app.primary_monitor().ok().flatten() {
+                    let size = monitor.size();
+                    let scale = monitor.scale_factor();
+                    let screen_w = size.width as f64 / scale;
+                    let screen_h = size.height as f64 / scale;
+                    let x = (screen_w - pill_w) / 2.0;
+                    let y = screen_h - pill_h - 80.0;
+                    builder = builder.position(x, y);
+                }
+
+                let pill = builder
+                    .build()
+                    .map_err(|e| {
+                        log::error!("Failed to create dictation pill window: {e}");
+                        e
+                    })
+                    .ok();
+
+                #[cfg(target_os = "macos")]
+                if let Some(ref _pill) = pill {
+                    make_window_transparent(_pill);
+                    reposition_pill_near_dock(app.handle());
+                }
+
+                let _ = pill;
             }
 
             Ok(())

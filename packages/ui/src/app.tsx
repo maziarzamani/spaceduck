@@ -57,7 +57,7 @@ function AppInner() {
     enabled: boolean;
     hotkey: string;
     languageHint?: string;
-  }>({ enabled: false, hotkey: "CommandOrControl+Shift+Space" });
+  }>({ enabled: false, hotkey: "Fn" });
 
   const fetchDictationConfig = useCallback(() => {
     const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
@@ -70,7 +70,7 @@ function AppInner() {
         if (data.dictation) {
           setDictationConfig({
             enabled: data.dictation.enabled ?? false,
-            hotkey: data.dictation.hotkey ?? "CommandOrControl+Shift+Space",
+            hotkey: data.dictation.hotkey ?? "Fn",
             languageHint: data.language,
           });
         }

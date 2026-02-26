@@ -6,7 +6,6 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from ".
 import { Button } from "../../ui/button";
 import { Loader2 } from "lucide-react";
 import { DebouncedInput } from "../shared/debounced-input";
-import { HotkeyRecorder } from "../../ui/hotkey-recorder";
 import type { SectionProps } from "./shared";
 import { getPath } from "./shared";
 
@@ -71,7 +70,7 @@ export function SpeechSection({ cfg }: SectionProps) {
   const awsProfile = (awsTranscribe.profile as string | null) ?? "";
   const dictation = (stt.dictation ?? {}) as Record<string, unknown>;
   const dictationEnabled = (dictation.enabled as boolean) ?? false;
-  const dictationHotkey = (dictation.hotkey as string) ?? "CommandOrControl+Shift+Space";
+  const dictationHotkey = (dictation.hotkey as string) ?? "Fn";
 
   const sttCap = cfg.capabilities.stt;
 
@@ -291,26 +290,14 @@ export function SpeechSection({ cfg }: SectionProps) {
             <Card>
               <CardContent className="pt-6 flex flex-col gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="dictation-hotkey">Hotkey</Label>
+                  <Label>In-App Hotkey</Label>
                   <div className="flex items-center gap-2">
-                    <HotkeyRecorder
-                      value={dictationHotkey}
-                      onChange={(v) => patch("/stt/dictation/hotkey", v || "CommandOrControl+Shift+Space")}
-                      className="flex-1"
-                    />
-                    <Button
-                      variant={dictationHotkey === "Fn" ? "default" : "outline"}
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => patch("/stt/dictation/hotkey", dictationHotkey === "Fn" ? "CommandOrControl+Shift+Space" : "Fn")}
-                    >
-                      🌐 Fn
-                    </Button>
+                    <div className="flex-1 rounded-md border px-3 py-2 text-sm bg-muted text-muted-foreground">
+                      🌐 Fn (Globe key)
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {dictationHotkey === "Fn"
-                      ? "Using the Globe/Fn key. Hold to record, release to transcribe. Requires Accessibility permission."
-                      : "Click the field above, then press your desired key combination."}
+                    Hold the Fn key while the app is focused to record into the chat input. Requires Accessibility permission.
                   </p>
                 </div>
               </CardContent>

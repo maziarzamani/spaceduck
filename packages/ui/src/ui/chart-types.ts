@@ -23,7 +23,7 @@ const MAX_HEIGHT = 400;
 
 // ── Shared fields ──────────────────────────────────────────────────────
 
-const dataRow = z.record(z.string(), z.union([z.string(), z.number()]));
+const dataRow = z.record(z.string(), z.union([z.string(), z.number(), z.null()]));
 
 const seriesItem = z.object({
   key: z.string(),
@@ -62,6 +62,7 @@ const cartesianSchema = z
       }
       for (const s of spec.series) {
         const val = row[s.key];
+        if (val === null) continue;
         if (val === undefined || typeof val !== "number" || !Number.isFinite(val)) {
           ctx.addIssue({
             code: "custom",
