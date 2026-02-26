@@ -27,7 +27,7 @@ const ABOUT_HTML = `<!DOCTYPE html>
 <body><h1>About Page</h1><a href="/">Back</a></body>
 </html>`;
 
-let server: Server;
+let server: Server<unknown>;
 let BASE: string;
 
 beforeAll(() => {

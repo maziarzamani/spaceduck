@@ -110,6 +110,11 @@ function AppInner() {
     [],
   );
 
+  const handleAuthExpired = useCallback(() => {
+    localStorage.removeItem("spaceduck.token");
+    setView("onboarding");
+  }, []);
+
   const handleDisconnect = useCallback(() => {
     localStorage.removeItem("spaceduck.gatewayUrl");
     localStorage.removeItem("spaceduck.token");
@@ -121,9 +126,9 @@ function AppInner() {
 
   useEffect(() => {
     if (ws.authFailed) {
-      handleDisconnect();
+      handleAuthExpired();
     }
-  }, [ws.authFailed, handleDisconnect]);
+  }, [ws.authFailed, handleAuthExpired]);
 
   const handleDismissBanner = useCallback(() => {
     setSetupBanner(false);

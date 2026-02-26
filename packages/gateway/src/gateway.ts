@@ -1,9 +1,5 @@
 // Gateway: composition root that wires all dependencies and manages lifecycle
 
-// Bun HTML import — auto-bundles <script>/<link> tags for fullstack dev server
-// @ts-ignore: Bun HTML import
-import homepage from "@spaceduck/web/index.html";
-
 import { Database } from "bun:sqlite";
 import {
   type SpaceduckConfig,
@@ -209,13 +205,15 @@ export class Gateway implements Lifecycle {
 
     this.server = Bun.serve<WsConnectionData>({
       port: config.port,
-      // Bun fullstack: HTML imports auto-bundle <script> and <link> tags
-      routes: {
-        "/": homepage,
-      },
-      development: config.logLevel === "debug",
+      development: false,
       fetch: async (req, server) => {
-        const resp = await this.handleRequest(req, server);
+        let resp: Response | undefined;
+        try {
+          resp = await this.handleRequest(req, server);
+        } catch (err) {
+          logger.error("handleRequest threw", { url: req.url, error: String(err) });
+          return Response.json({ error: "Internal Server Error" }, { status: 500 });
+        }
         if (resp) {
           const cors = this.corsHeaders(req);
           for (const [k, v] of Object.entries(cors)) resp.headers.set(k, v);

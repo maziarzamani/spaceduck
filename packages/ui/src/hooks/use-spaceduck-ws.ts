@@ -7,6 +7,7 @@ import type {
   Attachment,
 } from "@spaceduck/core";
 import type { ToolActivity } from "../lib/tool-types";
+import { createWebSocket, WS_OPEN, type UnifiedWs } from "../lib/ws-adapter";
 
 function getWsUrl(): string {
   const stored = localStorage.getItem("spaceduck.gatewayUrl");
@@ -32,8 +33,8 @@ function getWsUrl(): string {
 }
 
 const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS = 30000;
-const AUTH_FAILURE_THRESHOLD = 3;
+const RECONNECT_MAX_MS = 8000;
+const AUTH_CHECK_AFTER_RETRIES = 5;
 
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
@@ -81,7 +82,7 @@ function emptyStreamState(): ConversationStreamState {
 }
 
 export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<UnifiedWs | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [authFailed, setAuthFailed] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -95,7 +96,6 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const [browserPreview, setBrowserPreview] = useState<BrowserPreview | null>(null);
 
   const retriesRef = useRef(0);
-  const consecutiveFailsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountedRef = useRef(false);
   const activeConvIdRef = useRef<string | null>(null);
@@ -129,7 +129,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   }
 
   const send = useCallback((envelope: WsClientEnvelope) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WS_OPEN) {
       wsRef.current.send(JSON.stringify(envelope));
     }
   }, []);
@@ -139,67 +139,74 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
 
     const gatewayUrl = localStorage.getItem("spaceduck.gatewayUrl");
     const token = localStorage.getItem("spaceduck.token");
-    if (gatewayUrl && token) {
+
+    // After several failed retries, check if the token is permanently invalid.
+    // We only do this when the gateway is reachable but WS keeps failing,
+    // which signals a potential auth problem rather than a transient outage.
+    if (retriesRef.current >= AUTH_CHECK_AFTER_RETRIES && gatewayUrl) {
       try {
-        const res = await fetch(`${gatewayUrl}/api/gateway/info`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(5000),
-        });
-        if (res.status === 401) {
-          setAuthFailed(true);
-          return;
+        if (token) {
+          const res = await fetch(`${gatewayUrl}/api/gateway/info`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(3000),
+          });
+          if (res.status === 401) {
+            setAuthFailed(true);
+            return;
+          }
+        } else {
+          const res = await fetch(`${gatewayUrl}/api/gateway/public-info`, {
+            signal: AbortSignal.timeout(3000),
+          });
+          if (res.ok) {
+            const info = await res.json() as { requiresAuth?: boolean };
+            if (info.requiresAuth) {
+              setAuthFailed(true);
+              return;
+            }
+          }
         }
       } catch {
-        // Gateway unreachable — fall through and try WebSocket anyway
+        // Gateway unreachable — keep retrying WS
       }
     }
 
     const wsUrl = getWsUrl();
     setStatus("connecting");
 
-    const ws = new WebSocket(wsUrl);
+    const ws = await createWebSocket(wsUrl, {
+      onopen: () => {
+        retriesRef.current = 0;
+        setStatus("connected");
+        setConnectionEpoch((prev) => prev + 1);
+        setToolActivities([]);
+        send({ v: 1, type: "conversation.list" });
+      },
+      onclose: () => {
+        if (unmountedRef.current) return;
+        setStatus("disconnected");
+        wsRef.current = null;
+
+        const delay = Math.min(
+          RECONNECT_BASE_MS * Math.pow(2, retriesRef.current),
+          RECONNECT_MAX_MS,
+        );
+        retriesRef.current++;
+        reconnectTimerRef.current = setTimeout(connect, delay);
+      },
+      onerror: () => {
+        // onclose will fire after onerror, which triggers reconnect
+      },
+      onmessage: (data) => {
+        try {
+          const envelope = JSON.parse(data) as WsServerEnvelope;
+          handleMessageRef.current(envelope);
+        } catch {
+          // Ignore malformed messages
+        }
+      },
+    });
     wsRef.current = ws;
-
-    ws.onopen = () => {
-      retriesRef.current = 0;
-      consecutiveFailsRef.current = 0;
-      setStatus("connected");
-      setConnectionEpoch((prev) => prev + 1);
-      setToolActivities([]);
-      send({ v: 1, type: "conversation.list" });
-    };
-
-    ws.onclose = () => {
-      if (unmountedRef.current) return;
-      setStatus("disconnected");
-      wsRef.current = null;
-
-      consecutiveFailsRef.current++;
-      if (consecutiveFailsRef.current >= AUTH_FAILURE_THRESHOLD && token) {
-        setAuthFailed(true);
-        return;
-      }
-
-      const delay = Math.min(
-        RECONNECT_BASE_MS * Math.pow(2, retriesRef.current),
-        RECONNECT_MAX_MS,
-      );
-      retriesRef.current++;
-      reconnectTimerRef.current = setTimeout(connect, delay);
-    };
-
-    ws.onerror = () => {
-      // onclose will fire after onerror, which triggers reconnect
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const envelope = JSON.parse(event.data) as WsServerEnvelope;
-        handleMessageRef.current(envelope);
-      } catch {
-        // Ignore malformed messages
-      }
-    };
   }, [send]);
 
   useEffect(() => {
@@ -219,7 +226,6 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         reconnectTimerRef.current = null;
       }
       if (wsRef.current) {
-        wsRef.current.onclose = null;
         wsRef.current.close();
         wsRef.current = null;
       }

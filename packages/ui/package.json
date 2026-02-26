@@ -29,6 +29,7 @@
     "@spaceduck/brand": "workspace:*",
     "@spaceduck/config": "workspace:*",
     "@spaceduck/core": "workspace:*",
+    "@tauri-apps/plugin-websocket": "^2.4.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "input-otp": "^1.4.2",
