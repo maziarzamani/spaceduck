@@ -1,10 +1,31 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { BrowserTool } from "../browser-tool";
 import type { ScreencastFrame } from "../types";
 import type { Server } from "bun";
 
-console.log("[DEBUG] BrowserTool import:", typeof BrowserTool, Object.getOwnPropertyNames(BrowserTool));
-console.log("[DEBUG] BrowserTool.prototype:", BrowserTool.prototype ? Object.getOwnPropertyNames(BrowserTool.prototype) : "NO PROTOTYPE");
+let BrowserTool: any;
+try {
+  const mod = await import("../browser-tool");
+  BrowserTool = mod.BrowserTool;
+  console.log("[DEBUG] BrowserTool import OK:", typeof BrowserTool, Object.getOwnPropertyNames(BrowserTool));
+  console.log("[DEBUG] BrowserTool.prototype:", BrowserTool.prototype ? Object.getOwnPropertyNames(BrowserTool.prototype) : "NO PROTOTYPE");
+} catch (e: any) {
+  console.log("[DEBUG] BrowserTool import FAILED:", e.message, e.stack);
+}
+
+let playwrightMod: any;
+try {
+  playwrightMod = await import("playwright");
+  console.log("[DEBUG] playwright import OK:", Object.keys(playwrightMod));
+} catch (e: any) {
+  console.log("[DEBUG] playwright import FAILED:", e.message);
+}
+
+try {
+  const { chromium } = await import("playwright");
+  console.log("[DEBUG] chromium.executablePath:", chromium.executablePath());
+} catch (e: any) {
+  console.log("[DEBUG] chromium access FAILED:", e.message);
+}
 
 const TEST_HTML = `<!DOCTYPE html>
 <html>
