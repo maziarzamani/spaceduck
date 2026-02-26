@@ -1,0 +1,64 @@
+/*
+ * @spaceduck/brand — canonical design tokens
+ *
+ * Single source of truth for all surfaces, text, borders, accents, and chart
+ * palette colors shared across the app and website.
+ *
+ * Values are bare H S L triplets so consumers can apply alpha at the call-site:
+ *   background-color: hsl(var(--sd-background));
+ *   border-color: hsl(var(--sd-border) / 0.1);
+ */
+
+:root {
+  --sd-background: 0 0% 100%;
+  --sd-foreground: 240 10% 4%;
+  --sd-muted: 240 5% 96%;
+  --sd-muted-foreground: 240 4% 46%;
+  --sd-card: 0 0% 99%;
+  --sd-card-foreground: 240 10% 4%;
+  --sd-border: 240 6% 90%;
+  --sd-input: 240 6% 90%;
+  --sd-primary: 239 84% 67%;
+  --sd-primary-foreground: 0 0% 100%;
+  --sd-secondary: 240 5% 96%;
+  --sd-secondary-foreground: 240 6% 10%;
+  --sd-accent: 240 5% 96%;
+  --sd-accent-foreground: 240 6% 10%;
+  --sd-destructive: 0 84% 60%;
+  --sd-destructive-foreground: 0 0% 100%;
+  --sd-ring: 239 84% 67%;
+  --sd-popover: 0 0% 100%;
+  --sd-popover-foreground: 240 10% 4%;
+  --sd-chart-1: 239 84% 67%;
+  --sd-chart-2: 173 58% 39%;
+  --sd-chart-3: 43 74% 66%;
+  --sd-chart-4: 12 76% 61%;
+  --sd-chart-5: 197 37% 46%;
+}
+
+.dark {
+  --sd-background: 240 27% 8%;
+  --sd-foreground: 0 0% 96%;
+  --sd-muted: 240 15% 16%;
+  --sd-muted-foreground: 240 5% 65%;
+  --sd-card: 240 24% 14%;
+  --sd-card-foreground: 0 0% 96%;
+  --sd-border: 240 11% 17%;
+  --sd-input: 240 8% 22%;
+  --sd-primary: 239 84% 67%;
+  --sd-primary-foreground: 0 0% 100%;
+  --sd-secondary: 240 15% 16%;
+  --sd-secondary-foreground: 0 0% 96%;
+  --sd-accent: 240 15% 16%;
+  --sd-accent-foreground: 0 0% 96%;
+  --sd-destructive: 0 63% 55%;
+  --sd-destructive-foreground: 0 0% 100%;
+  --sd-ring: 239 84% 67%;
+  --sd-popover: 240 24% 14%;
+  --sd-popover-foreground: 0 0% 96%;
+  --sd-chart-1: 239 84% 67%;
+  --sd-chart-2: 173 58% 52%;
+  --sd-chart-3: 43 74% 70%;
+  --sd-chart-4: 12 76% 65%;
+  --sd-chart-5: 197 37% 58%;
+}

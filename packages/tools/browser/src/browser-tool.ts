@@ -138,7 +138,7 @@ export class BrowserTool {
       return `URL matched "${options.url}"`;
     }
     if (options.state) {
-      await page.waitForLoadState(options.state);
+      await page.waitForLoadState(options.state, { timeout });
       return `Page reached "${options.state}" state`;
     }
     if (options.jsCondition) {
@@ -157,7 +157,8 @@ export class BrowserTool {
 
   async evaluate(script: string): Promise<string> {
     const page = this.ensurePage();
-    const result = await page.evaluate(script);
+    const wrapped = script.includes("return ") ? `(() => { ${script} })()` : script;
+    const result = await page.evaluate(wrapped);
     const str = typeof result === "string" ? result : JSON.stringify(result, null, 2);
     if (str && str.length > this.maxChars) {
       return str.slice(0, this.maxChars) + "\n[truncated]";

@@ -15,6 +15,8 @@ export interface UseVoiceRecorderReturn {
   stream: MediaStream | null;
   toggle: () => void;
   cancel: () => void;
+  startRecording: () => void;
+  stopAndTranscribe: () => void;
 }
 
 function getTranscribeUrl(): string {
@@ -45,12 +47,16 @@ function selectMimeType(): string {
 }
 
 const AUTO_RESET_MS = 1500;
+const STUCK_RECORDING_TIMEOUT_MS = 180_000; // 3 min auto-recovery
+
+let nextStartId = 1;
 
 export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRecorderReturn {
   const [state, setState] = useState<RecorderState>("idle");
   const [durationMs, setDurationMs] = useState(0);
   const [stream, setStream] = useState<MediaStream | null>(null);
 
+  const stateRef = useRef<RecorderState>("idle");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -59,6 +65,13 @@ export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRe
   const startTimeRef = useRef<number>(0);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mimeTypeRef = useRef<string>("audio/webm");
+  const activeStartIdRef = useRef<number>(0);
+  const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const setStateTracked = useCallback((next: RecorderState) => {
+    stateRef.current = next;
+    setState(next);
+  }, []);
 
   const stopMediaTracks = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -80,16 +93,45 @@ export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRe
     }
   }, []);
 
+  const clearStuckTimer = useCallback(() => {
+    if (stuckTimerRef.current) {
+      clearTimeout(stuckTimerRef.current);
+      stuckTimerRef.current = null;
+    }
+  }, []);
+
+  const forceReset = useCallback(() => {
+    clearTimer();
+    clearResetTimer();
+    clearStuckTimer();
+    activeStartIdRef.current = 0;
+
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = null;
+      recorder.stop();
+    }
+    mediaRecorderRef.current = null;
+    stopMediaTracks();
+    chunksRef.current = [];
+
+    abortRef.current?.abort();
+    abortRef.current = null;
+
+    setStateTracked("idle");
+    setDurationMs(0);
+  }, [clearTimer, clearResetTimer, clearStuckTimer, stopMediaTracks, setStateTracked]);
+
   const scheduleReset = useCallback(() => {
     clearResetTimer();
     resetTimerRef.current = setTimeout(() => {
-      setState("idle");
+      setStateTracked("idle");
       setDurationMs(0);
     }, AUTO_RESET_MS);
-  }, [clearResetTimer]);
+  }, [clearResetTimer, setStateTracked]);
 
   const sendAudio = useCallback(async (blob: Blob) => {
-    setState("processing");
+    setStateTracked("processing");
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -117,49 +159,84 @@ export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRe
       if (!resp.ok) {
         const msg = data.message ?? data.error ?? "Transcription failed";
         opts.onError?.(msg);
-        setState("error");
+        setStateTracked("error");
         scheduleReset();
         return;
       }
 
       opts.onTranscript?.(data.text ?? "");
-      setState("success");
+      setStateTracked("success");
       scheduleReset();
     } catch (err) {
       if ((err as Error).name === "AbortError") {
-        setState("idle");
+        setStateTracked("idle");
         setDurationMs(0);
         return;
       }
       opts.onError?.(err instanceof Error ? err.message : String(err));
-      setState("error");
+      setStateTracked("error");
       scheduleReset();
     } finally {
       abortRef.current = null;
     }
-  }, [opts.languageHint, opts.onTranscript, opts.onError, scheduleReset]);
+  }, [opts.languageHint, opts.onTranscript, opts.onError, scheduleReset, setStateTracked]);
 
   const stopAndTranscribe = useCallback(() => {
+    clearStuckTimer();
+    const myStartId = activeStartIdRef.current;
+
+    // If we're still waiting for getUserMedia, invalidate that pending start
+    if (stateRef.current !== "recording") {
+      activeStartIdRef.current = 0;
+      return;
+    }
+
     clearTimer();
+    activeStartIdRef.current = 0;
 
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== "inactive") {
       recorder.stop();
     }
     stopMediaTracks();
-  }, [clearTimer, stopMediaTracks]);
+  }, [clearTimer, clearStuckTimer, stopMediaTracks]);
 
   const startRecording = useCallback(async () => {
+    if (stateRef.current === "recording") return;
+
+    // Clean up any lingering state from previous cycle
     clearResetTimer();
+    clearStuckTimer();
+    abortRef.current?.abort();
+    abortRef.current = null;
+
+    const oldRecorder = mediaRecorderRef.current;
+    if (oldRecorder && oldRecorder.state !== "inactive") {
+      oldRecorder.onstop = null;
+      oldRecorder.stop();
+    }
+    stopMediaTracks();
     chunksRef.current = [];
     mimeTypeRef.current = selectMimeType();
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      setStream(stream);
+    // Pending-start token: if stopAndTranscribe is called before getUserMedia
+    // resolves, we detect it by checking whether our startId is still active.
+    const startId = nextStartId++;
+    activeStartIdRef.current = startId;
 
-      const recorder = new MediaRecorder(stream, { mimeType: mimeTypeRef.current });
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Check if stop was called while we were awaiting getUserMedia
+      if (activeStartIdRef.current !== startId) {
+        mediaStream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      streamRef.current = mediaStream;
+      setStream(mediaStream);
+
+      const recorder = new MediaRecorder(mediaStream, { mimeType: mimeTypeRef.current });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -172,14 +249,14 @@ export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRe
         if (blob.size > 0) {
           sendAudio(blob);
         } else {
-          setState("idle");
+          setStateTracked("idle");
           setDurationMs(0);
         }
       };
 
       recorder.start();
       startTimeRef.current = Date.now();
-      setState("recording");
+      setStateTracked("recording");
       setDurationMs(0);
 
       timerRef.current = setInterval(() => {
@@ -190,47 +267,43 @@ export function useVoiceRecorder(opts: UseVoiceRecorderOptions = {}): UseVoiceRe
           stopAndTranscribe();
         }
       }, 100);
+
+      // Auto-recovery: force cancel if recording gets stuck
+      stuckTimerRef.current = setTimeout(() => {
+        if (stateRef.current === "recording") {
+          console.warn("[voice-recorder] stuck recording detected, force resetting");
+          forceReset();
+        }
+      }, STUCK_RECORDING_TIMEOUT_MS);
     } catch (err) {
+      activeStartIdRef.current = 0;
       opts.onError?.(err instanceof Error ? err.message : "Microphone access denied");
-      setState("idle");
+      setStateTracked("idle");
     }
-  }, [opts.maxSeconds, opts.onError, sendAudio, stopAndTranscribe, clearResetTimer]);
+  }, [opts.maxSeconds, opts.onError, sendAudio, stopAndTranscribe, clearResetTimer, clearStuckTimer, stopMediaTracks, setStateTracked, forceReset]);
 
   const toggle = useCallback(() => {
-    if (state === "idle") {
+    if (stateRef.current === "idle") {
       startRecording();
-    } else if (state === "recording") {
+    } else if (stateRef.current === "recording") {
       stopAndTranscribe();
     }
-  }, [state, startRecording, stopAndTranscribe]);
+  }, [startRecording, stopAndTranscribe]);
 
   const cancel = useCallback(() => {
-    clearTimer();
-    clearResetTimer();
-
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.onstop = null;
-      recorder.stop();
-    }
-    stopMediaTracks();
-    chunksRef.current = [];
-
-    abortRef.current?.abort();
-    abortRef.current = null;
-
-    setState("idle");
-    setDurationMs(0);
-  }, [clearTimer, clearResetTimer, stopMediaTracks]);
+    forceReset();
+  }, [forceReset]);
 
   useEffect(() => {
     return () => {
       clearTimer();
       clearResetTimer();
+      clearStuckTimer();
       stopMediaTracks();
       abortRef.current?.abort();
+      activeStartIdRef.current = 0;
     };
-  }, [clearTimer, clearResetTimer, stopMediaTracks]);
+  }, [clearTimer, clearResetTimer, clearStuckTimer, stopMediaTracks]);
 
-  return { state, durationMs, stream, toggle, cancel };
+  return { state, durationMs, stream, toggle, cancel, startRecording, stopAndTranscribe };
 }

@@ -59,7 +59,7 @@ export type AgentChunk =
   | { type: "tool_call"; toolCall: ToolCall }
   | { type: "tool_result"; toolResult: ToolResult };
 
-const DEFAULT_MAX_TOOL_ROUNDS = 20;
+const DEFAULT_MAX_TOOL_ROUNDS = 30;
 
 /**
  * The agent loop: receives a user message, builds context, calls the provider,
@@ -307,7 +307,6 @@ export class AgentLoop {
 
         yield { type: "tool_result", toolResult: result };
 
-        // Persist tool result as a tool message
         const toolMessage: Message = {
           id: generateId(),
           role: "tool",

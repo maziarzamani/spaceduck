@@ -1,6 +1,6 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
 import { MarkerTool } from "../marker-tool";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -39,18 +39,12 @@ describe("MarkerTool", () => {
     it("truncates output exceeding maxOutputChars", async () => {
       const tool = new MarkerTool({ maxOutputChars: 50 });
 
-      // Monkey-patch to simulate marker_single producing a long markdown
-      const origConvert = tool.convert.bind(tool);
       const longOutput = "A".repeat(200);
 
-      // Simulate by directly testing truncation logic
-      // Create a temp dir with markdown output to test findAndReadMarkdown
       const outputDir = mkdtempSync(join(tmpdir(), "marker-output-"));
-      const subdir = join(outputDir, "output");
-      mkdirSync(subdir);
-      writeFileSync(join(subdir, "test.md"), longOutput);
+      const mdPath = join(outputDir, "output", "test.md");
+      await Bun.write(mdPath, longOutput);
 
-      // Access private method via prototype for testing
       const mdContent = (tool as any).findAndReadMarkdown(outputDir);
       expect(mdContent).toBe(longOutput);
       expect(mdContent!.length).toBe(200);
@@ -69,11 +63,9 @@ describe("MarkerTool", () => {
   });
 
   describe("findAndReadMarkdown", () => {
-    it("finds .md files in subdirectories", () => {
+    it("finds .md files in subdirectories", async () => {
       const dir = mkdtempSync(join(tmpdir(), "marker-find-"));
-      const sub = join(dir, "sub");
-      mkdirSync(sub);
-      writeFileSync(join(sub, "doc.md"), "# Hello World");
+      await Bun.write(join(dir, "sub", "doc.md"), "# Hello World");
 
       const tool = new MarkerTool();
       const content = (tool as any).findAndReadMarkdown(dir);

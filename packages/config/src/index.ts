@@ -1,4 +1,4 @@
-export { SpaceduckConfigSchema, HttpUrlSchema, SttModelEnum } from "./schema";
+export { SpaceduckConfigSchema, HttpUrlSchema, SttModelEnum, SttBackendEnum } from "./schema";
 export { DEFAULT_SYSTEM_PROMPT } from "./constants";
 export type { SpaceduckProductConfig } from "./types";
 export type { ConfigPatchOp } from "./types";

@@ -77,11 +77,18 @@ Semantic recall requires a separate embedding model. You can use the same provid
     When `marker_single` is on your PATH, the `marker_scan` tool is automatically registered. Upload PDFs via the paperclip button in the chat UI.
   </Accordion>
 
-  <Accordion title="Voice dictation (Whisper)">
+  <Accordion title="Voice dictation">
+    **Web UI:** Click the mic button in the chat input. Hold to record, release to transcribe via [Whisper](https://github.com/openai/whisper) or AWS Transcribe.
+
     ```bash
-    pip install openai-whisper   # requires Python 3.9+, ffmpeg
+    pip install openai-whisper   # Option A: local Whisper (Python 3.9+, ffmpeg)
     ```
-    When `whisper` is on your PATH, the mic button appears in the chat UI. Hold to record, release to transcribe.
+
+    When `whisper` is on your PATH, the mic button appears in the chat UI.
+
+    Alternatively, configure **AWS Transcribe** credentials in your environment for cloud-based STT.
+
+    **Desktop app (macOS):** Press the **Fn/Globe key** from any application to activate a system-wide dictation pill with real-time waveform. See [Desktop App](/platforms/desktop) for setup.
   </Accordion>
 </AccordionGroup>
 

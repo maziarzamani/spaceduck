@@ -14,6 +14,8 @@
   "dependencies": {
     "@spaceduck/ui": "workspace:*",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+    "@tauri-apps/plugin-global-shortcut": "^2.3.1",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@tauri-apps/plugin-shell": "^2"
   },

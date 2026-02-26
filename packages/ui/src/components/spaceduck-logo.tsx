@@ -1,7 +1,7 @@
 // Spaceduck logo — pixel art astronaut duck
 // Uses the spaceduck-logo.png from docs/assets
 
-import logoUrl from "../assets/spaceduck-logo.png";
+import { logoUrl } from "@spaceduck/brand";
 
 interface SpaceduckLogoProps {
   size?: number;

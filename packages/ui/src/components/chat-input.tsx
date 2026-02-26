@@ -16,6 +16,12 @@ function getUploadUrl(): string {
   return `${window.location.origin}/api/upload`;
 }
 
+export interface ChatInputRecorderHandle {
+  startRecording: () => void;
+  stopAndTranscribe: () => void;
+  isRecording: () => boolean;
+}
+
 interface ChatInputProps {
   onSend: (content: string, attachments?: Attachment[]) => void;
   disabled?: boolean;
@@ -23,6 +29,7 @@ interface ChatInputProps {
   sttAvailable?: boolean;
   sttLanguage?: string;
   sttMaxSeconds?: number;
+  recorderRef?: React.MutableRefObject<ChatInputRecorderHandle | null>;
 }
 
 function formatDuration(ms: number): string {
@@ -32,7 +39,7 @@ function formatDuration(ms: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttLanguage, sttMaxSeconds }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttLanguage, sttMaxSeconds, recorderRef }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -49,6 +56,16 @@ export function ChatInput({ onSend, disabled, isStreaming, sttAvailable, sttLang
     },
     onError: (err) => console.error("[stt]", err),
   });
+
+  useEffect(() => {
+    if (recorderRef) {
+      recorderRef.current = {
+        startRecording: recorder.startRecording,
+        stopAndTranscribe: recorder.stopAndTranscribe,
+        isRecording: () => recorder.state === "recording",
+      };
+    }
+  }, [recorderRef, recorder.startRecording, recorder.stopAndTranscribe, recorder.state]);
 
   useEffect(() => {
     const el = textareaRef.current;

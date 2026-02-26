@@ -1,0 +1,73 @@
+---
+title: "Charts"
+description: "Render interactive bar, line, area, and pie charts directly in the conversation."
+---
+
+## What it does
+
+The `render_chart` tool lets the assistant create interactive charts inside the chat. When the assistant calls this tool, a Recharts-powered visualization is rendered inline — no external services or image generation needed.
+
+## Supported chart types
+
+| Type | Best for |
+|------|----------|
+| `bar` | Comparing categories or discrete values |
+| `line` | Trends over time |
+| `area` | Volume or cumulative data over time |
+| `pie` | Proportional breakdowns (also supports donut style) |
+
+## How it works
+
+1. You ask the assistant to visualize data (e.g., "chart this data", "show me a bar chart")
+2. The assistant calls `render_chart` with a chart specification
+3. The tool validates the data and returns a `chart` code block
+4. The UI renders it as an interactive Recharts visualization
+
+<Info>
+Charts are rendered client-side in the web UI and desktop app. The gateway only validates the data and returns JSON — no images are generated server-side.
+</Info>
+
+## Chart specification
+
+### Cartesian charts (bar, line, area)
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `type` | `"bar" \| "line" \| "area"` | Yes | Chart type |
+| `data` | array of objects | Yes | Row data (max 50 rows) |
+| `xKey` | string | Yes | Key for the X axis |
+| `series` | array of `{ key, label? }` | Yes | Series to plot (max 8) |
+| `title` | string | No | Chart title |
+| `description` | string | No | Short description below the title |
+| `stacked` | boolean | No | Stack series (bar and area only) |
+| `height` | number | No | Chart height in pixels (100-400, default 240) |
+
+### Pie charts
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `type` | `"pie"` | Yes | Chart type |
+| `data` | array of objects | Yes | Row data (max 50 rows) |
+| `nameKey` | string | Yes | Key for slice names |
+| `valueKey` | string | Yes | Key for slice values |
+| `title` | string | No | Chart title |
+| `description` | string | No | Short description below the title |
+| `donut` | boolean | No | Render as a donut chart |
+| `height` | number | No | Chart height in pixels (100-400, default 240) |
+
+## Handling missing data
+
+Series values can be `null` to represent missing data points. The chart renderer treats `null` values as gaps — Recharts skips them gracefully in line and area charts, and omits them in bar charts.
+
+## Limits
+
+| Constraint | Value |
+|------------|-------|
+| Max rows | 50 |
+| Max series | 8 |
+| Height range | 100-400px |
+| Data values | Must be numeric (or `null` for missing) |
+
+## Configuration
+
+The `render_chart` tool is always registered — no external dependencies required. The chart palette follows the brand color tokens defined in `@spaceduck/brand`.

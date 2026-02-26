@@ -1,6 +1,6 @@
 ---
 title: "Desktop App"
-description: "Run Spaceduck as a native desktop application using Tauri v2."
+description: "Run Spaceduck as a native desktop application using Tauri v2, with system-wide Fn key dictation."
 ---
 
 The Spaceduck desktop app is a [Tauri v2](https://v2.tauri.app) shell that wraps the web UI in a native window. It supports macOS, Linux, and Windows.
@@ -10,10 +10,7 @@ The Spaceduck desktop app is a [Tauri v2](https://v2.tauri.app) shell that wraps
 - Runs the gateway as a **sidecar process** — starts and stops with the app
 - Provides a native window with OS integration (menu bar, window management)
 - Connects to the gateway over `http://localhost:3000`
-
-<Info>
-The desktop app is a companion to the gateway — it doesn't replace it. The gateway does all the work; the desktop app provides a native window for the web UI.
-</Info>
+- **System-wide Fn key dictation** — press the Globe/Fn key from any app to start voice input (macOS only)
 
 ## Running the desktop app
 
@@ -31,6 +28,45 @@ bun run build:desktop
 
 The built application is output to `apps/desktop/src-tauri/target/release/`.
 
+## Dictation pill
+
+The desktop app adds a floating dictation pill that appears when you press the **Fn (Globe) key** from any application. This is a macOS-only feature.
+
+### How it works
+
+1. Press the **Fn/Globe key** — a transparent floating pill appears above the Dock
+2. Speak — the pill shows a real-time waveform visualizer
+3. Release the Fn key — audio is sent to the gateway for transcription
+4. The transcribed text is pasted into the active application via Cmd+V
+
+The pill is a transparent, always-on-top window with no title bar. It uses a `CGEventTap` at the HID level to intercept the Fn key before macOS routes it to the emoji picker.
+
+### Multi-monitor support
+
+The dictation pill follows the active screen. When you press Fn on a secondary monitor, the pill appears on that screen, centered horizontally with a fixed gap above the Dock.
+
+### Speech-to-text
+
+The dictation pill records audio via the Web Audio API and sends it to the gateway's `/api/stt/transcribe` endpoint. The gateway supports two STT backends:
+
+| Backend | Setup |
+|---------|-------|
+| **Whisper** | `pip install openai-whisper` — must have `whisper` on PATH |
+| **AWS Transcribe** | Configure AWS credentials in your environment |
+
+## macOS permissions
+
+The desktop app requires two macOS permissions for Fn key dictation to work:
+
+| Permission | Where to enable | Why |
+|---|---|---|
+| **Accessibility** | System Settings > Privacy & Security > Accessibility | Allows the app to observe keyboard events and simulate paste (Cmd+V) |
+| **Input Monitoring** | System Settings > Privacy & Security > Input Monitoring | Required for HID-level event tap to intercept the Fn/Globe key |
+
+<Warning>
+Both permissions must be granted to the Spaceduck app (or the terminal running it during development). You will be prompted on first launch, or you can add the app manually in System Settings.
+</Warning>
+
 ## How it connects
 
 The desktop app loads the web UI from the bundled frontend and connects to the gateway sidecar over localhost. The CSP (Content Security Policy) is configured to allow connections to `localhost` on any port:
@@ -39,12 +75,10 @@ The desktop app loads the web UI from the bundled frontend and connects to the g
 - Font loading from Google Fonts
 - Image loading from `data:` and `blob:` URIs
 
-## Current status
+## Platform support
 
 | Platform | Status |
 |----------|--------|
-| macOS | Supported |
-| Linux | Supported |
-| Windows | Supported |
-
-The desktop app provides the same functionality as the web UI — chat, settings, file upload, voice dictation. There are no desktop-specific features yet.
+| macOS | Supported (full features including Fn key dictation) |
+| Linux | Supported (web UI, no Fn key dictation) |
+| Windows | Supported (web UI, no Fn key dictation) |
