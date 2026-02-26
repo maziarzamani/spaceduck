@@ -23,7 +23,7 @@ import { useTheme } from "../hooks/use-theme";
 interface SidebarProps {
   conversations: ConversationSummary[];
   activeId: string | null;
-  streamingId: string | null;
+  streamingIds: ReadonlySet<string>;
   unreadIds: ReadonlySet<string>;
   onSelect: (id: string) => void;
   onCreate: () => void;
@@ -40,7 +40,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-export function Sidebar({ conversations, activeId, streamingId, unreadIds, onSelect, onCreate, onDelete, onRename, onOpenSettings }: SidebarProps) {
+export function Sidebar({ conversations, activeId, streamingIds, unreadIds, onSelect, onCreate, onDelete, onRename, onOpenSettings }: SidebarProps) {
   const { resolved, setTheme } = useTheme();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -98,7 +98,7 @@ export function Sidebar({ conversations, activeId, streamingId, unreadIds, onSel
           )}
           {conversations.map((conv) => {
             const isEditing = editingId === conv.id;
-            const isStreaming = streamingId === conv.id;
+            const isStreaming = streamingIds.has(conv.id);
             const isUnread = unreadIds.has(conv.id);
 
             return (

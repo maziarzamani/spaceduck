@@ -131,6 +131,10 @@ export function createWsHandler(deps: WsHandlerDeps) {
 
     open(ws: { send(data: string): void; data: WsConnectionData }) {
       log.debug("Client connected", { senderId: ws.data.senderId });
+      const activeIds = runLock.activeConversationIds;
+      if (activeIds.length > 0) {
+        send(ws, { v: 1, type: "run.active", conversationIds: activeIds });
+      }
     },
 
     close(ws: { send(data: string): void; data: WsConnectionData }, code: number) {

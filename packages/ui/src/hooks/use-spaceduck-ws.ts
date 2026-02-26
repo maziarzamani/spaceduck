@@ -56,7 +56,7 @@ export interface UseSpaceduckWs {
   messages: Message[];
   activeConversationId: string | null;
   pendingStream: PendingStream | null;
-  streamingConversationId: string | null;
+  streamingConversationIds: ReadonlySet<string>;
   unreadConversationIds: ReadonlySet<string>;
   toolActivities: ToolActivity[];
   connectionEpoch: number;
@@ -69,6 +69,17 @@ export interface UseSpaceduckWs {
   refreshConversations: () => void;
 }
 
+interface ConversationStreamState {
+  pendingStream: PendingStream | null;
+  streamBuffer: string;
+  toolActivities: ToolActivity[];
+  browserPreview: BrowserPreview | null;
+}
+
+function emptyStreamState(): ConversationStreamState {
+  return { pendingStream: null, streamBuffer: "", toolActivities: [], browserPreview: null };
+}
+
 export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const wsRef = useRef<WebSocket | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
@@ -77,13 +88,12 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [pendingStream, setPendingStream] = useState<PendingStream | null>(null);
-  const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
+  const [streamingConversationIds, setStreamingConversationIds] = useState<Set<string>>(new Set());
   const [unreadConversationIds, setUnreadConversationIds] = useState<Set<string>>(new Set());
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
   const [connectionEpoch, setConnectionEpoch] = useState(0);
   const [browserPreview, setBrowserPreview] = useState<BrowserPreview | null>(null);
 
-  const streamBufferRef = useRef<string>("");
   const retriesRef = useRef(0);
   const consecutiveFailsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,7 +102,31 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const pendingConvIdRef = useRef<string | null>(null);
   const handleMessageRef = useRef<(envelope: WsServerEnvelope) => void>(() => {});
 
+  const streamStateMap = useRef<Map<string, ConversationStreamState>>(new Map());
+
   activeConvIdRef.current = activeConversationId;
+
+  function getStreamState(convId: string): ConversationStreamState {
+    let s = streamStateMap.current.get(convId);
+    if (!s) {
+      s = emptyStreamState();
+      streamStateMap.current.set(convId, s);
+    }
+    return s;
+  }
+
+  function projectViewState(convId: string | null) {
+    if (!convId || !streamStateMap.current.has(convId)) {
+      setPendingStream(null);
+      setToolActivities([]);
+      setBrowserPreview(null);
+      return;
+    }
+    const s = streamStateMap.current.get(convId)!;
+    setPendingStream(s.pendingStream);
+    setToolActivities([...s.toolActivities]);
+    setBrowserPreview(s.browserPreview);
+  }
 
   const send = useCallback((envelope: WsClientEnvelope) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -202,11 +236,13 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
       case "conversation.created":
         setActiveConversationId(envelope.conversationId);
         setMessages([]);
+        projectViewState(envelope.conversationId);
         send({ v: 1, type: "conversation.list" });
         break;
 
       case "conversation.deleted":
         setConversations((prev) => prev.filter((c) => c.id !== envelope.conversationId));
+        streamStateMap.current.delete(envelope.conversationId);
         if (activeConvIdRef.current === envelope.conversationId) {
           setActiveConversationId(null);
           setMessages([]);
@@ -234,34 +270,56 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
 
       case "processing.started": {
         const convId = pendingConvIdRef.current || activeConvIdRef.current || "";
-        streamBufferRef.current = "";
-        setStreamingConversationId(convId);
-        setPendingStream({
+        const s = getStreamState(convId);
+        s.streamBuffer = "";
+        s.pendingStream = {
           requestId: envelope.requestId,
           conversationId: convId,
           content: "",
-        });
+        };
+        s.toolActivities = [];
+        s.browserPreview = null;
+        setStreamingConversationIds((prev) => new Set(prev).add(convId));
+        if (convId === activeConvIdRef.current) {
+          projectViewState(convId);
+        }
         break;
       }
 
-      case "stream.delta":
-        streamBufferRef.current += envelope.delta;
-        setPendingStream((prev) =>
-          prev ? { ...prev, content: streamBufferRef.current } : null,
-        );
+      case "stream.delta": {
+        const convId = pendingConvIdRef.current;
+        if (!convId) break;
+        const s = getStreamState(convId);
+        s.streamBuffer += envelope.delta;
+        if (s.pendingStream) {
+          s.pendingStream = { ...s.pendingStream, content: s.streamBuffer };
+        }
+        if (convId === activeConvIdRef.current) {
+          setPendingStream(s.pendingStream);
+        }
         break;
+      }
 
       case "stream.done": {
         const finishedConvId = pendingConvIdRef.current;
         if (finishedConvId && finishedConvId !== activeConvIdRef.current) {
           setUnreadConversationIds((prev) => new Set(prev).add(finishedConvId));
         }
-        setPendingStream(null);
-        setStreamingConversationId(null);
-        streamBufferRef.current = "";
+        if (finishedConvId) {
+          streamStateMap.current.delete(finishedConvId);
+        }
+        setStreamingConversationIds((prev) => {
+          if (!finishedConvId || !prev.has(finishedConvId)) return prev;
+          const next = new Set(prev);
+          next.delete(finishedConvId);
+          return next;
+        });
         pendingConvIdRef.current = null;
-        setToolActivities([]);
-        setBrowserPreview(null);
+        if (finishedConvId === activeConvIdRef.current || !finishedConvId) {
+          setPendingStream(null);
+          setToolActivities([]);
+          setBrowserPreview(null);
+        }
         if (activeConvIdRef.current) {
           send({ v: 1, type: "conversation.history", conversationId: activeConvIdRef.current });
         }
@@ -269,55 +327,100 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         break;
       }
 
-      case "stream.error":
-        setPendingStream(null);
-        setStreamingConversationId(null);
-        streamBufferRef.current = "";
-        pendingConvIdRef.current = null;
-        setToolActivities([]);
-        setBrowserPreview(null);
-        break;
-
-      case "tool.calling":
-        setToolActivities((prev) => {
-          const activity: ToolActivity = {
-            toolCallId: envelope.toolCall.id,
-            toolName: envelope.toolCall.name,
-            startedAt: Date.now(),
-          };
-          const next = [...prev, activity];
-          return next.length > 20 ? next.slice(-20) : next;
+      case "stream.error": {
+        const errorConvId = pendingConvIdRef.current;
+        if (errorConvId) {
+          streamStateMap.current.delete(errorConvId);
+        }
+        setStreamingConversationIds((prev) => {
+          if (!errorConvId || !prev.has(errorConvId)) return prev;
+          const next = new Set(prev);
+          next.delete(errorConvId);
+          return next;
         });
-        break;
-
-      case "tool.result":
-        setToolActivities((prev) =>
-          prev.map((a) =>
-            a.toolCallId === envelope.toolResult.toolCallId
-              ? {
-                  ...a,
-                  result: {
-                    content: envelope.toolResult.content,
-                    isError: !!envelope.toolResult.isError,
-                  },
-                  completedAt: Date.now(),
-                }
-              : a,
-          ),
-        );
-        break;
-
-      case "browser.frame":
-        if ("closed" in envelope && envelope.closed) {
+        pendingConvIdRef.current = null;
+        if (errorConvId === activeConvIdRef.current || !errorConvId) {
+          setPendingStream(null);
+          setToolActivities([]);
           setBrowserPreview(null);
+        }
+        break;
+      }
+
+      case "tool.calling": {
+        const convId = pendingConvIdRef.current;
+        if (!convId) break;
+        const s = getStreamState(convId);
+        const activity: ToolActivity = {
+          toolCallId: envelope.toolCall.id,
+          toolName: envelope.toolCall.name,
+          startedAt: Date.now(),
+        };
+        s.toolActivities = [...s.toolActivities, activity];
+        if (s.toolActivities.length > 20) {
+          s.toolActivities = s.toolActivities.slice(-20);
+        }
+        if (convId === activeConvIdRef.current) {
+          setToolActivities([...s.toolActivities]);
+        }
+        break;
+      }
+
+      case "tool.result": {
+        const convId = pendingConvIdRef.current;
+        if (!convId) break;
+        const s = getStreamState(convId);
+        s.toolActivities = s.toolActivities.map((a) =>
+          a.toolCallId === envelope.toolResult.toolCallId
+            ? {
+                ...a,
+                result: {
+                  content: envelope.toolResult.content,
+                  isError: !!envelope.toolResult.isError,
+                },
+                completedAt: Date.now(),
+              }
+            : a,
+        );
+        if (convId === activeConvIdRef.current) {
+          setToolActivities([...s.toolActivities]);
+        }
+        break;
+      }
+
+      case "browser.frame": {
+        const convId = pendingConvIdRef.current;
+        if (!convId) break;
+        const s = getStreamState(convId);
+        if ("closed" in envelope && envelope.closed) {
+          s.browserPreview = null;
         } else if ("data" in envelope) {
-          setBrowserPreview({
+          s.browserPreview = {
             dataUrl: `data:image/${envelope.format};base64,${envelope.data}`,
             url: envelope.url,
             timestamp: Date.now(),
-          });
+          };
+        }
+        if (convId === activeConvIdRef.current) {
+          setBrowserPreview(s.browserPreview);
         }
         break;
+      }
+
+      case "run.active": {
+        const ids = envelope.conversationIds;
+        setStreamingConversationIds(new Set(ids));
+        for (const id of ids) {
+          const s = getStreamState(id);
+          if (!s.pendingStream) {
+            s.pendingStream = { requestId: "", conversationId: id, content: "" };
+          }
+        }
+        if (activeConvIdRef.current && ids.includes(activeConvIdRef.current)) {
+          projectViewState(activeConvIdRef.current);
+        }
+        break;
+      }
 
       case "error":
         console.error("[spaceduck ws]", envelope.code, envelope.message);
@@ -364,6 +467,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const deleteConversation = useCallback(
     (conversationId: string) => {
       send({ v: 1, type: "conversation.delete", conversationId });
+      streamStateMap.current.delete(conversationId);
       setConversations((prev) => prev.filter((c) => c.id !== conversationId));
       if (activeConvIdRef.current === conversationId) {
         setActiveConversationId(null);
@@ -384,10 +488,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
     (conversationId: string) => {
       setActiveConversationId(conversationId);
       setMessages([]);
-      setPendingStream(null);
-      streamBufferRef.current = "";
-      setToolActivities([]);
-      setBrowserPreview(null);
+      projectViewState(conversationId);
       setUnreadConversationIds((prev) => {
         if (!prev.has(conversationId)) return prev;
         const next = new Set(prev);
@@ -410,7 +511,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
     messages,
     activeConversationId,
     pendingStream,
-    streamingConversationId,
+    streamingConversationIds,
     unreadConversationIds,
     toolActivities,
     connectionEpoch,

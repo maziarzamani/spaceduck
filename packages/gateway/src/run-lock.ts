@@ -29,4 +29,9 @@ export class RunLock {
   isLocked(conversationId: string): boolean {
     return this.locks.has(conversationId);
   }
+
+  /** Return all conversation IDs that currently have an active run. */
+  get activeConversationIds(): string[] {
+    return [...this.locks.keys()];
+  }
 }
