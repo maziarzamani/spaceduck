@@ -1,30 +1,27 @@
+// @ts-nocheck — temporary debug build to diagnose CI import failure
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import type { ScreencastFrame } from "../types";
 import type { Server } from "bun";
 
-let BrowserTool: any;
-try {
-  const mod = await import("../browser-tool");
-  BrowserTool = mod.BrowserTool;
-  console.log("[DEBUG] BrowserTool import OK:", typeof BrowserTool, Object.getOwnPropertyNames(BrowserTool));
-  console.log("[DEBUG] BrowserTool.prototype:", BrowserTool.prototype ? Object.getOwnPropertyNames(BrowserTool.prototype) : "NO PROTOTYPE");
-} catch (e: any) {
-  console.log("[DEBUG] BrowserTool import FAILED:", e.message, e.stack);
-}
+// Dynamic import with diagnostics to figure out why BrowserTool is empty in CI
+const mod = await import("../browser-tool");
+const BrowserTool = mod.BrowserTool;
 
-let playwrightMod: any;
+console.log("[DEBUG] module keys:", Object.keys(mod));
+console.log("[DEBUG] BrowserTool type:", typeof BrowserTool);
+console.log("[DEBUG] BrowserTool own props:", Object.getOwnPropertyNames(BrowserTool));
+console.log("[DEBUG] BrowserTool.prototype props:", BrowserTool?.prototype ? Object.getOwnPropertyNames(BrowserTool.prototype) : "NONE");
+
+let pwImportError = "";
 try {
-  playwrightMod = await import("playwright");
-  console.log("[DEBUG] playwright import OK:", Object.keys(playwrightMod));
+  const pw = await import("playwright");
+  console.log("[DEBUG] playwright keys:", Object.keys(pw).slice(0, 10));
+  console.log("[DEBUG] chromium type:", typeof pw.chromium);
+  if (pw.chromium) {
+    console.log("[DEBUG] executablePath:", pw.chromium.executablePath());
+  }
 } catch (e: any) {
+  pwImportError = e.message;
   console.log("[DEBUG] playwright import FAILED:", e.message);
-}
-
-try {
-  const { chromium } = await import("playwright");
-  console.log("[DEBUG] chromium.executablePath:", chromium.executablePath());
-} catch (e: any) {
-  console.log("[DEBUG] chromium access FAILED:", e.message);
 }
 
 const TEST_HTML = `<!DOCTYPE html>
@@ -80,7 +77,7 @@ describe("BrowserTool.isAvailable", () => {
 });
 
 describe("BrowserTool", () => {
-  let browser: BrowserTool;
+  let browser: InstanceType<typeof BrowserTool>;
 
   beforeAll(async () => {
     browser = new BrowserTool({ headless: true });
@@ -225,9 +222,9 @@ describe("BrowserTool", () => {
 
   describe("screencast", () => {
     it("should deliver frames via callback", async () => {
-      const frames: ScreencastFrame[] = [];
+      const frames: any[] = [];
       await browser.navigate(BASE);
-      await browser.startScreencast((frame) => frames.push(frame));
+      await browser.startScreencast((frame: any) => frames.push(frame));
 
       await browser.navigate(`${BASE}/about`);
       await browser.wait({ timeMs: 1500 });
