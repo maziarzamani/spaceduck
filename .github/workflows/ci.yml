@@ -53,6 +53,7 @@ jobs:
           fi
           rm -f bun.lockb
           git checkout bun.lock
+          bun install
 
       - name: Run tests
         run: bun test --recursive
