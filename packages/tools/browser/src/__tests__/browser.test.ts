@@ -3,6 +3,9 @@ import { BrowserTool } from "../browser-tool";
 import type { ScreencastFrame } from "../types";
 import type { Server } from "bun";
 
+console.log("[DEBUG] BrowserTool import:", typeof BrowserTool, Object.getOwnPropertyNames(BrowserTool));
+console.log("[DEBUG] BrowserTool.prototype:", BrowserTool.prototype ? Object.getOwnPropertyNames(BrowserTool.prototype) : "NO PROTOTYPE");
+
 const TEST_HTML = `<!DOCTYPE html>
 <html>
 <head><title>Test Page</title></head>
