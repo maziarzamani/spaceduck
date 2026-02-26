@@ -45,15 +45,15 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Build
-        run: bun run build
-
       - name: Install Playwright Chromium
         run: |
           npx @playwright/test@1.58.2 install chromium $( [ "$RUNNER_OS" = "Linux" ] && echo "--with-deps" )
 
       - name: Run tests
         run: bun test --recursive
+
+      - name: Build
+        run: bun run build
 
   docker-smoke:
     name: Docker Smoke Test
