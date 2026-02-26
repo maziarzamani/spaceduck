@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { BrowserTool } from "..";
+import { BrowserTool } from "../browser-tool";
 import type { ScreencastFrame } from "../types";
 import type { Server } from "bun";
 
