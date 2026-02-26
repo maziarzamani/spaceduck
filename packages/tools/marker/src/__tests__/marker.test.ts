@@ -47,7 +47,7 @@ describe("MarkerTool", () => {
       // Create a temp dir with markdown output to test findAndReadMarkdown
       const outputDir = mkdtempSync(join(tmpdir(), "marker-output-"));
       const subdir = join(outputDir, "output");
-      mkdirSync(subdir);
+      mkdirSync(subdir, { recursive: true });
       writeFileSync(join(subdir, "test.md"), longOutput);
 
       // Access private method via prototype for testing
@@ -72,7 +72,7 @@ describe("MarkerTool", () => {
     it("finds .md files in subdirectories", () => {
       const dir = mkdtempSync(join(tmpdir(), "marker-find-"));
       const sub = join(dir, "sub");
-      mkdirSync(sub);
+      mkdirSync(sub, { recursive: true });
       writeFileSync(join(sub, "doc.md"), "# Hello World");
 
       const tool = new MarkerTool();
