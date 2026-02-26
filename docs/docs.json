@@ -71,7 +71,8 @@
           "tools/browser",
           "tools/web-search",
           "tools/web-fetch",
-          "tools/document-scanning"
+          "tools/document-scanning",
+          "tools/charts"
         ]
       },
       {

@@ -5,7 +5,7 @@ description: "Headless browser automation using Playwright with accessibility-sn
 
 ## What it does
 
-Launches a headless Chromium browser that the assistant can control — navigate to URLs, click elements, fill forms, read page content, and wait for changes. Uses accessibility snapshots to give the LLM numbered element references instead of fragile CSS selectors.
+Launches a headless Chromium browser that the assistant can control — navigate to URLs, click elements, fill forms, execute JavaScript, scroll pages, and read content. Uses accessibility snapshots to give the LLM numbered element references instead of fragile CSS selectors.
 
 ## Requirements
 
@@ -19,34 +19,75 @@ The browser tool is automatically registered at gateway startup when Playwright 
 
 ## How the assistant uses it
 
-The browser tool exposes these actions:
+The browser exposes seven actions, each registered as a separate tool:
 
-| Action | What it does |
-|--------|-------------|
-| `navigate` | Go to a URL |
-| `click` | Click an element by its ref number |
-| `type` | Type text into an input field |
-| `snapshot` | Get the current page structure as numbered elements |
-| `wait` | Wait for a selector, URL pattern, page state, or fixed delay |
+| Action | Tool name | What it does |
+|--------|-----------|-------------|
+| Navigate | `browser_navigate` | Go to a URL |
+| Snapshot | `browser_snapshot` | Get the current page structure as numbered element refs |
+| Click | `browser_click` | Click an element by its ref number |
+| Type | `browser_type` | Type text into an input (append or replace with `clear: true`) |
+| Scroll | `browser_scroll` | Scroll the page in a direction (`up`, `down`, `left`, `right`) |
+| Wait | `browser_wait` | Wait for a selector, URL pattern, page state, JS condition, or fixed delay |
+| Evaluate | `browser_evaluate` | Execute JavaScript in the page context and return the result |
 
-A typical flow:
+### Typical browsing flow
 
-1. Assistant calls `navigate` to open a page
-2. Assistant calls `snapshot` to see the page structure
+1. Assistant calls `browser_navigate` to open a page
+2. Assistant calls `browser_snapshot` to see the page structure
 3. Assistant identifies the right element by its ref number
-4. Assistant calls `click` or `type` to interact
+4. Assistant calls `browser_click` or `browser_type` to interact
+5. Assistant takes another snapshot if the page changed
+
+### Extracting structured data
+
+For JavaScript-heavy pages (product listings, search results, data tables), `browser_evaluate` is often faster than repeated snapshot/scroll cycles:
+
+```javascript
+return JSON.stringify(
+  [...document.querySelectorAll('.product-card')].map(el => ({
+    name: el.querySelector('h2')?.textContent?.trim(),
+    price: el.querySelector('.price')?.textContent?.trim(),
+  }))
+);
+```
+
+<Tip>
+Scripts with top-level `return` statements are automatically wrapped in an IIFE, so you can write `return ...` directly without wrapping in a function.
+</Tip>
+
+### Scrolling
+
+`browser_scroll` scrolls the viewport by a pixel amount (default 500px). Useful for loading lazy content or reaching elements below the fold:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `direction` | `"up" \| "down" \| "left" \| "right"` | required | Scroll direction |
+| `amount` | number | 500 | Pixels to scroll |
+
+### Wait conditions
+
+`browser_wait` supports multiple strategies:
+
+| Parameter | What it does |
+|-----------|-------------|
+| `timeMs` | Simple delay in milliseconds — best for SPAs |
+| `selector` | Wait for a CSS selector to appear in the DOM |
+| `url` | Wait for the URL to match a pattern |
+| `state` | Wait for a page load state (`load`, `domcontentloaded`) |
+| `jsCondition` | Wait for a JavaScript expression to evaluate to truthy |
+
+<Warning>
+Avoid `state: "networkidle"` on single-page applications — SPAs never stop making requests and it will timeout.
+</Warning>
 
 ## Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `headless` | `true` | Run without a visible browser window |
-| `maxResultChars` | 50,000 | Max characters returned from snapshots |
+| `maxResultChars` | 50,000 | Max characters returned from snapshots and evaluate |
 | `defaultTimeout` | 30,000 ms | Timeout for page actions |
-
-<Tip>
-The browser tool is heavier than web fetch. The assistant prefers `web_fetch` for simple page reads and only launches the browser when it needs to interact with a page (click, fill forms, handle JavaScript-rendered content).
-</Tip>
 
 ## When to use browser vs web fetch
 
@@ -56,3 +97,4 @@ The browser tool is heavier than web fetch. The assistant prefers `web_fetch` fo
 | You need to click or fill forms | You just need the text content |
 | Content is behind interactions | Content is at a direct URL |
 | You need to navigate through pages | Single page read is enough |
+| You need to extract structured data from JS-rendered DOM | Static HTML with clean structure |
