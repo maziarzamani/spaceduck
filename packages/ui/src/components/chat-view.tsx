@@ -5,6 +5,7 @@ import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
 import type { ChatInputRecorderHandle } from "./chat-input";
 import { StatusBar } from "./status-bar";
+import { BrowserPreviewPanel } from "./browser-preview-panel";
 import { Separator } from "../ui/separator";
 import type { UseSpaceduckWs } from "../hooks/use-spaceduck-ws";
 
@@ -113,6 +114,16 @@ export function ChatView({ ws, onOpenSettings, recorderRef }: ChatViewProps) {
           recorderRef={recorderRef}
         />
       </main>
+
+      <div
+        className={`transition-all duration-300 ease-in-out overflow-hidden ${
+          ws.browserPreview ? "w-80" : "w-0"
+        }`}
+      >
+        {ws.browserPreview && (
+          <BrowserPreviewPanel preview={ws.browserPreview} />
+        )}
+      </div>
     </div>
   );
 }

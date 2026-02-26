@@ -43,6 +43,12 @@ export interface PendingStream {
   content: string;
 }
 
+export interface BrowserPreview {
+  dataUrl: string;
+  url: string;
+  timestamp: number;
+}
+
 export interface UseSpaceduckWs {
   status: ConnectionStatus;
   authFailed: boolean;
@@ -52,6 +58,7 @@ export interface UseSpaceduckWs {
   pendingStream: PendingStream | null;
   toolActivities: ToolActivity[];
   connectionEpoch: number;
+  browserPreview: BrowserPreview | null;
   sendMessage: (content: string, conversationId?: string, attachments?: Attachment[]) => string;
   createConversation: (title?: string) => void;
   deleteConversation: (conversationId: string) => void;
@@ -70,6 +77,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const [pendingStream, setPendingStream] = useState<PendingStream | null>(null);
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
   const [connectionEpoch, setConnectionEpoch] = useState(0);
+  const [browserPreview, setBrowserPreview] = useState<BrowserPreview | null>(null);
 
   const streamBufferRef = useRef<string>("");
   const retriesRef = useRef(0);
@@ -238,6 +246,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         setPendingStream(null);
         streamBufferRef.current = "";
         setToolActivities([]);
+        setBrowserPreview(null);
         if (activeConvIdRef.current) {
           send({ v: 1, type: "conversation.history", conversationId: activeConvIdRef.current });
         }
@@ -249,6 +258,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         setPendingStream(null);
         streamBufferRef.current = "";
         setToolActivities([]);
+        setBrowserPreview(null);
         break;
 
       case "tool.calling":
@@ -278,6 +288,18 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
               : a,
           ),
         );
+        break;
+
+      case "browser.frame":
+        if ("closed" in envelope && envelope.closed) {
+          setBrowserPreview(null);
+        } else if ("data" in envelope) {
+          setBrowserPreview({
+            dataUrl: `data:image/${envelope.format};base64,${envelope.data}`,
+            url: envelope.url,
+            timestamp: Date.now(),
+          });
+        }
         break;
 
       case "error":
@@ -363,6 +385,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
     pendingStream,
     toolActivities,
     connectionEpoch,
+    browserPreview,
     sendMessage,
     createConversation,
     deleteConversation,

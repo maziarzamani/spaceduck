@@ -24,6 +24,8 @@ export type WsServerEnvelope =
   | { v: 1; type: "stream.error"; requestId: string; code: string; message: string }
   | { v: 1; type: "tool.calling"; requestId: string; toolCall: ToolCall }
   | { v: 1; type: "tool.result"; requestId: string; toolResult: ToolResult }
+  | { v: 1; type: "browser.frame"; requestId: string; data: string; format: "jpeg" | "png"; url: string }
+  | { v: 1; type: "browser.frame"; requestId: string; closed: true }
   | { v: 1; type: "conversation.list"; conversations: ConversationSummary[] }
   | { v: 1; type: "conversation.history"; conversationId: string; messages: Message[] }
   | { v: 1; type: "conversation.created"; conversationId: string }

@@ -6,6 +6,21 @@ export interface BrowserToolOptions {
   defaultTimeout?: number;
 }
 
+export interface ScreencastOptions {
+  format?: "jpeg" | "png";
+  quality?: number;
+  maxWidth?: number;
+  maxHeight?: number;
+}
+
+export interface ScreencastFrame {
+  base64: string;
+  format: "jpeg" | "png";
+  url: string;
+}
+
+export type ScreencastFrameCallback = (frame: ScreencastFrame) => void;
+
 export interface SnapshotNode {
   ref: number;
   role: string;

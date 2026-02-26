@@ -10,6 +10,7 @@ import type {
 } from "@spaceduck/core";
 import type { AgentLoop } from "@spaceduck/core";
 import type { RunLock } from "./run-lock";
+import type { BrowserFrameTarget } from "./browser-frame-target";
 
 function generateId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
@@ -21,6 +22,7 @@ export interface WsHandlerDeps {
   readonly conversationStore: ConversationStore;
   readonly sessionManager: SessionManager;
   readonly runLock: RunLock;
+  readonly browserFrameTarget?: BrowserFrameTarget;
 }
 
 /** Per-connection state stored on ws.data */
@@ -83,7 +85,7 @@ function parseEnvelope(
  * Returns the handler function for use in Bun.serve websocket config.
  */
 export function createWsHandler(deps: WsHandlerDeps) {
-  const { logger, agent, conversationStore, sessionManager, runLock } = deps;
+  const { logger, agent, conversationStore, sessionManager, runLock, browserFrameTarget } = deps;
   const log = logger.child({ component: "WebSocket" });
 
   return {
@@ -169,6 +171,12 @@ export function createWsHandler(deps: WsHandlerDeps) {
       // Signal processing started
       send(ws, { v: 1, type: "processing.started", requestId });
 
+      // Point browser frame output at this WS connection
+      if (browserFrameTarget) {
+        browserFrameTarget.ws = ws;
+        browserFrameTarget.requestId = requestId;
+      }
+
       // Build user message
       const userMessage: Message = {
         id: generateId(),
@@ -215,6 +223,10 @@ export function createWsHandler(deps: WsHandlerDeps) {
         message: err instanceof Error ? err.message : "Agent run failed",
       });
     } finally {
+      if (browserFrameTarget) {
+        browserFrameTarget.ws = null;
+        browserFrameTarget.requestId = "";
+      }
       release();
     }
   }
