@@ -45,11 +45,12 @@ jobs:
         run: bun run build
 
       - name: Install Playwright Chromium
+        working-directory: packages/tools/browser
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
-            bunx playwright install chromium --with-deps
+            bun run playwright install chromium --with-deps
           else
-            bunx playwright install chromium
+            bun run playwright install chromium
           fi
 
       - name: Run tests
