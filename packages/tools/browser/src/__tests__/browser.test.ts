@@ -1,28 +1,7 @@
-// @ts-nocheck — temporary debug build to diagnose CI import failure
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { BrowserTool } from "../browser-tool";
+import type { ScreencastFrame } from "../types";
 import type { Server } from "bun";
-
-// Dynamic import with diagnostics to figure out why BrowserTool is empty in CI
-const mod = await import("../browser-tool");
-const BrowserTool = mod.BrowserTool;
-
-console.log("[DEBUG] module keys:", Object.keys(mod));
-console.log("[DEBUG] BrowserTool type:", typeof BrowserTool);
-console.log("[DEBUG] BrowserTool own props:", Object.getOwnPropertyNames(BrowserTool));
-console.log("[DEBUG] BrowserTool.prototype props:", BrowserTool?.prototype ? Object.getOwnPropertyNames(BrowserTool.prototype) : "NONE");
-
-let pwImportError = "";
-try {
-  const pw = await import("playwright");
-  console.log("[DEBUG] playwright keys:", Object.keys(pw).slice(0, 10));
-  console.log("[DEBUG] chromium type:", typeof pw.chromium);
-  if (pw.chromium) {
-    console.log("[DEBUG] executablePath:", pw.chromium.executablePath());
-  }
-} catch (e: any) {
-  pwImportError = e.message;
-  console.log("[DEBUG] playwright import FAILED:", e.message);
-}
 
 const TEST_HTML = `<!DOCTYPE html>
 <html>
@@ -77,7 +56,7 @@ describe("BrowserTool.isAvailable", () => {
 });
 
 describe("BrowserTool", () => {
-  let browser: InstanceType<typeof BrowserTool>;
+  let browser: BrowserTool;
 
   beforeAll(async () => {
     browser = new BrowserTool({ headless: true });
@@ -222,9 +201,9 @@ describe("BrowserTool", () => {
 
   describe("screencast", () => {
     it("should deliver frames via callback", async () => {
-      const frames: any[] = [];
+      const frames: ScreencastFrame[] = [];
       await browser.navigate(BASE);
-      await browser.startScreencast((frame: any) => frames.push(frame));
+      await browser.startScreencast((frame) => frames.push(frame));
 
       await browser.navigate(`${BASE}/about`);
       await browser.wait({ timeMs: 1500 });
