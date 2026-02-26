@@ -47,13 +47,10 @@ jobs:
       - name: Install Playwright Chromium
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
-            bunx playwright install chromium --with-deps
+            npx playwright install chromium --with-deps
           else
-            bunx playwright install chromium
+            npx playwright install chromium
           fi
-          rm -f bun.lockb
-          git checkout bun.lock
-          bun install
 
       - name: Run tests
         run: bun test --recursive
