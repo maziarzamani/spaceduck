@@ -1,6 +1,7 @@
 // Browser tool tests -- requires network access and Playwright Chromium
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { BrowserTool } from "..";
+import type { ScreencastFrame } from "../types";
 
 describe("BrowserTool.isAvailable", () => {
   it("returns available: true when Chromium is installed", () => {
@@ -122,6 +123,60 @@ describe("BrowserTool", () => {
       const parsed = JSON.parse(result);
       expect(parsed.a).toBe(1);
       expect(parsed.b).toBe("hello");
+    });
+  });
+
+  describe("screenshotBase64", () => {
+    it("should return a base64 string", async () => {
+      await browser.navigate("https://example.com");
+      const b64 = await browser.screenshotBase64();
+      expect(b64).toBeTruthy();
+      expect(typeof b64).toBe("string");
+      expect(b64!.length).toBeGreaterThan(100);
+    });
+
+    it("should return null when no page is open", async () => {
+      const fresh = new BrowserTool({ headless: true });
+      const result = await fresh.screenshotBase64();
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("currentUrl", () => {
+    it("should return the current page URL", async () => {
+      await browser.navigate("https://example.com");
+      const url = browser.currentUrl();
+      expect(url).toContain("example.com");
+    });
+
+    it("should return null when no page is open", () => {
+      const fresh = new BrowserTool({ headless: true });
+      expect(fresh.currentUrl()).toBeNull();
+    });
+  });
+
+  describe("screencast", () => {
+    it("should deliver frames via callback", async () => {
+      const frames: ScreencastFrame[] = [];
+      await browser.navigate("https://example.com");
+      await browser.startScreencast((frame) => frames.push(frame));
+
+      // Trigger a visual change to produce at least one frame
+      await browser.navigate("https://example.com/");
+      await browser.wait({ timeMs: 1500 });
+
+      await browser.stopScreencast();
+
+      expect(frames.length).toBeGreaterThanOrEqual(1);
+      const frame = frames[0];
+      expect(frame.base64).toBeTruthy();
+      expect(frame.format).toBe("jpeg");
+      expect(frame.url).toContain("example.com");
+    });
+
+    it("stopScreencast should be idempotent", async () => {
+      await browser.stopScreencast();
+      await browser.stopScreencast();
     });
   });
 });
