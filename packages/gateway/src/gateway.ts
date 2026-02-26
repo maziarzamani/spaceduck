@@ -41,6 +41,7 @@ import {
 import { RunLock } from "./run-lock";
 import { createWsHandler, type WsConnectionData } from "./ws-handler";
 import { buildToolRegistry } from "./tool-registrations";
+import { createBrowserFrameTarget } from "./browser-frame-target";
 import { buildChannels } from "./channel-registrations";
 import { ToolStatusService } from "./tools/tools-status";
 import type { ToolName } from "./tools/tools-status";
@@ -155,6 +156,7 @@ export class Gateway implements Lifecycle {
   readonly deps: GatewayDeps;
   toolStatusService: ToolStatusService | null = null;
   private channels: Channel[] = [];
+  private readonly browserFrame = createBrowserFrameTarget();
 
   constructor(deps: GatewayDeps, db?: Database) {
     this.deps = deps;
@@ -191,6 +193,7 @@ export class Gateway implements Lifecycle {
       conversationStore: this.deps.conversationStore,
       sessionManager: this.deps.sessionManager,
       runLock: this.deps.runLock,
+      browserFrameTarget: this.browserFrame.target,
     });
 
     this.server = Bun.serve<WsConnectionData>({
@@ -297,7 +300,7 @@ export class Gateway implements Lifecycle {
     const configStore = this.deps.configStore;
     const prevSize = this.deps.agent.toolRegistry?.size ?? 0;
     try {
-      const next = buildToolRegistry(this.deps.logger, this.deps.attachmentStore, configStore);
+      const next = buildToolRegistry(this.deps.logger, this.deps.attachmentStore, configStore, this.browserFrame.onFrame);
       this.deps.agent.setToolRegistry(next);
       this.deps.logger.info("Tool registry hot-swapped", {
         reason, changedPaths,
@@ -1494,6 +1497,7 @@ const TOOL_REBUILD_PATHS = new Set([
   "/tools/webAnswer/enabled",
   "/tools/marker/enabled",
   "/tools/browser/enabled",
+  "/tools/browser/livePreview",
   "/tools/webFetch/enabled",
 ]);
 
@@ -1973,6 +1977,8 @@ export async function createGateway(overrides?: {
 
   // Create tool registry with built-in tools
   const toolRegistry = buildToolRegistry(logger, attachmentStore, configStore);
+
+  // Browser frame target is wired after Gateway construction
 
   // Wire fact extractor to extract durable facts from assistant responses
   // Uses the LLM provider for intelligent extraction (falls back to regex if unavailable)

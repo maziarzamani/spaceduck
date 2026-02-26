@@ -2,8 +2,8 @@
 // Provides numbered element refs via accessibility snapshots so the LLM
 // can reference elements by number instead of fragile CSS selectors.
 
-import { chromium, type Browser, type BrowserContext, type Page, type Locator } from "playwright";
-import type { BrowserToolOptions, WaitOptions, RefEntry } from "./types";
+import { chromium, type Browser, type BrowserContext, type Page, type Locator, type CDPSession } from "playwright";
+import type { BrowserToolOptions, WaitOptions, RefEntry, ScreencastOptions, ScreencastFrameCallback } from "./types";
 import { parseAriaSnapshot } from "./snapshot";
 
 const DEFAULT_MAX_CHARS = 50_000;
@@ -17,6 +17,8 @@ export class BrowserTool {
   private readonly headless: boolean;
   private readonly maxChars: number;
   private readonly defaultTimeout: number;
+  private cdpSession: CDPSession | null = null;
+  private frameCallback: ScreencastFrameCallback | null = null;
 
   static isAvailable(): { available: true } | { available: false; reason: string } {
     try {
@@ -48,6 +50,7 @@ export class BrowserTool {
   }
 
   async close(): Promise<void> {
+    await this.stopScreencast();
     if (this.context) {
       await this.context.close();
       this.context = null;
@@ -58,6 +61,56 @@ export class BrowserTool {
     }
     this.page = null;
     this.refMap.clear();
+  }
+
+  // ─── Screencast (CDP) ──────────────────────────────────────────────
+
+  async startScreencast(
+    onFrame: ScreencastFrameCallback,
+    opts?: ScreencastOptions,
+  ): Promise<void> {
+    const page = this.ensurePage();
+    this.frameCallback = onFrame;
+    const format = opts?.format ?? "jpeg";
+
+    this.cdpSession = await page.context().newCDPSession(page);
+    this.cdpSession.on("Page.screencastFrame", (params: { data: string; sessionId: number }) => {
+      this.frameCallback?.({
+        base64: params.data,
+        format,
+        url: page.url(),
+      });
+      this.cdpSession?.send("Page.screencastFrameAck", { sessionId: params.sessionId }).catch(() => {});
+    });
+
+    await this.cdpSession.send("Page.startScreencast", {
+      format,
+      quality: opts?.quality ?? 60,
+      maxWidth: opts?.maxWidth ?? 800,
+      maxHeight: opts?.maxHeight ?? 600,
+    });
+  }
+
+  async stopScreencast(): Promise<void> {
+    if (this.cdpSession) {
+      await this.cdpSession.send("Page.stopScreencast").catch(() => {});
+      await this.cdpSession.detach().catch(() => {});
+      this.cdpSession = null;
+    }
+    this.frameCallback = null;
+  }
+
+  async screenshotBase64(format: "jpeg" | "png" = "jpeg", quality = 60): Promise<string | null> {
+    if (!this.page) return null;
+    const buffer = await this.page.screenshot({
+      type: format,
+      quality: format === "jpeg" ? quality : undefined,
+    });
+    return buffer.toString("base64");
+  }
+
+  currentUrl(): string | null {
+    return this.page?.url() ?? null;
   }
 
   private ensurePage(): Page {

@@ -117,6 +117,7 @@ export function ToolsSection({ cfg }: SectionProps) {
   const searxngUrl = (webSearch.searxngUrl as string | null) ?? "";
   const webAnswerEnabled = (webAnswer.enabled as boolean) ?? true;
   const browserEnabled = (browserCfg.enabled as boolean) ?? true;
+  const livePreviewEnabled = (browserCfg.livePreview as boolean) ?? false;
   const webFetchEnabled = (webFetchCfg.enabled as boolean) ?? true;
   const markerEnabled = (marker.enabled as boolean) ?? true;
 
@@ -284,7 +285,19 @@ export function ToolsSection({ cfg }: SectionProps) {
           />
         </CardHeader>
         {browserEnabled && (
-          <CardContent>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Live Preview</Label>
+                <p className="text-xs text-muted-foreground">
+                  Show real-time browser view in chat while browsing.
+                </p>
+              </div>
+              <Switch
+                checked={livePreviewEnabled}
+                onCheckedChange={(v) => patch("/tools/browser/livePreview", v)}
+              />
+            </div>
             <div className="flex items-center justify-between pt-2 border-t">
               <StatusBadge entry={brStatus} testResult={testResult["browser_navigate"]} />
               <Button

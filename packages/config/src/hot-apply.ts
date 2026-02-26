@@ -21,6 +21,7 @@ export const HOT_APPLY_PATHS: ReadonlySet<string> = new Set([
   "/stt/awsTranscribe/profile",
   "/stt/dictation/enabled",
   "/stt/dictation/hotkey",
+  "/tools/browser/livePreview",
   "/tools/marker/enabled",
   "/tools/webSearch/provider",
   "/tools/webSearch/searxngUrl",

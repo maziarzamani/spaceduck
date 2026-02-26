@@ -3,7 +3,7 @@
 
 import type { Logger } from "@spaceduck/core";
 import { ToolRegistry } from "@spaceduck/core";
-import { BrowserTool } from "@spaceduck/tool-browser";
+import { BrowserTool, type ScreencastFrame } from "@spaceduck/tool-browser";
 import { WebFetchTool } from "@spaceduck/tool-web-fetch";
 import { WebSearchTool, WebAnswerTool, type SearchProvider } from "@spaceduck/tool-web-search";
 import { MarkerTool } from "@spaceduck/tool-marker";
@@ -20,6 +20,7 @@ export function buildToolRegistry(
   logger: Logger,
   attachmentStore?: AttachmentStore,
   configStore?: ConfigStore,
+  onBrowserFrame?: (frame: ScreencastFrame | { closed: true }) => void,
 ): ToolRegistry {
   const registry = new ToolRegistry();
   const log = logger.child({ component: "ToolRegistry" });
@@ -58,6 +59,7 @@ export function buildToolRegistry(
 
   // ── browser tools ─────────────────────────────────────────────────
   const browserEnabled = cfg?.tools?.browser?.enabled ?? true;
+  const livePreview = cfg?.tools?.browser?.livePreview ?? false;
   let browser: BrowserTool | null = null;
 
   if (browserEnabled) {
@@ -66,6 +68,13 @@ export function buildToolRegistry(
         browser = new BrowserTool({ headless: true });
         await browser.launch();
         log.info("Browser launched");
+
+        if (livePreview && onBrowserFrame) {
+          await browser.startScreencast(onBrowserFrame).catch((e) => {
+            log.warn("Failed to start screencast", { error: String(e) });
+          });
+          log.info("Browser screencast started");
+        }
       }
       return browser;
     }

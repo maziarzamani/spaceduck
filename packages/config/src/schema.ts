@@ -103,6 +103,7 @@ const MarkerSchema = z.object({
 
 const BrowserSchema = z.object({
   enabled: z.boolean().default(true),
+  livePreview: z.boolean().default(false),
 });
 
 const WebFetchSchema = z.object({

@@ -89,6 +89,38 @@ Avoid `state: "networkidle"` on single-page applications — SPAs never stop mak
 | `maxResultChars` | 50,000 | Max characters returned from snapshots and evaluate |
 | `defaultTimeout` | 30,000 ms | Timeout for page actions |
 
+## Live Preview
+
+When enabled, a real-time browser view panel appears on the right side of the chat while the assistant is browsing. You can watch navigation, clicks, form fills, and page transitions as they happen.
+
+Live Preview uses Chrome DevTools Protocol [screencast](https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-startScreencast) to stream compressed JPEG frames directly from Chromium — the same technology that powers Chrome's remote debugging. Frames are only pushed when the page visually changes, so bandwidth is naturally throttled.
+
+### Enabling Live Preview
+
+Live Preview is **disabled by default**. To turn it on:
+
+1. Go to **Settings → Tools → Browser**
+2. Toggle **Live Preview** on
+
+Or set it via the config file:
+
+```json5
+{
+  tools: {
+    browser: {
+      enabled: true,
+      livePreview: true
+    }
+  }
+}
+```
+
+The setting is hot-applied — no gateway restart required.
+
+<Note>
+Live Preview adds ~20–50 KB per frame over the WebSocket connection. On typical browsing sessions this is well within normal bandwidth, but you may want to disable it on very slow connections.
+</Note>
+
 ## When to use browser vs web fetch
 
 | Use browser when | Use web fetch when |
