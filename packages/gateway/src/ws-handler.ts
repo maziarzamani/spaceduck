@@ -11,6 +11,7 @@ import type {
 import type { AgentLoop } from "@spaceduck/core";
 import type { RunLock } from "./run-lock";
 import type { BrowserFrameTarget } from "./browser-frame-target";
+import type { BrowserSessionPool } from "./browser-session-pool";
 
 function generateId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
@@ -23,6 +24,9 @@ export interface WsHandlerDeps {
   readonly sessionManager: SessionManager;
   readonly runLock: RunLock;
   readonly browserFrameTarget?: BrowserFrameTarget;
+  readonly browserPool?: BrowserSessionPool;
+  /** Mutable ref — set by ws-handler before agent.run, read by tool handlers */
+  readonly conversationIdRef: { current: string };
 }
 
 /** Per-connection state stored on ws.data */
@@ -85,7 +89,7 @@ function parseEnvelope(
  * Returns the handler function for use in Bun.serve websocket config.
  */
 export function createWsHandler(deps: WsHandlerDeps) {
-  const { logger, agent, conversationStore, sessionManager, runLock, browserFrameTarget } = deps;
+  const { logger, agent, conversationStore, sessionManager, runLock, browserFrameTarget, browserPool, conversationIdRef } = deps;
   const log = logger.child({ component: "WebSocket" });
 
   return {
@@ -175,7 +179,11 @@ export function createWsHandler(deps: WsHandlerDeps) {
       if (browserFrameTarget) {
         browserFrameTarget.ws = ws;
         browserFrameTarget.requestId = requestId;
+        browserFrameTarget.conversationId = conversationId;
       }
+
+      // Set conversation context for tool handlers
+      conversationIdRef.current = conversationId;
 
       // Build user message
       const userMessage: Message = {
@@ -226,7 +234,9 @@ export function createWsHandler(deps: WsHandlerDeps) {
       if (browserFrameTarget) {
         browserFrameTarget.ws = null;
         browserFrameTarget.requestId = "";
+        browserFrameTarget.conversationId = "";
       }
+      conversationIdRef.current = "";
       release();
     }
   }
@@ -302,6 +312,10 @@ export function createWsHandler(deps: WsHandlerDeps) {
       sendError(ws, "MEMORY_ERROR", result.error.message);
       return;
     }
+
+    browserPool?.release(conversationId).catch((err) => {
+      log.warn("Failed to release browser session on delete", { conversationId, error: String(err) });
+    });
 
     send(ws, { v: 1, type: "conversation.deleted", conversationId });
   }

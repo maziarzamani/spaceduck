@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import { createBrowserFrameTarget } from "../browser-frame-target";
 
 function createMockWs() {
@@ -12,16 +12,17 @@ function createMockWs() {
 describe("createBrowserFrameTarget", () => {
   it("onFrame does nothing when target.ws is null", () => {
     const { onFrame } = createBrowserFrameTarget();
-    onFrame({ base64: "abc", format: "jpeg", url: "https://example.com" });
+    onFrame("conv-1", { base64: "abc", format: "jpeg", url: "https://example.com" });
   });
 
-  it("onFrame sends browser.frame envelope when ws is set", () => {
+  it("onFrame sends browser.frame envelope when ws is set and conversationId matches", () => {
     const { target, onFrame } = createBrowserFrameTarget();
     const { ws, calls } = createMockWs();
     target.ws = ws;
     target.requestId = "req-42";
+    target.conversationId = "conv-1";
 
-    onFrame({ base64: "AQID", format: "jpeg", url: "https://example.com" });
+    onFrame("conv-1", { base64: "AQID", format: "jpeg", url: "https://example.com" });
 
     expect(calls).toHaveLength(1);
     const envelope = JSON.parse(calls[0]);
@@ -35,13 +36,25 @@ describe("createBrowserFrameTarget", () => {
     });
   });
 
+  it("onFrame ignores frames from non-matching conversationId", () => {
+    const { target, onFrame } = createBrowserFrameTarget();
+    const { ws, calls } = createMockWs();
+    target.ws = ws;
+    target.requestId = "req-42";
+    target.conversationId = "conv-1";
+
+    onFrame("conv-other", { base64: "AQID", format: "jpeg", url: "https://example.com" });
+    expect(calls).toHaveLength(0);
+  });
+
   it("onFrame sends closed envelope", () => {
     const { target, onFrame } = createBrowserFrameTarget();
     const { ws, calls } = createMockWs();
     target.ws = ws;
     target.requestId = "req-99";
+    target.conversationId = "conv-2";
 
-    onFrame({ closed: true });
+    onFrame("conv-2", { closed: true });
 
     expect(calls).toHaveLength(1);
     const envelope = JSON.parse(calls[0]);
@@ -58,12 +71,13 @@ describe("createBrowserFrameTarget", () => {
     const { ws, calls } = createMockWs();
     target.ws = ws;
     target.requestId = "req-1";
+    target.conversationId = "conv-1";
 
-    onFrame({ base64: "first", format: "jpeg", url: "https://a.com" });
+    onFrame("conv-1", { base64: "first", format: "jpeg", url: "https://a.com" });
     expect(calls).toHaveLength(1);
 
     target.ws = null;
-    onFrame({ base64: "second", format: "jpeg", url: "https://b.com" });
+    onFrame("conv-1", { base64: "second", format: "jpeg", url: "https://b.com" });
     expect(calls).toHaveLength(1);
   });
 });

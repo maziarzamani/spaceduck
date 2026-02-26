@@ -265,6 +265,52 @@ describe("BrowserSchema and WebFetchSchema", () => {
     expect(config.tools.browser.enabled).toBe(true);
   });
 
+  test("browser sessionIdleTimeoutMs defaults to 600000", () => {
+    const config = SpaceduckConfigSchema.parse({});
+    expect(config.tools.browser.sessionIdleTimeoutMs).toBe(600_000);
+  });
+
+  test("browser sessionIdleTimeoutMs can be overridden", () => {
+    const config = SpaceduckConfigSchema.parse({
+      tools: { browser: { sessionIdleTimeoutMs: 300_000 } },
+    });
+    expect(config.tools.browser.sessionIdleTimeoutMs).toBe(300_000);
+  });
+
+  test("browser sessionIdleTimeoutMs rejects negative values", () => {
+    expect(() =>
+      SpaceduckConfigSchema.parse({ tools: { browser: { sessionIdleTimeoutMs: -1 } } }),
+    ).toThrow();
+  });
+
+  test("browser sessionIdleTimeoutMs accepts 0 (close after each run)", () => {
+    const config = SpaceduckConfigSchema.parse({
+      tools: { browser: { sessionIdleTimeoutMs: 0 } },
+    });
+    expect(config.tools.browser.sessionIdleTimeoutMs).toBe(0);
+  });
+
+  test("browser maxSessions defaults to null (unlimited)", () => {
+    const config = SpaceduckConfigSchema.parse({});
+    expect(config.tools.browser.maxSessions).toBeNull();
+  });
+
+  test("browser maxSessions can be set", () => {
+    const config = SpaceduckConfigSchema.parse({
+      tools: { browser: { maxSessions: 3 } },
+    });
+    expect(config.tools.browser.maxSessions).toBe(3);
+  });
+
+  test("browser maxSessions rejects 0 and negative", () => {
+    expect(() =>
+      SpaceduckConfigSchema.parse({ tools: { browser: { maxSessions: 0 } } }),
+    ).toThrow();
+    expect(() =>
+      SpaceduckConfigSchema.parse({ tools: { browser: { maxSessions: -2 } } }),
+    ).toThrow();
+  });
+
   test("webFetch defaults to enabled", () => {
     const config = SpaceduckConfigSchema.parse({});
     expect(config.tools.webFetch.enabled).toBe(true);

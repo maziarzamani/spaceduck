@@ -42,6 +42,7 @@ import { RunLock } from "./run-lock";
 import { createWsHandler, type WsConnectionData } from "./ws-handler";
 import { buildToolRegistry } from "./tool-registrations";
 import { createBrowserFrameTarget } from "./browser-frame-target";
+import { BrowserSessionPool } from "./browser-session-pool";
 import { buildChannels } from "./channel-registrations";
 import { ToolStatusService } from "./tools/tools-status";
 import type { ToolName } from "./tools/tools-status";
@@ -123,6 +124,9 @@ export interface GatewayDeps {
   readonly swappableProvider?: SwappableProvider;
   readonly swappableEmbeddingProvider?: SwappableEmbeddingProvider;
   readonly contextBuilder?: DefaultContextBuilder;
+  readonly browserPool?: BrowserSessionPool;
+  readonly conversationIdRef?: { current: string };
+  readonly browserFrame?: ReturnType<typeof createBrowserFrameTarget>;
 }
 
 export class Gateway implements Lifecycle {
@@ -156,13 +160,18 @@ export class Gateway implements Lifecycle {
   readonly deps: GatewayDeps;
   toolStatusService: ToolStatusService | null = null;
   private channels: Channel[] = [];
-  private readonly browserFrame = createBrowserFrameTarget();
+  private readonly browserFrame: ReturnType<typeof createBrowserFrameTarget>;
+  private readonly browserPool: BrowserSessionPool | undefined;
+  private readonly conversationIdRef: { current: string };
 
   constructor(deps: GatewayDeps, db?: Database) {
     this.deps = deps;
     this.db = db ?? null;
     this.authRequired = (Bun.env.SPACEDUCK_REQUIRE_AUTH ?? "1") !== "0";
     this.channels = deps.channels ?? [];
+    this.browserPool = deps.browserPool;
+    this.conversationIdRef = deps.conversationIdRef ?? { current: "" };
+    this.browserFrame = deps.browserFrame ?? createBrowserFrameTarget();
   }
 
   get status(): LifecycleStatus {
@@ -194,6 +203,8 @@ export class Gateway implements Lifecycle {
       sessionManager: this.deps.sessionManager,
       runLock: this.deps.runLock,
       browserFrameTarget: this.browserFrame.target,
+      browserPool: this.browserPool,
+      conversationIdRef: this.conversationIdRef,
     });
 
     this.server = Bun.serve<WsConnectionData>({
@@ -241,6 +252,9 @@ export class Gateway implements Lifecycle {
 
     // Stop external channels
     await this.stopChannels();
+
+    // Close all browser sessions
+    if (this.browserPool) await this.browserPool.releaseAll();
 
     if (this.server) {
       this.server.stop(true);
@@ -300,7 +314,11 @@ export class Gateway implements Lifecycle {
     const configStore = this.deps.configStore;
     const prevSize = this.deps.agent.toolRegistry?.size ?? 0;
     try {
-      const next = buildToolRegistry(this.deps.logger, this.deps.attachmentStore, configStore, this.browserFrame.onFrame);
+      const next = buildToolRegistry(
+        this.deps.logger, this.deps.attachmentStore, configStore,
+        this.browserFrame.onFrame, this.browserPool,
+        () => this.conversationIdRef.current,
+      );
       this.deps.agent.setToolRegistry(next);
       this.deps.logger.info("Tool registry hot-swapped", {
         reason, changedPaths,
@@ -1975,10 +1993,27 @@ export async function createGateway(overrides?: {
   // Create attachment store for file uploads
   const attachmentStore = new AttachmentStore();
 
-  // Create tool registry with built-in tools
-  const toolRegistry = buildToolRegistry(logger, attachmentStore, configStore);
+  // Create per-conversation browser session pool + conversation context ref
+  const conversationIdRef = { current: "" };
+  const browserFrame = createBrowserFrameTarget();
+  const browserPool = configStore ? new BrowserSessionPool({
+    configStore,
+    logger,
+    onNewSession: (convId, browser) => {
+      const livePreview = configStore.current?.tools?.browser?.livePreview ?? false;
+      if (livePreview) {
+        browser.startScreencast((frame) => browserFrame.onFrame(convId, frame)).catch((e) => {
+          logger.warn("Failed to start screencast", { conversationId: convId, error: String(e) });
+        });
+      }
+    },
+  }) : undefined;
 
-  // Browser frame target is wired after Gateway construction
+  // Create tool registry with built-in tools
+  const toolRegistry = buildToolRegistry(
+    logger, attachmentStore, configStore, undefined,
+    browserPool, () => conversationIdRef.current,
+  );
 
   // Wire fact extractor to extract durable facts from assistant responses
   // Uses the LLM provider for intelligent extraction (falls back to regex if unavailable)
@@ -2018,6 +2053,9 @@ export async function createGateway(overrides?: {
     swappableProvider,
     swappableEmbeddingProvider,
     contextBuilder,
+    browserPool,
+    conversationIdRef,
+    browserFrame,
   }, db);
 
   await gateway.initStt();

@@ -104,6 +104,8 @@ const MarkerSchema = z.object({
 const BrowserSchema = z.object({
   enabled: z.boolean().default(true),
   livePreview: z.boolean().default(false),
+  sessionIdleTimeoutMs: z.number().int().min(0).default(600_000),
+  maxSessions: z.number().int().positive().nullable().default(null),
 });
 
 const WebFetchSchema = z.object({
