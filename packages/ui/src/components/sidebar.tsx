@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { cn } from "../lib/utils";
 import type { ConversationSummary } from "@spaceduck/core";
-import { MessageSquarePlus, Trash2, MessageCircle, Settings, Sun, Moon, MoreHorizontal, Pencil } from "lucide-react";
+import { MessageSquarePlus, Trash2, MessageCircle, Settings, Sun, Moon, MoreHorizontal, Pencil, Loader2 } from "lucide-react";
 import { SpaceduckLogo } from "./spaceduck-logo";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
@@ -23,6 +23,8 @@ import { useTheme } from "../hooks/use-theme";
 interface SidebarProps {
   conversations: ConversationSummary[];
   activeId: string | null;
+  streamingId: string | null;
+  unreadIds: ReadonlySet<string>;
   onSelect: (id: string) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
@@ -38,7 +40,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete, onRename, onOpenSettings }: SidebarProps) {
+export function Sidebar({ conversations, activeId, streamingId, unreadIds, onSelect, onCreate, onDelete, onRename, onOpenSettings }: SidebarProps) {
   const { resolved, setTheme } = useTheme();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -96,6 +98,8 @@ export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete,
           )}
           {conversations.map((conv) => {
             const isEditing = editingId === conv.id;
+            const isStreaming = streamingId === conv.id;
+            const isUnread = unreadIds.has(conv.id);
 
             return (
               <button
@@ -115,7 +119,11 @@ export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete,
                   startEditing(conv);
                 }}
               >
-                <MessageCircle size={14} className="shrink-0" />
+                {isStreaming ? (
+                  <Loader2 size={14} className="shrink-0 animate-spin text-primary" />
+                ) : (
+                  <MessageCircle size={14} className="shrink-0" />
+                )}
                 <div className="flex-1 min-w-0">
                   {isEditing ? (
                     <div className="flex items-center gap-1">
@@ -137,7 +145,14 @@ export function Sidebar({ conversations, activeId, onSelect, onCreate, onDelete,
                     </div>
                   ) : (
                     <>
-                      <p className="text-sm truncate">{conv.title || "Untitled"}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className={cn("text-sm truncate", isUnread && "font-semibold text-foreground")}>
+                          {conv.title || "Untitled"}
+                        </p>
+                        {isUnread && (
+                          <span className="shrink-0 h-2 w-2 rounded-full bg-primary" />
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">{timeAgo(conv.lastActiveAt)}</p>
                     </>
                   )}
