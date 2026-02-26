@@ -50,7 +50,7 @@ jobs:
 
       - name: Install Playwright Chromium
         run: |
-          npx playwright@1.58.2 install chromium $( [ "$RUNNER_OS" = "Linux" ] && echo "--with-deps" )
+          npx @playwright/test@1.58.2 install chromium $( [ "$RUNNER_OS" = "Linux" ] && echo "--with-deps" )
 
       - name: Run tests
         run: bun test --recursive
