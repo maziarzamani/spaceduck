@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.20.0...gateway-v0.21.0) (2026-02-27)
+
+
+### Features
+
+* **memory:** implement Memory v2 — typed memories, semantic dedup, contradiction detection ([6e1bbb8](https://github.com/maziarzamani/spaceduck/commit/6e1bbb839cf2a12090f5808332f17a2d85b2c93f))
+
 ## [0.20.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.19.0...gateway-v0.20.0) (2026-02-27)
 
 
