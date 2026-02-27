@@ -8,7 +8,6 @@ import type {
   Message,
   Provider,
   ConversationStore,
-  LongTermMemory,
   Logger,
   SessionManager,
   ToolCall,
@@ -21,8 +20,7 @@ import type { EventBus } from "./events";
 import type { Middleware, MessageContext } from "./middleware";
 import { composeMiddleware } from "./middleware";
 import type { ToolRegistry } from "./tool-registry";
-import type { FactExtractor } from "./fact-extractor";
-import { guardFact } from "./fact-extractor";
+import type { MemoryExtractor } from "./memory-extractor";
 
 function generateId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
@@ -35,8 +33,7 @@ export interface AgentDeps {
   readonly sessionManager: SessionManager;
   readonly eventBus: EventBus;
   readonly logger: Logger;
-  readonly longTermMemory?: LongTermMemory;
-  readonly factExtractor?: FactExtractor;
+  readonly memoryExtractor?: MemoryExtractor;
   readonly middleware?: Middleware[];
   readonly toolRegistry?: ToolRegistry;
   readonly maxToolRounds?: number;
@@ -120,33 +117,6 @@ export class AgentLoop {
       message: userMessage,
     });
 
-    // ── Pre-context regex extraction: update identity slots BEFORE building context ──
-    if (this.deps.factExtractor && this.deps.longTermMemory) {
-      try {
-        const candidates = this.deps.factExtractor.extractRegexFromText(userMessage.content);
-        for (const c of candidates) {
-          if (c.slot === "other" || c.slot === "preference") continue;
-          const guard = guardFact(c.content);
-          if (!guard.pass) continue;
-
-          await this.deps.longTermMemory.upsertSlotFact({
-            slot: c.slot,
-            slotValue: c.slotValue ?? "",
-            content: c.content,
-            conversationId,
-            lang: c.lang,
-            source: "pre_regex",
-            derivedFromMessageId: userMessage.id,
-            confidence: guard.confidence,
-          });
-        }
-      } catch (e) {
-        this.logger.warn("Pre-context regex extraction failed (non-fatal)", {
-          conversationId, error: String(e),
-        });
-      }
-    }
-
     // Get tool definitions if a registry is available
     const toolDefs = this._toolRegistry?.getDefinitions() ?? [];
     let totalToolCalls = 0;
@@ -223,24 +193,13 @@ export class AgentLoop {
           durationMs: Date.now() - startTime,
         });
 
-        // Background: compaction check + eager LTM fact extraction
+        // Background: compaction check
         this.maybeCompact(conversationId).catch((e) =>
           this.logger.error("Background compaction failed", {
             conversationId,
             error: String(e),
           }),
         );
-
-        if (this.deps.contextBuilder.afterTurn) {
-          this.deps.contextBuilder
-            .afterTurn(conversationId, this.deps.provider)
-            .catch((e) =>
-              this.logger.error("Background turn-flush failed", {
-                conversationId,
-                error: String(e),
-              }),
-            );
-        }
 
         return; // Done
       }

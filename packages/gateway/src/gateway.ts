@@ -7,7 +7,7 @@ import {
   type Provider,
   type ProviderChunk,
   type ConversationStore,
-  type LongTermMemory,
+  type MemoryStore,
   type SessionManager,
   type Lifecycle,
   type LifecycleStatus,
@@ -18,7 +18,7 @@ import {
   SimpleEventBus,
   DefaultContextBuilder,
   AgentLoop,
-  FactExtractor,
+  MemoryExtractor,
   loadConfig,
   ToolRegistry,
   GATEWAY_VERSION,
@@ -30,9 +30,10 @@ import {
   SchemaManager,
   ensureCustomSQLite,
   SqliteConversationStore,
-  SqliteLongTermMemory,
+  SqliteMemoryStore,
   SqliteSessionManager,
   reconcileVecFacts,
+  reconcileVecMemories,
 } from "@spaceduck/memory-sqlite";
 import { RunLock } from "./run-lock";
 import { createWsHandler, type WsConnectionData } from "./ws-handler";
@@ -109,7 +110,7 @@ export interface GatewayDeps {
   readonly eventBus: EventBus;
   readonly provider: Provider;
   readonly conversationStore: ConversationStore;
-  readonly longTermMemory: LongTermMemory;
+  readonly memoryStore?: MemoryStore;
   readonly sessionManager: SessionManager;
   readonly agent: AgentLoop;
   readonly runLock: RunLock;
@@ -938,6 +939,11 @@ export class Gateway implements Lifecycle {
                       next,
                       this.deps.logger,
                       this.deps.config.memory.connectionString,
+                    );
+                    reconcileVecMemories(
+                      this.db,
+                      next,
+                      this.deps.logger,
                     );
                   }
                   this.deps.logger.info("Embedding provider hot-swapped", {
@@ -1953,13 +1959,15 @@ export async function createGateway(overrides?: {
     config.memory.connectionString,
   );
 
-  // Create memory layer — pass swappable embedding provider for vector search
-  const conversationStore = new SqliteConversationStore(db, logger);
-  const longTermMemory = new SqliteLongTermMemory(
+  // Reconcile vec_memories virtual table for Memory v2
+  reconcileVecMemories(
     db,
+    swappableEmbeddingProvider.current,
     logger,
-    swappableEmbeddingProvider,
   );
+
+  // Create memory layer
+  const conversationStore = new SqliteConversationStore(db, logger);
   const sessionManager = new SqliteSessionManager(db, logger);
 
   // Build swappable AI provider (can be hot-swapped on config change)
@@ -1977,12 +1985,15 @@ export async function createGateway(overrides?: {
   })();
   provider = swappableProvider;
 
+  // Memory store (with provider for contradiction detection in semantic dedup)
+  const memoryStore = new SqliteMemoryStore(db, logger, swappableEmbeddingProvider, provider);
+
   // Create context builder
   const contextBuilder = new DefaultContextBuilder(
     conversationStore,
-    longTermMemory,
     logger,
     productConfig.ai.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
+    memoryStore,
   );
 
   // Create run lock
@@ -2013,12 +2024,11 @@ export async function createGateway(overrides?: {
     browserPool, () => conversationIdRef.current,
   );
 
-  // Wire fact extractor to extract durable facts from assistant responses
-  // Uses the LLM provider for intelligent extraction (falls back to regex if unavailable)
-  const factExtractor = new FactExtractor(longTermMemory, logger, provider);
-  factExtractor.register(eventBus);
+  // Wire memory extractor (v2) — classifies and stores typed memories from assistant responses
+  const memoryExtractor = new MemoryExtractor(memoryStore, logger, provider);
+  memoryExtractor.register(eventBus);
 
-  // Create agent loop (factExtractor enables pre-context regex extraction)
+  // Create agent loop
   const agent = new AgentLoop({
     provider,
     conversationStore,
@@ -2026,8 +2036,7 @@ export async function createGateway(overrides?: {
     sessionManager,
     eventBus,
     logger,
-    longTermMemory,
-    factExtractor,
+    memoryExtractor,
     toolRegistry,
   });
 
@@ -2040,7 +2049,7 @@ export async function createGateway(overrides?: {
     eventBus,
     provider,
     conversationStore,
-    longTermMemory,
+    memoryStore,
     sessionManager,
     agent,
     runLock,

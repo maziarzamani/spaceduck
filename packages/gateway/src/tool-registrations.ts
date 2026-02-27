@@ -442,7 +442,10 @@ export function buildToolRegistry(
       {
         name: "config_set",
         description:
-          "Replace a single non-secret config value using a JSON Pointer path. Path must already exist. Secret paths (API keys) cannot be set via chat tools and must be managed in Settings > Secrets.",
+          "Replace a single non-secret GATEWAY config value using a JSON Pointer path. " +
+          "This is ONLY for Spaceduck system settings like /ai/model, /ai/temperature, /ai/provider, /stt/language, etc. " +
+          "Do NOT use this tool to store user preferences, facts, or personal information — those are stored automatically in memory. " +
+          "Path must already exist. Secret paths (API keys) cannot be set via this tool.",
         parameters: {
           type: "object",
           properties: {

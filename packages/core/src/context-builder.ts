@@ -1,6 +1,6 @@
 // Context builder: assembles messages for LLM, manages token budget, handles compaction
 
-import type { Message, ConversationStore, LongTermMemory, Provider, Logger } from "./types";
+import type { Message, ConversationStore, MemoryStore, ScoredMemory, Provider, Logger } from "./types";
 import type { Result } from "./types";
 import { ok } from "./types";
 
@@ -9,6 +9,8 @@ export interface TokenBudget {
   readonly systemPromptReserve: number;
   readonly maxTurns: number;
   readonly maxFacts: number;
+  readonly maxProcedures: number;
+  readonly maxEpisodes: number;
   readonly compactionThreshold: number;
 }
 
@@ -17,6 +19,8 @@ export const DEFAULT_TOKEN_BUDGET: TokenBudget = {
   systemPromptReserve: 1000,
   maxTurns: 50,
   maxFacts: 10,
+  maxProcedures: 3,
+  maxEpisodes: 3,
   compactionThreshold: 0.85,
 };
 
@@ -25,57 +29,45 @@ export interface ContextWindowManager {
   compact(conversationId: string, provider: Provider): Promise<Result<void>>;
   estimateTokens(messages: Message[]): number;
   needsCompaction(messages: Message[], budget: TokenBudget): boolean;
-  /**
-   * Called after every agent response. Eagerly extracts and persists facts from the
-   * latest exchange so they reach LTM even in short conversations that never compact.
-   */
-  afterTurn?(conversationId: string, provider: Provider): Promise<void>;
 }
 
 /**
- * Minimum number of new messages since the last flush before we flush again.
- * Prevents the flush LLM call from running on every compaction of the same convo.
+ * Prioritize procedures by subtype: constraint > workflow > behavioral.
+ * Within a subtype, preserve the recall score ordering (already sorted by RRF).
  */
-const MIN_MESSAGES_BETWEEN_FLUSHES = 20;
+const PROCEDURE_SUBTYPE_PRIORITY: Record<string, number> = {
+  constraint: 0,
+  workflow: 1,
+  behavioral: 2,
+};
 
-/**
- * SHA-256 of a comma-joined list of message IDs.
- * Used to detect when we're compacting the exact same chunk twice.
- */
-async function chunkHash(messages: Message[]): Promise<string> {
-  const raw = messages.map((m) => m.id).join(",");
-  const data = new TextEncoder().encode(raw);
-  return new Bun.CryptoHasher("sha256").update(data).digest("hex");
+export function prioritizeProcedures(
+  procedures: ScoredMemory[],
+  max: number,
+): ScoredMemory[] {
+  const sorted = [...procedures].sort((a, b) => {
+    const pa = PROCEDURE_SUBTYPE_PRIORITY[a.memory.procedureSubtype ?? "behavioral"] ?? 2;
+    const pb = PROCEDURE_SUBTYPE_PRIORITY[b.memory.procedureSubtype ?? "behavioral"] ?? 2;
+    if (pa !== pb) return pa - pb;
+    return b.score - a.score;
+  });
+  return sorted.slice(0, max);
 }
 
-const FLUSH_EXTRACTION_PROMPT = `You are a memory consolidation system. Extract durable, long-term facts from this conversation chunk before it is archived.
-
-Rules:
-- The conversation may be in any language. Always extract facts as canonical English sentences.
-- Extract ONLY concrete facts about the user (preferences, decisions, personal info, technical choices)
-- Do NOT extract transient information or summaries
-- Each fact must be a single self-contained English sentence
-- Return a JSON array of strings: ["fact 1", "fact 2"]
-- Return [] if no durable facts are worth preserving. Do not guess.
-- Maximum 8 facts`;
-
 /**
- * Default context builder that assembles messages from ConversationStore + LongTermMemory.
- * Supports compaction when context exceeds token budget, with a pre-compaction memory flush
- * to preserve durable facts before the conversation chunk is archived.
+ * Default context builder that assembles messages from ConversationStore + MemoryStore.
+ * Supports compaction when context exceeds token budget.
+ *
+ * Memories are recalled by kind and injected with kind-aware formatting:
+ * facts (up to maxFacts), procedures (up to maxProcedures, prioritized by
+ * subtype: constraint > workflow > behavioral), episodes (up to maxEpisodes).
  */
 export class DefaultContextBuilder implements ContextWindowManager {
-  // Per-conversation flush state: tracks last-flush message count and seen chunk hashes
-  private readonly flushState = new Map<
-    string,
-    { messageCount: number; seenHashes: Set<string> }
-  >();
-
   constructor(
     private readonly store: ConversationStore,
-    private readonly ltm: LongTermMemory | undefined,
     private readonly logger: Logger,
     private systemPrompt?: string,
+    private readonly memoryStore?: MemoryStore,
   ) {}
 
   setSystemPrompt(prompt: string | undefined): void {
@@ -106,22 +98,10 @@ export class DefaultContextBuilder implements ContextWindowManager {
       });
     }
 
-    // Add relevant facts from LTM if available
-    if (this.ltm) {
-      const lastUserMessage = messages.filter((m) => m.role === "user").at(-1);
-      if (lastUserMessage) {
-        const factsResult = await this.ltm.recall(lastUserMessage.content, budget.maxFacts);
-        if (factsResult.ok && factsResult.value.length > 0) {
-          const factsText = factsResult.value.map((f) => `- ${f.content}`).join("\n");
-          context.push({
-            id: `facts-${Date.now()}`,
-            role: "system",
-            content: `Previously stored user information (may be outdated). If the user's message contradicts a stored fact, assume the new message is correct. Only ask a clarifying question if the correction is ambiguous.\n${factsText}`,
-            timestamp: 0,
-            source: "system",
-          });
-        }
-      }
+    // Inject recalled memories from MemoryStore
+    const lastUserMessage = messages.filter((m) => m.role === "user").at(-1);
+    if (lastUserMessage && this.memoryStore) {
+      await this.injectMemoryV2(context, lastUserMessage.content, budget);
     }
 
     // Add recent conversation messages
@@ -147,6 +127,84 @@ export class DefaultContextBuilder implements ContextWindowManager {
     return ok(context);
   }
 
+  /**
+   * Memory v2: recall typed memories and inject kind-aware system messages.
+   * Procedures are capped and prioritized by subtype (constraint > workflow > behavioral).
+   */
+  private async injectMemoryV2(
+    context: Message[],
+    query: string,
+    budget: TokenBudget,
+  ): Promise<void> {
+    const totalK = budget.maxFacts + budget.maxProcedures + budget.maxEpisodes;
+    const result = await this.memoryStore!.recall(query, {
+      kinds: ["fact", "procedure", "episode"],
+      status: ["active"],
+      topK: totalK,
+    });
+
+    if (!result.ok || result.value.length === 0) return;
+
+    const facts: ScoredMemory[] = [];
+    const procedures: ScoredMemory[] = [];
+    const episodes: ScoredMemory[] = [];
+
+    for (const sm of result.value) {
+      switch (sm.memory.kind) {
+        case "fact":
+          if (facts.length < budget.maxFacts) facts.push(sm);
+          break;
+        case "procedure":
+          procedures.push(sm);
+          break;
+        case "episode":
+          if (episodes.length < budget.maxEpisodes) episodes.push(sm);
+          break;
+      }
+    }
+
+    const selectedProcedures = prioritizeProcedures(procedures, budget.maxProcedures);
+
+    const blocks: string[] = [];
+
+    if (facts.length > 0) {
+      const lines = facts.map((sm) => `- ${sm.memory.content}`);
+      blocks.push(`Known facts about the user:\n${lines.join("\n")}`);
+    }
+
+    if (selectedProcedures.length > 0) {
+      const lines = selectedProcedures.map((sm) => {
+        const tag = sm.memory.procedureSubtype
+          ? `[${sm.memory.procedureSubtype}] `
+          : "";
+        return `- ${tag}${sm.memory.content}`;
+      });
+      blocks.push(
+        `Behavioral instructions and constraints (always follow these):\n${lines.join("\n")}`,
+      );
+    }
+
+    if (episodes.length > 0) {
+      const lines = episodes.map((sm) => {
+        const when = sm.memory.occurredAt
+          ? ` (${new Date(sm.memory.occurredAt).toISOString().slice(0, 10)})`
+          : "";
+        return `- ${sm.memory.content}${when}`;
+      });
+      blocks.push(`Relevant past events:\n${lines.join("\n")}`);
+    }
+
+    if (blocks.length === 0) return;
+
+    context.push({
+      id: `memories-${Date.now()}`,
+      role: "system",
+      content: `Previously stored user information (may be outdated). If the user's message contradicts a stored memory, assume the new message is correct. Only ask a clarifying question if the correction is ambiguous.\n\n${blocks.join("\n\n")}`,
+      timestamp: 0,
+      source: "system",
+    });
+  }
+
   async compact(conversationId: string, provider: Provider): Promise<Result<void>> {
     const messagesResult = await this.store.loadMessages(conversationId);
     if (!messagesResult.ok) return messagesResult;
@@ -154,7 +212,6 @@ export class DefaultContextBuilder implements ContextWindowManager {
     const messages = messagesResult.value;
     if (messages.length < 10) return ok(undefined);
 
-    // Take the oldest 60% of messages to summarize
     const cutoff = Math.floor(messages.length * 0.6);
     const toSummarize = messages.slice(0, cutoff);
 
@@ -164,14 +221,6 @@ export class DefaultContextBuilder implements ContextWindowManager {
       summarizing: toSummarize.length,
     });
 
-    // ── Pre-compaction memory flush ──────────────────────────────────────
-    // Extract durable facts from the chunk BEFORE it is compressed into a
-    // summary and those details become inaccessible.
-    if (this.ltm) {
-      await this.maybeFlush(conversationId, toSummarize, provider, messages.length);
-    }
-
-    // ── Summary generation ───────────────────────────────────────────────
     const transcript = toSummarize
       .map((m) => `${m.role}: ${m.content}`)
       .join("\n");
@@ -217,241 +266,10 @@ export class DefaultContextBuilder implements ContextWindowManager {
     return ok(undefined);
   }
 
-  /**
-   * Run a pre-compaction memory flush if the rate-limit and chunk-hash
-   * dedup guards allow it.
-   */
-  private async maybeFlush(
-    conversationId: string,
-    toSummarize: Message[],
-    provider: Provider,
-    totalMessageCount: number,
-  ): Promise<void> {
-    try {
-      let state = this.flushState.get(conversationId);
-      if (!state) {
-        state = { messageCount: 0, seenHashes: new Set() };
-        this.flushState.set(conversationId, state);
-      }
-
-      // Guardrail 1: rate limit — skip if we flushed recently
-      const messagesSinceFlush = totalMessageCount - state.messageCount;
-      if (state.messageCount > 0 && messagesSinceFlush < MIN_MESSAGES_BETWEEN_FLUSHES) {
-        this.logger.debug("Compaction flush skipped (rate limit)", {
-          conversationId,
-          messagesSinceFlush,
-        });
-        return;
-      }
-
-      // Guardrail 2: chunk hash dedup — skip if we've seen this exact chunk
-      const hash = await chunkHash(toSummarize);
-      if (state.seenHashes.has(hash)) {
-        this.logger.debug("Compaction flush skipped (duplicate chunk)", {
-          conversationId,
-          hash: hash.slice(0, 8),
-        });
-        return;
-      }
-
-      // Run the flush
-      this.logger.info("Running pre-compaction memory flush", {
-        conversationId,
-        messages: toSummarize.length,
-      });
-
-      const facts = await this.extractFlushFacts(toSummarize, provider);
-
-      let stored = 0;
-      let filtered = 0;
-      for (const content of facts) {
-        if (content.length < 5 || content.length > 300) {
-          filtered++;
-          continue;
-        }
-        await this.ltm!.remember({
-          conversationId,
-          content,
-          source: "compaction-flush",
-          confidence: 0.65,
-        });
-        stored++;
-      }
-
-      // Mark as flushed
-      state.messageCount = totalMessageCount;
-      state.seenHashes.add(hash);
-
-      this.logger.info("Pre-compaction flush complete", {
-        conversationId,
-        stage: "compaction-flush",
-        factsExtracted: facts.length,
-        factsStored: stored,
-        filteredByLength: filtered,
-      });
-    } catch (flushErr) {
-      // Flush failure must never block compaction
-      this.logger.warn("Pre-compaction flush failed (non-fatal)", {
-        conversationId,
-        error: String(flushErr),
-      });
-    }
-  }
-
-  /**
-   * One LLM call to extract durable facts from a chunk of messages.
-   */
-  private async extractFlushFacts(
-    messages: Message[],
-    provider: Provider,
-  ): Promise<string[]> {
-    const transcript = messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => `${m.role}: ${m.content}`)
-      .join("\n");
-
-    if (!transcript.trim()) return [];
-
-    const prompt: Message[] = [
-      {
-        id: `flush-sys-${Date.now()}`,
-        role: "system",
-        content: FLUSH_EXTRACTION_PROMPT,
-        timestamp: Date.now(),
-      },
-      {
-        id: `flush-input-${Date.now()}`,
-        role: "user",
-        content: transcript,
-        timestamp: Date.now(),
-      },
-    ];
-
-    let response = "";
-    for await (const chunk of provider.chat(prompt)) {
-      if (chunk.type === "text") {
-        response += chunk.text;
-      }
-    }
-
-    return this.parseFactsJson(response);
-  }
-
-  /**
-   * Parse a JSON array of strings from LLM output.
-   * Tolerates markdown fences, trailing commas, and extra text.
-   */
-  private parseFactsJson(raw: string): string[] {
-    let cleaned = raw.replace(/```(?:json)?\s*\n?([\s\S]*?)```/g, "$1").trim();
-    const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
-    if (!arrayMatch) return [];
-
-    cleaned = arrayMatch[0].replace(/,\s*]/g, "]");
-
-    try {
-      const parsed = JSON.parse(cleaned);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((item: unknown): item is string => typeof item === "string");
-    } catch {
-      const strings: string[] = [];
-      const re = /"((?:[^"\\]|\\.)*)"/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(cleaned)) !== null) {
-        const s = m[1].replace(/\\"/g, '"').replace(/\\n/g, " ").trim();
-        if (s.length >= 5) strings.push(s);
-      }
-      return strings;
-    }
-  }
-
-  /**
-   * Eagerly extract and persist facts from the latest exchange (last user + assistant pair).
-   * Runs in the background after every agent response so facts reach LTM immediately —
-   * long before compaction would ever trigger in short conversations.
-   *
-   * Uses the same seenHashes dedup as maybeFlush so we never process the same pair twice.
-   */
-  async afterTurn(conversationId: string, provider: Provider): Promise<void> {
-    if (!this.ltm) return;
-
-    try {
-      const messagesResult = await this.store.loadMessages(conversationId, 10);
-      if (!messagesResult.ok) return;
-
-      const messages = messagesResult.value;
-
-      // Need at least a user + assistant pair
-      const userAssistant = messages.filter(
-        (m) => m.role === "user" || m.role === "assistant",
-      );
-      if (userAssistant.length < 2) return;
-
-      // Only look at the most recent pair
-      const recentPair = userAssistant.slice(-2);
-      if (!recentPair.some((m) => m.role === "user")) return;
-
-      // Dedup: skip if we already extracted facts from this exact pair
-      const hash = await chunkHash(recentPair);
-      let state = this.flushState.get(conversationId);
-      if (!state) {
-        state = { messageCount: 0, seenHashes: new Set() };
-        this.flushState.set(conversationId, state);
-      }
-      if (state.seenHashes.has(hash)) return;
-
-      const facts = await this.extractFlushFacts(recentPair, provider);
-
-      let stored = 0;
-      let filtered = 0;
-      for (const content of facts) {
-        if (content.length < 5 || content.length > 300) {
-          filtered++;
-          continue;
-        }
-        await this.ltm!.remember({
-          conversationId,
-          content,
-          source: "turn-flush",
-          confidence: 0.75,
-        });
-        stored++;
-      }
-
-      state.seenHashes.add(hash);
-
-      if (stored > 0) {
-        this.logger.info("Turn facts persisted to LTM", {
-          conversationId,
-          stage: "turn-flush",
-          factsExtracted: facts.length,
-          factsStored: stored,
-          filteredByLength: filtered,
-        });
-      } else {
-        this.logger.debug("Turn flush: no facts stored", {
-          conversationId,
-          stage: "turn-flush",
-          reason: facts.length === 0 ? "llm_empty" : "all_filtered",
-          factsExtracted: facts.length,
-          filteredByLength: filtered,
-        });
-      }
-    } catch (err) {
-      this.logger.warn("Turn fact extraction failed (non-fatal)", {
-        conversationId,
-        error: String(err),
-      });
-    }
-  }
-
-  /**
-   * Simple token estimator: ~4 characters per token.
-   * Good enough for budget checks; upgrade to tiktoken later if needed.
-   */
   estimateTokens(messages: Message[]): number {
     let chars = 0;
     for (const msg of messages) {
-      chars += msg.role.length + msg.content.length + 10; // overhead for role markers
+      chars += msg.role.length + msg.content.length + 10;
     }
     return Math.ceil(chars / 4);
   }

@@ -5,7 +5,8 @@ import { SchemaManager, ensureCustomSQLite } from "../schema";
 import { SqliteConversationStore } from "../store";
 import { SqliteLongTermMemory } from "../long-term";
 import { SqliteSessionManager } from "../session-store";
-import type { Message } from "@spaceduck/core";
+import { SqliteMemoryStore } from "../memory-store";
+import type { MemoryInput, MemoryRecord, Message } from "@spaceduck/core";
 
 const logger = new ConsoleLogger("error");
 
@@ -58,7 +59,7 @@ describe("SchemaManager", () => {
     db.close();
   });
 
-  it("should be idempotent and reach version 12", async () => {
+  it("should be idempotent and reach version 13", async () => {
     const db = createTestDb();
     const schema = new SchemaManager(db, logger);
     schema.loadExtensions();
@@ -68,7 +69,7 @@ describe("SchemaManager", () => {
     const row = db.query("SELECT MAX(version) as version FROM schema_version").get() as {
       version: number;
     };
-    expect(row.version).toBe(12);
+    expect(row.version).toBe(13);
 
     db.close();
   });
@@ -123,6 +124,234 @@ describe("SchemaManager", () => {
     const after = db.query("SELECT updated_at, created_at FROM facts WHERE id = 'pre-v2'").get() as { updated_at: number; created_at: number };
     expect(after.updated_at).toBe(after.created_at);
     expect(after.updated_at).toBe(now);
+
+    db.close();
+  });
+
+  it("migration 013: memories table, FTS, triggers, and vec_memories_meta exist", async () => {
+    const db = createTestDb();
+    const schema = new SchemaManager(db, logger);
+    schema.loadExtensions();
+    await schema.migrate();
+
+    const tables = db
+      .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all() as { name: string }[];
+    const tableNames = tables.map((t) => t.name);
+
+    expect(tableNames).toContain("memories");
+    expect(tableNames).toContain("memories_fts");
+    expect(tableNames).toContain("vec_memories_meta");
+
+    const columns = db
+      .query("PRAGMA table_info(memories)")
+      .all() as { name: string; type: string; notnull: number }[];
+    const colNames = columns.map((c) => c.name);
+
+    expect(colNames).toContain("id");
+    expect(colNames).toContain("kind");
+    expect(colNames).toContain("title");
+    expect(colNames).toContain("content");
+    expect(colNames).toContain("summary");
+    expect(colNames).toContain("scope_type");
+    expect(colNames).toContain("scope_id");
+    expect(colNames).toContain("entity_refs");
+    expect(colNames).toContain("source_type");
+    expect(colNames).toContain("source_id");
+    expect(colNames).toContain("source_conversation_id");
+    expect(colNames).toContain("source_run_id");
+    expect(colNames).toContain("source_tool_name");
+    expect(colNames).toContain("created_at");
+    expect(colNames).toContain("updated_at");
+    expect(colNames).toContain("last_seen_at");
+    expect(colNames).toContain("occurred_at");
+    expect(colNames).toContain("expires_at");
+    expect(colNames).toContain("procedure_subtype");
+    expect(colNames).toContain("importance");
+    expect(colNames).toContain("confidence");
+    expect(colNames).toContain("status");
+    expect(colNames).toContain("superseded_by");
+    expect(colNames).toContain("embedding_version");
+    expect(colNames).toContain("tags");
+    expect(colNames).toContain("content_hash");
+
+    const indexes = db
+      .query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='memories'")
+      .all() as { name: string }[];
+    const idxNames = indexes.map((i) => i.name);
+
+    expect(idxNames).toContain("idx_memories_kind_status");
+    expect(idxNames).toContain("idx_memories_scope");
+    expect(idxNames).toContain("idx_memories_updated");
+    expect(idxNames).toContain("idx_memories_importance");
+    expect(idxNames).toContain("idx_memories_status");
+    expect(idxNames).toContain("idx_memories_content_hash");
+    expect(idxNames).toContain("idx_memories_occurred_at");
+
+    const triggers = db
+      .query("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='memories'")
+      .all() as { name: string }[];
+    const triggerNames = triggers.map((t) => t.name);
+
+    expect(triggerNames).toContain("memories_ai");
+    expect(triggerNames).toContain("memories_ad");
+    expect(triggerNames).toContain("memories_au");
+
+    db.close();
+  });
+
+  it("migration 013: kind CHECK constraint rejects invalid values", async () => {
+    const db = createTestDb();
+    const schema = new SchemaManager(db, logger);
+    schema.loadExtensions();
+    await schema.migrate();
+
+    const now = Date.now();
+
+    // Valid kinds should work
+    for (const kind of ["fact", "episode", "procedure"]) {
+      db.exec(
+        `INSERT INTO memories (id, kind, title, content, source_type, created_at, updated_at, last_seen_at)
+         VALUES ('test-${kind}', '${kind}', 'Test', 'Content', 'system', ${now}, ${now}, ${now})`,
+      );
+    }
+
+    // Invalid kind should throw
+    expect(() => {
+      db.exec(
+        `INSERT INTO memories (id, kind, title, content, source_type, created_at, updated_at, last_seen_at)
+         VALUES ('test-bad', 'invalid_kind', 'Test', 'Content', 'system', ${now}, ${now}, ${now})`,
+      );
+    }).toThrow();
+
+    db.close();
+  });
+
+  it("migration 013: status CHECK constraint rejects invalid values", async () => {
+    const db = createTestDb();
+    const schema = new SchemaManager(db, logger);
+    schema.loadExtensions();
+    await schema.migrate();
+
+    const now = Date.now();
+
+    for (const status of ["candidate", "active", "stale", "superseded", "archived"]) {
+      db.exec(
+        `INSERT INTO memories (id, kind, title, content, source_type, status, created_at, updated_at, last_seen_at)
+         VALUES ('test-${status}', 'fact', 'Test', 'Content', 'system', '${status}', ${now}, ${now}, ${now})`,
+      );
+    }
+
+    expect(() => {
+      db.exec(
+        `INSERT INTO memories (id, kind, title, content, source_type, status, created_at, updated_at, last_seen_at)
+         VALUES ('test-bad-status', 'fact', 'Test', 'Content', 'system', 'deleted', ${now}, ${now}, ${now})`,
+      );
+    }).toThrow();
+
+    db.close();
+  });
+
+  it("migration 013: procedure_subtype CHECK constraint allows valid subtypes and NULL", async () => {
+    const db = createTestDb();
+    const schema = new SchemaManager(db, logger);
+    schema.loadExtensions();
+    await schema.migrate();
+
+    const now = Date.now();
+
+    // NULL is valid (for facts/episodes)
+    db.exec(
+      `INSERT INTO memories (id, kind, title, content, source_type, created_at, updated_at, last_seen_at)
+       VALUES ('test-null-subtype', 'fact', 'Test', 'Content', 'system', ${now}, ${now}, ${now})`,
+    );
+
+    for (const subtype of ["behavioral", "workflow", "constraint"]) {
+      db.exec(
+        `INSERT INTO memories (id, kind, title, content, source_type, procedure_subtype, created_at, updated_at, last_seen_at)
+         VALUES ('test-${subtype}', 'procedure', 'Test', 'Content', 'system', '${subtype}', ${now}, ${now}, ${now})`,
+      );
+    }
+
+    expect(() => {
+      db.exec(
+        `INSERT INTO memories (id, kind, title, content, source_type, procedure_subtype, created_at, updated_at, last_seen_at)
+         VALUES ('test-bad-sub', 'procedure', 'Test', 'Content', 'system', 'invalid', ${now}, ${now}, ${now})`,
+      );
+    }).toThrow();
+
+    db.close();
+  });
+
+  it("migration 013: FTS triggers sync on insert/update/delete", async () => {
+    const db = createTestDb();
+    const schema = new SchemaManager(db, logger);
+    schema.loadExtensions();
+    await schema.migrate();
+
+    const now = Date.now();
+
+    // Insert
+    db.exec(
+      `INSERT INTO memories (id, kind, title, content, summary, source_type, created_at, updated_at, last_seen_at)
+       VALUES ('fts-test', 'fact', 'Bun Runtime', 'Bun is fast', 'Fast JS runtime', 'system', ${now}, ${now}, ${now})`,
+    );
+
+    const afterInsert = db
+      .query("SELECT rowid FROM memories_fts WHERE memories_fts MATCH 'Bun'")
+      .all();
+    expect(afterInsert.length).toBe(1);
+
+    // Update
+    db.exec(
+      `UPDATE memories SET content = 'Bun is extremely fast', summary = 'Extremely fast JS runtime' WHERE id = 'fts-test'`,
+    );
+
+    const afterUpdate = db
+      .query("SELECT rowid FROM memories_fts WHERE memories_fts MATCH 'extremely'")
+      .all();
+    expect(afterUpdate.length).toBe(1);
+
+    const oldMatch = db
+      .query("SELECT rowid FROM memories_fts WHERE memories_fts MATCH 'Bun'")
+      .all();
+    expect(oldMatch.length).toBe(1);
+
+    // Delete
+    db.exec("DELETE FROM memories WHERE id = 'fts-test'");
+
+    const afterDelete = db
+      .query("SELECT rowid FROM memories_fts WHERE memories_fts MATCH 'Bun'")
+      .all();
+    expect(afterDelete.length).toBe(0);
+
+    db.close();
+  });
+
+  it("migration 013: content_hash is non-unique (allows duplicates)", async () => {
+    const db = createTestDb();
+    const schema = new SchemaManager(db, logger);
+    schema.loadExtensions();
+    await schema.migrate();
+
+    const now = Date.now();
+    const hash = "abc123deadbeef";
+
+    db.exec(
+      `INSERT INTO memories (id, kind, title, content, source_type, content_hash, scope_type, created_at, updated_at, last_seen_at)
+       VALUES ('dup-1', 'fact', 'Test', 'Same content', 'system', '${hash}', 'global', ${now}, ${now}, ${now})`,
+    );
+
+    // Same hash, different scope -- should NOT throw
+    db.exec(
+      `INSERT INTO memories (id, kind, title, content, source_type, content_hash, scope_type, scope_id, created_at, updated_at, last_seen_at)
+       VALUES ('dup-2', 'fact', 'Test', 'Same content', 'system', '${hash}', 'project', 'proj-1', ${now}, ${now}, ${now})`,
+    );
+
+    const rows = db
+      .query("SELECT id FROM memories WHERE content_hash = ?")
+      .all(hash) as { id: string }[];
+    expect(rows.length).toBe(2);
 
     db.close();
   });
@@ -1204,5 +1433,685 @@ describe("Slot deactivation of turn-flush facts", () => {
       .query("SELECT is_active FROM facts WHERE content = 'You prefer Python.'")
       .get() as { is_active: number };
     expect(prefFact.is_active).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SqliteMemoryStore (Memory v2)
+// ---------------------------------------------------------------------------
+
+function testInput(overrides?: Partial<MemoryInput>): MemoryInput {
+  return {
+    kind: "fact",
+    title: "Test memory",
+    content: "Test content for memory v2",
+    scope: { type: "global" },
+    source: { type: "system" },
+    ...overrides,
+  } as MemoryInput;
+}
+
+describe("SqliteMemoryStore", () => {
+  let db: Database;
+  let store: SqliteMemoryStore;
+
+  beforeEach(async () => {
+    db = await setupDb();
+    store = new SqliteMemoryStore(db, logger);
+  });
+
+  afterEach(() => db.close());
+
+  it("store() and get() round-trip a fact", async () => {
+    const result = await store.store(testInput({
+      title: "Prefers Bun",
+      content: "User prefers Bun over Node for TypeScript projects",
+      tags: ["preference", "runtime"],
+      importance: 0.8,
+      confidence: 0.9,
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const record = result.value;
+    expect(record.kind).toBe("fact");
+    expect(record.title).toBe("Prefers Bun");
+    expect(record.tags).toEqual(["preference", "runtime"]);
+    expect(record.importance).toBe(0.8);
+    expect(record.confidence).toBe(0.9);
+    expect(record.status).toBe("active");
+    expect(record.scope).toEqual({ type: "global" });
+
+    const got = await store.get(record.id);
+    expect(got.ok).toBe(true);
+    if (got.ok) {
+      expect(got.value?.id).toBe(record.id);
+      expect(got.value?.title).toBe("Prefers Bun");
+    }
+  });
+
+  it("store() an episode requires occurredAt", async () => {
+    const result = await store.store({
+      kind: "episode",
+      title: "Deployed auth service",
+      content: "Successfully deployed the auth service to production",
+      occurredAt: Date.now() - 3600_000,
+      scope: { type: "project", projectId: "proj-1" },
+      source: { type: "tool_result", toolName: "deploy" },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.kind).toBe("episode");
+    expect(result.value.occurredAt).toBeDefined();
+    expect(result.value.scope).toEqual({ type: "project", projectId: "proj-1" });
+  });
+
+  it("store() a procedure requires procedureSubtype", async () => {
+    const result = await store.store({
+      kind: "procedure",
+      title: "Always validate schemas",
+      content: "Before any write operation, validate the input against the schema",
+      procedureSubtype: "constraint",
+      scope: { type: "global" },
+      source: { type: "user_message" },
+      importance: 0.9,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.kind).toBe("procedure");
+    expect(result.value.procedureSubtype).toBe("constraint");
+  });
+
+  it("store() deduplicates by content_hash + kind + scope", async () => {
+    const input = testInput({ content: "Duplicate test content" });
+    const r1 = await store.store(input);
+    const r2 = await store.store(input);
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (r1.ok && r2.ok) {
+      expect(r1.value.id).toBe(r2.value.id);
+    }
+  });
+
+  it("store() allows same content in different scopes", async () => {
+    const r1 = await store.store(testInput({
+      content: "Same content different scope",
+      scope: { type: "global" },
+    }));
+    const r2 = await store.store(testInput({
+      content: "Same content different scope",
+      scope: { type: "project", projectId: "proj-1" },
+    }));
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (r1.ok && r2.ok) {
+      expect(r1.value.id).not.toBe(r2.value.id);
+    }
+  });
+
+  it("list() filters by kind and status", async () => {
+    await store.store(testInput({ kind: "fact", title: "Fact 1", content: "fact content 1" }));
+    await store.store({
+      kind: "episode", title: "Episode 1", content: "episode content 1",
+      occurredAt: Date.now(), scope: { type: "global" }, source: { type: "system" },
+    });
+    await store.store({
+      kind: "procedure", title: "Proc 1", content: "procedure content 1",
+      procedureSubtype: "behavioral", scope: { type: "global" }, source: { type: "system" },
+    });
+
+    const facts = await store.list({ kinds: ["fact"] });
+    expect(facts.ok).toBe(true);
+    if (facts.ok) {
+      expect(facts.value.length).toBe(1);
+      expect(facts.value[0].kind).toBe("fact");
+    }
+
+    const all = await store.list();
+    expect(all.ok).toBe(true);
+    if (all.ok) expect(all.value.length).toBe(3);
+  });
+
+  it("update() patches allowed fields and preserves immutables", async () => {
+    const r = await store.store(testInput({ title: "Original", content: "Original content" }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    const updated = await store.update(r.value.id, {
+      title: "Updated title",
+      tags: ["new-tag"],
+      status: "stale",
+    });
+
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    expect(updated.value.title).toBe("Updated title");
+    expect(updated.value.tags).toEqual(["new-tag"]);
+    expect(updated.value.status).toBe("stale");
+    expect(updated.value.kind).toBe("fact");
+    expect(updated.value.source).toEqual({ type: "system" });
+  });
+
+  it("supersede() marks old as superseded and creates new", async () => {
+    const r1 = await store.store(testInput({ title: "V1", content: "Version 1" }));
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+
+    const r2 = await store.supersede(r1.value.id, testInput({ title: "V2", content: "Version 2" }));
+    expect(r2.ok).toBe(true);
+    if (!r2.ok) return;
+
+    const old = await store.get(r1.value.id);
+    expect(old.ok).toBe(true);
+    if (old.ok) {
+      expect(old.value?.status).toBe("superseded");
+      expect(old.value?.supersededBy).toBe(r2.value.id);
+    }
+
+    expect(r2.value.status).toBe("active");
+  });
+
+  it("archive() sets status to archived", async () => {
+    const r = await store.store(testInput({ content: "To be archived" }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    await store.archive(r.value.id);
+    const got = await store.get(r.value.id);
+    expect(got.ok).toBe(true);
+    if (got.ok) expect(got.value?.status).toBe("archived");
+  });
+
+  it("delete() removes the memory", async () => {
+    const r = await store.store(testInput({ content: "To be deleted" }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    await store.delete(r.value.id);
+    const got = await store.get(r.value.id);
+    expect(got.ok).toBe(true);
+    if (got.ok) expect(got.value).toBeNull();
+  });
+
+  it("recall() via FTS finds memories by keyword", async () => {
+    await store.store(testInput({ title: "Bun Runtime", content: "Bun is an extremely fast JavaScript runtime" }));
+    await store.store(testInput({ title: "SQLite DB", content: "SQLite is a lightweight embedded database" }));
+
+    const results = await store.recall("fast JavaScript runtime");
+    expect(results.ok).toBe(true);
+    if (!results.ok) return;
+    expect(results.value.length).toBeGreaterThan(0);
+    expect(results.value[0].memory.title).toBe("Bun Runtime");
+  });
+
+  it("recall() filters by kind", async () => {
+    await store.store(testInput({ kind: "fact", title: "Fact A", content: "TypeScript is great for type safety" }));
+    await store.store({
+      kind: "procedure", title: "Proc A", content: "TypeScript should always use strict mode",
+      procedureSubtype: "constraint", scope: { type: "global" }, source: { type: "system" },
+    });
+
+    const factsOnly = await store.recall("TypeScript", { kinds: ["fact"] });
+    expect(factsOnly.ok).toBe(true);
+    if (factsOnly.ok) {
+      expect(factsOnly.value.every((s) => s.memory.kind === "fact")).toBe(true);
+    }
+  });
+
+  it("recall() excludes expired memories", async () => {
+    await store.store(testInput({
+      content: "This memory is expired already",
+      expiresAt: Date.now() - 1000,
+    }));
+    await store.store(testInput({ content: "This memory is still valid and fresh" }));
+
+    const results = await store.recall("memory");
+    expect(results.ok).toBe(true);
+    if (results.ok) {
+      expect(results.value.every((s) => s.memory.content !== "This memory is expired already")).toBe(true);
+    }
+  });
+
+  it("get() returns null for non-existent id", async () => {
+    const got = await store.get("non-existent-id");
+    expect(got.ok).toBe(true);
+    if (got.ok) expect(got.value).toBeNull();
+  });
+});
+
+// --- Semantic Dedup Tests ---
+
+import type { EmbeddingProvider } from "@spaceduck/core";
+import { MockProvider } from "@spaceduck/core/src/__fixtures__/mock-provider";
+import { reconcileVecMemories } from "../schema";
+
+/**
+ * Embedding provider that returns pre-configured vectors.
+ * Call queueVector() before each embed() call.
+ */
+class ControlledEmbeddingProvider implements EmbeddingProvider {
+  readonly name = "controlled";
+  readonly model = "controlled-model";
+  readonly dimensions = 4;
+  private queue: Float32Array[] = [];
+
+  queueVector(v: number[]): void {
+    const vec = new Float32Array(v);
+    // Normalize to unit vector
+    let norm = 0;
+    for (let i = 0; i < vec.length; i++) norm += vec[i] * vec[i];
+    norm = Math.sqrt(norm);
+    if (norm > 0) for (let i = 0; i < vec.length; i++) vec[i] /= norm;
+    this.queue.push(vec);
+  }
+
+  async embed(): Promise<Float32Array> {
+    const v = this.queue.shift();
+    if (!v) return new Float32Array(this.dimensions);
+    return v;
+  }
+
+  async embedBatch(texts: string[]): Promise<Float32Array[]> {
+    return texts.map(() => {
+      const v = this.queue.shift();
+      return v ?? new Float32Array(this.dimensions);
+    });
+  }
+}
+
+async function createDedupDb(embedding: EmbeddingProvider): Promise<{ db: Database; store: SqliteMemoryStore }> {
+  const db = createTestDb();
+  const schema = new SchemaManager(db, logger);
+  schema.loadExtensions();
+  await schema.migrate();
+  reconcileVecMemories(db, embedding, logger);
+  const store = new SqliteMemoryStore(db, logger, embedding);
+  return { db, store };
+}
+
+async function createDedupDbWithProvider(
+  embedding: EmbeddingProvider,
+  provider: MockProvider,
+): Promise<{ db: Database; store: SqliteMemoryStore }> {
+  const db = createTestDb();
+  const schema = new SchemaManager(db, logger);
+  schema.loadExtensions();
+  await schema.migrate();
+  reconcileVecMemories(db, embedding, logger);
+  const store = new SqliteMemoryStore(db, logger, embedding, provider);
+  return { db, store };
+}
+
+const dedupInput = (overrides?: Partial<MemoryInput>): MemoryInput => ({
+  kind: "fact",
+  title: "Test",
+  content: "The user prefers TypeScript for all projects",
+  scope: { type: "global" },
+  source: { type: "user_message", conversationId: "c1" },
+  ...overrides,
+} as MemoryInput);
+
+describe("SqliteMemoryStore — semantic dedup", () => {
+  it("skips near-duplicate when vector similarity >= threshold", async () => {
+    const embed = new ControlledEmbeddingProvider();
+    const { store } = await createDedupDb(embed);
+
+    const v1 = [1, 0, 0, 0];
+    embed.queueVector(v1); // first store: dedup query → reused for insert
+    const first = await store.store(dedupInput());
+    expect(first.ok).toBe(true);
+
+    // Second store: dedup query -> should find near-duplicate -> skip (no insert needed)
+    embed.queueVector(v1); // checkSemanticDedup query -> matches first memory
+    const second = await store.store(dedupInput({
+      content: "The user likes TypeScript for all projects",
+    }));
+    expect(second.ok).toBe(true);
+    if (!second.ok || !first.ok) return;
+
+    expect(second.value.id).toBe(first.value.id);
+
+    const all = await store.list();
+    expect(all.ok).toBe(true);
+    if (all.ok) expect(all.value.length).toBe(1);
+  });
+
+  it("does NOT dedup when vectors are dissimilar", async () => {
+    const embed = new ControlledEmbeddingProvider();
+    const { store } = await createDedupDb(embed);
+
+    embed.queueVector([1, 0, 0, 0]); // first store: dedup query (no matches) → reused for insert
+    await store.store(dedupInput());
+
+    embed.queueVector([0, 0, 0, 1]); // second store: dedup query (dissimilar) → reused for insert
+    const second = await store.store(dedupInput({
+      content: "The user builds mobile apps with React Native",
+    }));
+    expect(second.ok).toBe(true);
+
+    const all = await store.list();
+    expect(all.ok).toBe(true);
+    if (all.ok) expect(all.value.length).toBe(2);
+  });
+
+  it("only dedup within the same kind", async () => {
+    const embed = new ControlledEmbeddingProvider();
+    const { store } = await createDedupDb(embed);
+
+    const v = [1, 0, 0, 0];
+    embed.queueVector(v); // fact store: dedup query → reused for insert
+    await store.store(dedupInput({ kind: "fact" }));
+
+    // Same vector but different kind -> should NOT dedup
+    embed.queueVector(v); // procedure store: dedup query (no match for this kind) → reused for insert
+    const proc = await store.store(dedupInput({
+      kind: "procedure",
+      procedureSubtype: "behavioral",
+      content: "The user prefers TypeScript for all projects",
+    }) as MemoryInput);
+    expect(proc.ok).toBe(true);
+
+    const all = await store.list();
+    expect(all.ok).toBe(true);
+    if (all.ok) expect(all.value.length).toBe(2);
+  });
+
+  it("updates lastSeenAt on the existing record when deduped", async () => {
+    const embed = new ControlledEmbeddingProvider();
+    const { store } = await createDedupDb(embed);
+
+    const v = [1, 0, 0, 0];
+    embed.queueVector(v); // first store: dedup query → reused for insert
+    const first = await store.store(dedupInput());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const originalLastSeen = first.value.lastSeenAt;
+    await new Promise((r) => setTimeout(r, 5));
+
+    embed.queueVector(v); // second store dedup query
+    const second = await store.store(dedupInput({
+      content: "The user likes TypeScript for all projects",
+    }));
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.value.id).toBe(first.value.id);
+    expect(second.value.lastSeenAt).toBeGreaterThan(originalLastSeen);
+  });
+});
+
+describe("SqliteMemoryStore — contradiction detection", () => {
+  it("supersedes when LLM detects contradiction", async () => {
+    const embed = new ControlledEmbeddingProvider();
+    const provider = new MockProvider(["contradiction"]);
+    const { store } = await createDedupDbWithProvider(embed, provider);
+
+    const v = [1, 0, 0, 0];
+    embed.queueVector(v); // first store: dedup query → reused for insert
+    const first = await store.store(dedupInput({
+      content: "The user prefers TypeScript over Python",
+    }));
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    // Near-duplicate vector but contradicting content
+    embed.queueVector(v); // second store: dedup query -> finds first, calls contradiction check
+    // After supersede, the new memory goes through store() again:
+    embed.queueVector(v); // supersede -> store() dedup query → reused for insert
+    const second = await store.store(dedupInput({
+      content: "The user dislikes TypeScript and prefers Python",
+    }));
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.value.id).not.toBe(first.value.id);
+
+    const old = await store.get(first.value.id);
+    expect(old.ok).toBe(true);
+    if (old.ok && old.value) {
+      expect(old.value.status).toBe("superseded");
+      expect(old.value.supersededBy).toBe(second.value.id);
+    }
+  });
+
+  it("skips (no supersede) when LLM says consistent", async () => {
+    const embed = new ControlledEmbeddingProvider();
+    const provider = new MockProvider(["consistent"]);
+    const { store } = await createDedupDbWithProvider(embed, provider);
+
+    const v = [1, 0, 0, 0];
+    embed.queueVector(v); // first store: dedup query → reused for insert
+    const first = await store.store(dedupInput({
+      content: "The user prefers TypeScript for backend",
+    }));
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    embed.queueVector(v); // second store dedup query -> finds first, LLM says consistent -> skip
+    const second = await store.store(dedupInput({
+      content: "The user likes TypeScript for backend work",
+    }));
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.value.id).toBe(first.value.id);
+
+    const all = await store.list();
+    expect(all.ok).toBe(true);
+    if (all.ok) expect(all.value.length).toBe(1);
+  });
+
+  it("proceeds normally without provider (no contradiction check)", async () => {
+    const embed = new ControlledEmbeddingProvider();
+    const { store } = await createDedupDb(embed); // no provider
+
+    const v = [1, 0, 0, 0];
+    embed.queueVector(v); // first store: dedup query → reused for insert
+    await store.store(dedupInput({ content: "User prefers TypeScript" }));
+
+    // Near-duplicate: without provider, should skip (no contradiction check)
+    embed.queueVector(v); // second store: dedup query -> matches -> skip
+    const second = await store.store(dedupInput({ content: "User likes TypeScript" }));
+    expect(second.ok).toBe(true);
+
+    const all = await store.list();
+    expect(all.ok).toBe(true);
+    if (all.ok) expect(all.value.length).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Threshold boundary tests — validate dedup/contradiction at specific cosine
+// values to prevent threshold regressions.
+//
+// The ControlledEmbeddingProvider normalizes vectors to unit length, so
+// cos(a,b) = dot(a,b). We craft 4D vector pairs at exact cosine targets.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build two 4D unit vectors with a target cosine similarity.
+ * Returns [vecA, vecB]. Both are already normalized.
+ *
+ * Strategy: vecA = [1,0,0,0], vecB = [cos, sin, 0, 0] where sin = sqrt(1-cos²).
+ * Since ControlledEmbeddingProvider normalizes, we can pass raw values.
+ */
+function vectorPairAtCosine(targetCos: number): [number[], number[]] {
+  const sinVal = Math.sqrt(1 - targetCos * targetCos);
+  return [
+    [1, 0, 0, 0],
+    [targetCos, sinVal, 0, 0],
+  ];
+}
+
+describe("SqliteMemoryStore — threshold boundary tests", () => {
+
+  it("Tier 2: contradicts at cosine 0.70 (below old 0.75 threshold)", async () => {
+    const [vA, vB] = vectorPairAtCosine(0.70);
+    const embed = new ControlledEmbeddingProvider();
+    const provider = new MockProvider(["contradiction"]);
+    const { store } = await createDedupDbWithProvider(embed, provider);
+
+    embed.queueVector(vA); // first store: dedup query → reused for insert
+    const first = await store.store(dedupInput({
+      content: "The user lives in Paris",
+    }));
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    embed.queueVector(vB); // second store: dedup query → cos 0.70 → LLM → contradiction
+    embed.queueVector(vB); // supersede → store() dedup query → reused for insert
+    const second = await store.store(dedupInput({
+      content: "The user lives in Tokyo",
+    }));
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.value.id).not.toBe(first.value.id);
+
+    const old = await store.get(first.value.id);
+    expect(old.ok).toBe(true);
+    if (old.ok && old.value) {
+      expect(old.value.status).toBe("superseded");
+      expect(old.value.supersededBy).toBe(second.value.id);
+    }
+
+    const active = await store.list({ status: ["active"] });
+    expect(active.ok).toBe(true);
+    if (active.ok) expect(active.value.length).toBe(1);
+  });
+
+  it("Tier 2: consistent at cosine 0.70 stores both", async () => {
+    const [vA, vB] = vectorPairAtCosine(0.70);
+    const embed = new ControlledEmbeddingProvider();
+    const provider = new MockProvider(["consistent"]);
+    const { store } = await createDedupDbWithProvider(embed, provider);
+
+    embed.queueVector(vA); // first store: dedup query → reused for insert
+    await store.store(dedupInput({ content: "The user lives in Copenhagen" }));
+
+    embed.queueVector(vB); // cos 0.70 → LLM says consistent → action "none" → reused for insert
+    const second = await store.store(dedupInput({
+      content: "The user recently moved to Copenhagen",
+    }));
+    expect(second.ok).toBe(true);
+
+    const all = await store.list({ status: ["active"] });
+    expect(all.ok).toBe(true);
+    if (all.ok) expect(all.value.length).toBe(2);
+  });
+
+  it("below threshold: cosine 0.55 skips contradiction check entirely", async () => {
+    const [vA, vB] = vectorPairAtCosine(0.55);
+    const embed = new ControlledEmbeddingProvider();
+    const provider = new MockProvider([]); // empty: will error if called
+    const { store } = await createDedupDbWithProvider(embed, provider);
+
+    embed.queueVector(vA); // first store: dedup query → reused for insert
+    await store.store(dedupInput({ content: "The user's name is Alice" }));
+
+    embed.queueVector(vB); // cos 0.55 < 0.60 → no LLM → action "none" → reused for insert
+    const second = await store.store(dedupInput({
+      content: "The user works at a startup",
+    }));
+    expect(second.ok).toBe(true);
+
+    const all = await store.list({ status: ["active"] });
+    expect(all.ok).toBe(true);
+    if (all.ok) expect(all.value.length).toBe(2);
+  });
+
+  it("Tier 2 boundary: cosine exactly at 0.60 triggers contradiction check", async () => {
+    const [vA, vB] = vectorPairAtCosine(0.60);
+    const embed = new ControlledEmbeddingProvider();
+    const provider = new MockProvider(["contradiction"]);
+    const { store } = await createDedupDbWithProvider(embed, provider);
+
+    embed.queueVector(vA); // first store: dedup query → reused for insert
+    const first = await store.store(dedupInput({ content: "User prefers dark mode" }));
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    embed.queueVector(vB); // cos 0.60 → LLM → contradiction → supersede
+    embed.queueVector(vB); // supersede → store() dedup query → reused for insert
+    const second = await store.store(dedupInput({ content: "User prefers light mode" }));
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.value.id).not.toBe(first.value.id);
+    const old = await store.get(first.value.id);
+    if (old.ok && old.value) {
+      expect(old.value.status).toBe("superseded");
+    }
+  });
+
+  it("Tier 1: cosine 0.93 dedup-skips without LLM when consistent", async () => {
+    const [vA, vB] = vectorPairAtCosine(0.93);
+    const embed = new ControlledEmbeddingProvider();
+    const provider = new MockProvider(["consistent"]);
+    const { store } = await createDedupDbWithProvider(embed, provider);
+
+    embed.queueVector(vA); // first store: dedup query → reused for insert
+    const first = await store.store(dedupInput({
+      content: "The user prefers TypeScript for backend",
+    }));
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    embed.queueVector(vB); // cos 0.93 → Tier 1 → LLM says consistent → skip (no insert)
+    const second = await store.store(dedupInput({
+      content: "The user likes TypeScript for backend work",
+    }));
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.value.id).toBe(first.value.id);
+  });
+
+  it("Tier 1: cosine 0.93 supersedes on contradiction", async () => {
+    const [vA, vB] = vectorPairAtCosine(0.93);
+    const embed = new ControlledEmbeddingProvider();
+    const provider = new MockProvider(["contradiction"]);
+    const { store } = await createDedupDbWithProvider(embed, provider);
+
+    embed.queueVector(vA); // first store: dedup query → reused for insert
+    const first = await store.store(dedupInput({ content: "User likes Python" }));
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    embed.queueVector(vB); // cos 0.93 → Tier 1 → LLM → contradiction → supersede
+    embed.queueVector(vB); // supersede → store() dedup query → reused for insert
+    const second = await store.store(dedupInput({ content: "User dislikes Python" }));
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.value.id).not.toBe(first.value.id);
+    const old = await store.get(first.value.id);
+    if (old.ok && old.value) {
+      expect(old.value.status).toBe("superseded");
+    }
+  });
+
+  it("gap zone: cosine 0.59 does NOT trigger contradiction check", async () => {
+    const [vA, vB] = vectorPairAtCosine(0.59);
+    const embed = new ControlledEmbeddingProvider();
+    const provider = new MockProvider([]);
+    const { store } = await createDedupDbWithProvider(embed, provider);
+
+    embed.queueVector(vA); // first store: dedup query → reused for insert
+    await store.store(dedupInput({ content: "User has 3 cats" }));
+
+    embed.queueVector(vB); // cos 0.59 < 0.60 → no LLM → action "none" → reused for insert
+    const second = await store.store(dedupInput({ content: "User has 5 dogs" }));
+    expect(second.ok).toBe(true);
+
+    const all = await store.list({ status: ["active"] });
+    expect(all.ok).toBe(true);
+    if (all.ok) expect(all.value.length).toBe(2);
   });
 });

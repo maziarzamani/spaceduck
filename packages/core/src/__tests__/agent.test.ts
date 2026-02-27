@@ -34,7 +34,7 @@ describe("AgentLoop", () => {
     agent = new AgentLoop({
       provider,
       conversationStore: store,
-      contextBuilder: new DefaultContextBuilder(store, undefined, logger),
+      contextBuilder: new DefaultContextBuilder(store, logger),
       sessionManager: new InMemorySessionManager(),
       eventBus,
       logger,

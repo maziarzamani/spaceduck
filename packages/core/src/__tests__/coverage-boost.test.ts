@@ -17,15 +17,13 @@ const logger = new ConsoleLogger("error");
 
 describe("DefaultContextBuilder.compact", () => {
   let store: MockConversationStore;
-  let ltm: MockLongTermMemory;
   let builder: DefaultContextBuilder;
   let provider: MockProvider;
 
   beforeEach(() => {
     resetFixtures();
     store = new MockConversationStore();
-    ltm = new MockLongTermMemory();
-    builder = new DefaultContextBuilder(store, ltm, logger);
+    builder = new DefaultContextBuilder(store, logger);
     provider = new MockProvider(["This is a summary of the conversation."]);
   });
 

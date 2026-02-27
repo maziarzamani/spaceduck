@@ -21,7 +21,7 @@ import {
 import {
   SchemaManager,
   SqliteConversationStore,
-  SqliteLongTermMemory,
+  SqliteMemoryStore,
 } from "@spaceduck/memory-sqlite";
 
 // --- Helpers ---
@@ -35,11 +35,13 @@ function generateMessage(i: number, role: "user" | "assistant" = "user"): Messag
   };
 }
 
-function generateFact(i: number, convId: string) {
+function generateMemoryInput(i: number): import("@spaceduck/core").MemoryInput {
   return {
-    conversationId: convId,
+    kind: "fact",
+    title: `Preference ${i}`,
     content: `User prefers ${["TypeScript", "Python", "Rust", "Go", "Java"][i % 5]} for ${["web", "backend", "systems", "data", "mobile"][i % 5]} development. Project ${i} uses this stack.`,
-    category: "preference",
+    scope: { type: "global" },
+    source: { type: "user_message" },
   };
 }
 
@@ -128,8 +130,8 @@ async function main() {
   await schema.migrate();
 
   const store = new SqliteConversationStore(db, logger);
-  const ltm = new SqliteLongTermMemory(db, logger);
-  const contextBuilder = new DefaultContextBuilder(store, ltm, logger, "You are a helpful assistant.");
+  const memStore = new SqliteMemoryStore(db, logger);
+  const contextBuilder = new DefaultContextBuilder(store, logger, "You are a helpful assistant.", memStore);
 
   const convId = "bench-conv-1";
   await store.create(convId, "Benchmark conversation");
@@ -190,40 +192,40 @@ async function main() {
   printResult(listResult);
 
   // --- 4. Fact operations ---
-  console.log("\n🧠 Long-Term Memory (Facts)\n");
+  console.log("\n🧠 Memory Store\n");
 
   const rememberResult = await benchAsync(
-    "remember (insert fact)",
+    "store (insert memory)",
     async () => {
-      await ltm.remember(generateFact(Math.random() * 10000 | 0, convId));
+      await memStore.store(generateMemoryInput(Math.random() * 10000 | 0));
     },
     1000,
   );
   printResult(rememberResult);
 
-  // Now we have ~1K facts
+  // Now we have ~1K memories
   const recallResult = await benchAsync(
-    "recall (keyword search, 1K facts)",
+    "recall (keyword search, 1K memories)",
     async () => {
-      await ltm.recall("TypeScript web development project", 10);
+      await memStore.recall("TypeScript web development project", { topK: 10 });
     },
     500,
   );
   printResult(recallResult);
 
   const recallMissResult = await benchAsync(
-    "recall (no match, 1K facts)",
+    "recall (no match, 1K memories)",
     async () => {
-      await ltm.recall("xyznonexistent", 10);
+      await memStore.recall("xyznonexistent", { topK: 10 });
     },
     500,
   );
   printResult(recallMissResult);
 
   const listFactsResult = await benchAsync(
-    "listAll (1K facts)",
+    "list (1K memories)",
     async () => {
-      await ltm.listAll();
+      await memStore.list();
     },
     200,
   );
@@ -233,7 +235,7 @@ async function main() {
   console.log("\n🏗️  Context Building\n");
 
   const buildResult = await benchAsync(
-    "buildContext (50 turns from 10K, with LTM)",
+    "buildContext (50 turns from 10K, with memoryStore)",
     async () => {
       await contextBuilder.buildContext(convId);
     },
@@ -241,9 +243,9 @@ async function main() {
   );
   printResult(buildResult);
 
-  const buildNoLtm = new DefaultContextBuilder(store, undefined, logger);
+  const buildNoLtm = new DefaultContextBuilder(store, logger);
   const buildNoLtmResult = await benchAsync(
-    "buildContext (50 turns from 10K, no LTM)",
+    "buildContext (50 turns from 10K, no memoryStore)",
     async () => {
       await buildNoLtm.buildContext(convId);
     },
@@ -274,6 +276,8 @@ async function main() {
         systemPromptReserve: 1000,
         maxTurns: 50,
         maxFacts: 10,
+        maxProcedures: 3,
+        maxEpisodes: 3,
         compactionThreshold: 0.85,
       });
     },
