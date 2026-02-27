@@ -3,12 +3,13 @@
 
 import type { Logger } from "@spaceduck/core";
 import { ToolRegistry } from "@spaceduck/core";
-import { BrowserTool, type ScreencastFrame } from "@spaceduck/tool-browser";
 import { WebFetchTool } from "@spaceduck/tool-web-fetch";
 import { WebSearchTool, WebAnswerTool, type SearchProvider } from "@spaceduck/tool-web-search";
 import { MarkerTool } from "@spaceduck/tool-marker";
+import { BrowserTool } from "@spaceduck/tool-browser";
 import type { AttachmentStore } from "./attachment-store";
 import type { ConfigStore } from "./config";
+import type { BrowserSessionPool } from "./browser-session-pool";
 import { isSecretPath, decodePointer } from "@spaceduck/config";
 
 /**
@@ -20,7 +21,9 @@ export function buildToolRegistry(
   logger: Logger,
   attachmentStore?: AttachmentStore,
   configStore?: ConfigStore,
-  onBrowserFrame?: (frame: ScreencastFrame | { closed: true }) => void,
+  _onBrowserFrame?: unknown,
+  browserPool?: BrowserSessionPool,
+  getConversationId?: () => string,
 ): ToolRegistry {
   const registry = new ToolRegistry();
   const log = logger.child({ component: "ToolRegistry" });
@@ -59,24 +62,16 @@ export function buildToolRegistry(
 
   // ── browser tools ─────────────────────────────────────────────────
   const browserEnabled = cfg?.tools?.browser?.enabled ?? true;
-  const livePreview = cfg?.tools?.browser?.livePreview ?? false;
-  let browser: BrowserTool | null = null;
 
   if (browserEnabled) {
-    async function ensureBrowser(): Promise<BrowserTool> {
-      if (!browser) {
-        browser = new BrowserTool({ headless: true });
-        await browser.launch();
-        log.info("Browser launched");
+    let singletonBrowser: BrowserTool | null = null;
 
-        if (livePreview && onBrowserFrame) {
-          await browser.startScreencast(onBrowserFrame).catch((e) => {
-            log.warn("Failed to start screencast", { error: String(e) });
-          });
-          log.info("Browser screencast started");
-        }
+    async function ensureBrowser(): Promise<BrowserTool> {
+      if (browserPool && getConversationId) {
+        return browserPool.acquire(getConversationId());
       }
-      return browser;
+      if (!singletonBrowser) singletonBrowser = new BrowserTool();
+      return singletonBrowser;
     }
 
     registry.register(
@@ -237,7 +232,9 @@ export function buildToolRegistry(
       },
     );
 
-    log.info("browser tools registered (7 tools)");
+    log.info("browser tools registered (7 tools, per-conversation sessions)");
+  } else if (browserEnabled) {
+    log.debug("browser tools not registered (browserPool or getConversationId not provided)");
   } else {
     log.debug("browser tools not registered (disabled in config)");
   }

@@ -22,6 +22,8 @@ export const HOT_APPLY_PATHS: ReadonlySet<string> = new Set([
   "/stt/dictation/enabled",
   "/stt/dictation/hotkey",
   "/tools/browser/livePreview",
+  "/tools/browser/sessionIdleTimeoutMs",
+  "/tools/browser/maxSessions",
   "/tools/marker/enabled",
   "/tools/webSearch/provider",
   "/tools/webSearch/searxngUrl",

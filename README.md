@@ -130,12 +130,32 @@ Both permissions must be granted to the Spaceduck app (or the terminal running i
 | Tool | What it does |
 |------|-------------|
 | **Web Search** | Brave, Perplexity Sonar, or SearXNG |
-| **Browser** | Playwright headless with accessibility snapshots |
+| **Browser** | Playwright headless with accessibility snapshots (per-conversation sessions) |
 | **Web Fetch** | HTTP fetch + HTML-to-text |
 | **Document Scan** | PDF-to-markdown via [Marker](https://github.com/VikParuchuri/marker) |
 | **Voice Input** | Speech-to-text via [Whisper](https://github.com/openai/whisper) |
 
 > Setup guides: [Docs → Tools](https://docs.spaceduck.ai/tools/overview)
+
+### Browser sessions
+
+Each conversation gets its own isolated Chromium browser. Sessions are created on first `browser_navigate` and automatically close after an idle timeout (no browser tool calls).
+
+| Config path | Default | Description |
+|---|---|---|
+| `tools.browser.enabled` | `true` | Enable/disable all browser tools |
+| `tools.browser.livePreview` | `false` | Stream live screenshots to the UI |
+| `tools.browser.sessionIdleTimeoutMs` | `600000` (10 min) | Idle timeout before auto-closing a session. `0` = close immediately after each agent run. |
+| `tools.browser.maxSessions` | `null` (unlimited) | Max concurrent browser sessions. When the limit is reached, the oldest idle session is evicted. |
+
+Configure via CLI:
+
+```bash
+spaceduck config set /tools/browser/sessionIdleTimeoutMs 300000
+spaceduck config set /tools/browser/maxSessions 3
+```
+
+All browser settings are hot-appliable — no gateway restart required.
 
 ## Development
 

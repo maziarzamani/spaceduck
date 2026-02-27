@@ -79,7 +79,7 @@ export function ChatView({ ws, onOpenSettings, recorderRef }: ChatViewProps) {
       <Sidebar
         conversations={ws.conversations}
         activeId={ws.activeConversationId}
-        streamingId={ws.streamingConversationId}
+        streamingIds={ws.streamingConversationIds}
         unreadIds={ws.unreadConversationIds}
         onSelect={ws.selectConversation}
         onCreate={() => ws.createConversation()}

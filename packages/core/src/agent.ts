@@ -60,6 +60,7 @@ export type AgentChunk =
   | { type: "tool_result"; toolResult: ToolResult };
 
 const DEFAULT_MAX_TOOL_ROUNDS = 30;
+const MAX_CONSECUTIVE_SAME_TOOL = 3;
 
 /**
  * The agent loop: receives a user message, builds context, calls the provider,
@@ -149,6 +150,8 @@ export class AgentLoop {
     // Get tool definitions if a registry is available
     const toolDefs = this._toolRegistry?.getDefinitions() ?? [];
     let totalToolCalls = 0;
+    let consecutiveSameTool = 0;
+    let lastToolName = "";
 
     // ── Agentic loop: call provider, execute tools, repeat ──
     for (let round = 0; round <= this.maxToolRounds; round++) {
@@ -258,6 +261,45 @@ export class AgentLoop {
       // Execute each tool call
       for (const tc of pendingToolCalls) {
         if (options?.signal?.aborted) return;
+
+        if (tc.name === lastToolName) {
+          consecutiveSameTool++;
+        } else {
+          consecutiveSameTool = 1;
+          lastToolName = tc.name;
+        }
+
+        // Circuit breaker: prevent degenerate loops calling the same tool repeatedly
+        if (consecutiveSameTool > MAX_CONSECUTIVE_SAME_TOOL) {
+          const loopResult: ToolResult = {
+            toolCallId: tc.id,
+            name: tc.name,
+            content:
+              `Error: "${tc.name}" has been called ${consecutiveSameTool} times in a row with no progress. ` +
+              `You MUST try a different approach — use browser_snapshot to check page state, ` +
+              `browser_navigate to go to a different URL, or respond with a text answer.`,
+            isError: true,
+          };
+          this.logger.warn("Consecutive tool loop detected, injecting error", {
+            conversationId,
+            tool: tc.name,
+            consecutiveSameTool,
+            round,
+          });
+          yield { type: "tool_result", toolResult: loopResult };
+          const loopMsg: Message = {
+            id: generateId(),
+            role: "tool",
+            content: loopResult.content,
+            timestamp: Date.now(),
+            source: "tool",
+            toolCallId: tc.id,
+            toolName: tc.name,
+          };
+          await this.deps.conversationStore.appendMessage(conversationId, loopMsg);
+          totalToolCalls++;
+          continue;
+        }
 
         this.logger.info("Executing tool", {
           conversationId,

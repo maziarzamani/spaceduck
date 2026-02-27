@@ -1,13 +1,35 @@
 // BrowserTool: Playwright-based headless browser for AI agent use.
 // Provides numbered element refs via accessibility snapshots so the LLM
 // can reference elements by number instead of fragile CSS selectors.
+//
+// Playwright is lazy-imported instead of top-level because Bun's module
+// evaluator in GitHub Actions CI silently strips class methods when
+// playwright is imported at the top level. Keep imports inside methods
+// until the upstream runtime issue is resolved.
+// See: https://github.com/oven-sh/bun/issues/8222
 
-import { chromium, type Browser, type BrowserContext, type Page, type Locator, type CDPSession } from "playwright";
+import type { Browser, BrowserContext, Page, Locator, CDPSession } from "playwright";
 import type { BrowserToolOptions, WaitOptions, RefEntry, ScreencastOptions, ScreencastFrameCallback } from "./types";
 import { parseAriaSnapshot } from "./snapshot";
 
 const DEFAULT_MAX_CHARS = 50_000;
 const DEFAULT_TIMEOUT = 30_000;
+
+let _chromium: typeof import("playwright").chromium | null = null;
+async function getChromium() {
+  if (!_chromium) {
+    const pw = await import("playwright");
+    _chromium = pw.chromium;
+  }
+  return _chromium;
+}
+
+function getChromiumSync() {
+  if (_chromium) return _chromium;
+  const pw = require("playwright") as typeof import("playwright");
+  _chromium = pw.chromium;
+  return _chromium;
+}
 
 export class BrowserTool {
   private browser: Browser | null = null;
@@ -22,6 +44,7 @@ export class BrowserTool {
 
   static isAvailable(): { available: true } | { available: false; reason: string } {
     try {
+      const chromium = getChromiumSync();
       const executablePath: string = chromium.executablePath();
       const { existsSync } = require("node:fs") as typeof import("node:fs");
       return existsSync(executablePath)
@@ -40,6 +63,7 @@ export class BrowserTool {
 
   async launch(): Promise<void> {
     if (this.browser) return;
+    const chromium = await getChromium();
     this.browser = await chromium.launch({ headless: this.headless });
     this.context = await this.browser.newContext({
       userAgent:

@@ -7,6 +7,7 @@ import type {
   Attachment,
 } from "@spaceduck/core";
 import type { ToolActivity } from "../lib/tool-types";
+import { createWebSocket, WS_OPEN, type UnifiedWs } from "../lib/ws-adapter";
 
 function getWsUrl(): string {
   const stored = localStorage.getItem("spaceduck.gatewayUrl");
@@ -32,8 +33,8 @@ function getWsUrl(): string {
 }
 
 const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS = 30000;
-const AUTH_FAILURE_THRESHOLD = 3;
+const RECONNECT_MAX_MS = 8000;
+const AUTH_CHECK_AFTER_RETRIES = 5;
 
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
@@ -56,7 +57,7 @@ export interface UseSpaceduckWs {
   messages: Message[];
   activeConversationId: string | null;
   pendingStream: PendingStream | null;
-  streamingConversationId: string | null;
+  streamingConversationIds: ReadonlySet<string>;
   unreadConversationIds: ReadonlySet<string>;
   toolActivities: ToolActivity[];
   connectionEpoch: number;
@@ -69,33 +70,66 @@ export interface UseSpaceduckWs {
   refreshConversations: () => void;
 }
 
+interface ConversationStreamState {
+  pendingStream: PendingStream | null;
+  streamBuffer: string;
+  toolActivities: ToolActivity[];
+  browserPreview: BrowserPreview | null;
+}
+
+function emptyStreamState(): ConversationStreamState {
+  return { pendingStream: null, streamBuffer: "", toolActivities: [], browserPreview: null };
+}
+
 export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<UnifiedWs | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [authFailed, setAuthFailed] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [pendingStream, setPendingStream] = useState<PendingStream | null>(null);
-  const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
+  const [streamingConversationIds, setStreamingConversationIds] = useState<Set<string>>(new Set());
   const [unreadConversationIds, setUnreadConversationIds] = useState<Set<string>>(new Set());
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
   const [connectionEpoch, setConnectionEpoch] = useState(0);
   const [browserPreview, setBrowserPreview] = useState<BrowserPreview | null>(null);
 
-  const streamBufferRef = useRef<string>("");
   const retriesRef = useRef(0);
-  const consecutiveFailsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountedRef = useRef(false);
   const activeConvIdRef = useRef<string | null>(null);
   const pendingConvIdRef = useRef<string | null>(null);
   const handleMessageRef = useRef<(envelope: WsServerEnvelope) => void>(() => {});
 
+  const streamStateMap = useRef<Map<string, ConversationStreamState>>(new Map());
+
   activeConvIdRef.current = activeConversationId;
 
+  function getStreamState(convId: string): ConversationStreamState {
+    let s = streamStateMap.current.get(convId);
+    if (!s) {
+      s = emptyStreamState();
+      streamStateMap.current.set(convId, s);
+    }
+    return s;
+  }
+
+  function projectViewState(convId: string | null) {
+    if (!convId || !streamStateMap.current.has(convId)) {
+      setPendingStream(null);
+      setToolActivities([]);
+      setBrowserPreview(null);
+      return;
+    }
+    const s = streamStateMap.current.get(convId)!;
+    setPendingStream(s.pendingStream);
+    setToolActivities([...s.toolActivities]);
+    setBrowserPreview(s.browserPreview);
+  }
+
   const send = useCallback((envelope: WsClientEnvelope) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WS_OPEN) {
       wsRef.current.send(JSON.stringify(envelope));
     }
   }, []);
@@ -105,67 +139,74 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
 
     const gatewayUrl = localStorage.getItem("spaceduck.gatewayUrl");
     const token = localStorage.getItem("spaceduck.token");
-    if (gatewayUrl && token) {
+
+    // After several failed retries, check if the token is permanently invalid.
+    // We only do this when the gateway is reachable but WS keeps failing,
+    // which signals a potential auth problem rather than a transient outage.
+    if (retriesRef.current >= AUTH_CHECK_AFTER_RETRIES && gatewayUrl) {
       try {
-        const res = await fetch(`${gatewayUrl}/api/gateway/info`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(5000),
-        });
-        if (res.status === 401) {
-          setAuthFailed(true);
-          return;
+        if (token) {
+          const res = await fetch(`${gatewayUrl}/api/gateway/info`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(3000),
+          });
+          if (res.status === 401) {
+            setAuthFailed(true);
+            return;
+          }
+        } else {
+          const res = await fetch(`${gatewayUrl}/api/gateway/public-info`, {
+            signal: AbortSignal.timeout(3000),
+          });
+          if (res.ok) {
+            const info = await res.json() as { requiresAuth?: boolean };
+            if (info.requiresAuth) {
+              setAuthFailed(true);
+              return;
+            }
+          }
         }
       } catch {
-        // Gateway unreachable — fall through and try WebSocket anyway
+        // Gateway unreachable — keep retrying WS
       }
     }
 
     const wsUrl = getWsUrl();
     setStatus("connecting");
 
-    const ws = new WebSocket(wsUrl);
+    const ws = await createWebSocket(wsUrl, {
+      onopen: () => {
+        retriesRef.current = 0;
+        setStatus("connected");
+        setConnectionEpoch((prev) => prev + 1);
+        setToolActivities([]);
+        send({ v: 1, type: "conversation.list" });
+      },
+      onclose: () => {
+        if (unmountedRef.current) return;
+        setStatus("disconnected");
+        wsRef.current = null;
+
+        const delay = Math.min(
+          RECONNECT_BASE_MS * Math.pow(2, retriesRef.current),
+          RECONNECT_MAX_MS,
+        );
+        retriesRef.current++;
+        reconnectTimerRef.current = setTimeout(connect, delay);
+      },
+      onerror: () => {
+        // onclose will fire after onerror, which triggers reconnect
+      },
+      onmessage: (data) => {
+        try {
+          const envelope = JSON.parse(data) as WsServerEnvelope;
+          handleMessageRef.current(envelope);
+        } catch {
+          // Ignore malformed messages
+        }
+      },
+    });
     wsRef.current = ws;
-
-    ws.onopen = () => {
-      retriesRef.current = 0;
-      consecutiveFailsRef.current = 0;
-      setStatus("connected");
-      setConnectionEpoch((prev) => prev + 1);
-      setToolActivities([]);
-      send({ v: 1, type: "conversation.list" });
-    };
-
-    ws.onclose = () => {
-      if (unmountedRef.current) return;
-      setStatus("disconnected");
-      wsRef.current = null;
-
-      consecutiveFailsRef.current++;
-      if (consecutiveFailsRef.current >= AUTH_FAILURE_THRESHOLD && token) {
-        setAuthFailed(true);
-        return;
-      }
-
-      const delay = Math.min(
-        RECONNECT_BASE_MS * Math.pow(2, retriesRef.current),
-        RECONNECT_MAX_MS,
-      );
-      retriesRef.current++;
-      reconnectTimerRef.current = setTimeout(connect, delay);
-    };
-
-    ws.onerror = () => {
-      // onclose will fire after onerror, which triggers reconnect
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const envelope = JSON.parse(event.data) as WsServerEnvelope;
-        handleMessageRef.current(envelope);
-      } catch {
-        // Ignore malformed messages
-      }
-    };
   }, [send]);
 
   useEffect(() => {
@@ -185,7 +226,6 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         reconnectTimerRef.current = null;
       }
       if (wsRef.current) {
-        wsRef.current.onclose = null;
         wsRef.current.close();
         wsRef.current = null;
       }
@@ -202,11 +242,13 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
       case "conversation.created":
         setActiveConversationId(envelope.conversationId);
         setMessages([]);
+        projectViewState(envelope.conversationId);
         send({ v: 1, type: "conversation.list" });
         break;
 
       case "conversation.deleted":
         setConversations((prev) => prev.filter((c) => c.id !== envelope.conversationId));
+        streamStateMap.current.delete(envelope.conversationId);
         if (activeConvIdRef.current === envelope.conversationId) {
           setActiveConversationId(null);
           setMessages([]);
@@ -234,34 +276,56 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
 
       case "processing.started": {
         const convId = pendingConvIdRef.current || activeConvIdRef.current || "";
-        streamBufferRef.current = "";
-        setStreamingConversationId(convId);
-        setPendingStream({
+        const s = getStreamState(convId);
+        s.streamBuffer = "";
+        s.pendingStream = {
           requestId: envelope.requestId,
           conversationId: convId,
           content: "",
-        });
+        };
+        s.toolActivities = [];
+        s.browserPreview = null;
+        setStreamingConversationIds((prev) => new Set(prev).add(convId));
+        if (convId === activeConvIdRef.current) {
+          projectViewState(convId);
+        }
         break;
       }
 
-      case "stream.delta":
-        streamBufferRef.current += envelope.delta;
-        setPendingStream((prev) =>
-          prev ? { ...prev, content: streamBufferRef.current } : null,
-        );
+      case "stream.delta": {
+        const convId = pendingConvIdRef.current;
+        if (!convId) break;
+        const s = getStreamState(convId);
+        s.streamBuffer += envelope.delta;
+        if (s.pendingStream) {
+          s.pendingStream = { ...s.pendingStream, content: s.streamBuffer };
+        }
+        if (convId === activeConvIdRef.current) {
+          setPendingStream(s.pendingStream);
+        }
         break;
+      }
 
       case "stream.done": {
         const finishedConvId = pendingConvIdRef.current;
         if (finishedConvId && finishedConvId !== activeConvIdRef.current) {
           setUnreadConversationIds((prev) => new Set(prev).add(finishedConvId));
         }
-        setPendingStream(null);
-        setStreamingConversationId(null);
-        streamBufferRef.current = "";
+        if (finishedConvId) {
+          streamStateMap.current.delete(finishedConvId);
+        }
+        setStreamingConversationIds((prev) => {
+          if (!finishedConvId || !prev.has(finishedConvId)) return prev;
+          const next = new Set(prev);
+          next.delete(finishedConvId);
+          return next;
+        });
         pendingConvIdRef.current = null;
-        setToolActivities([]);
-        setBrowserPreview(null);
+        if (finishedConvId === activeConvIdRef.current || !finishedConvId) {
+          setPendingStream(null);
+          setToolActivities([]);
+          setBrowserPreview(null);
+        }
         if (activeConvIdRef.current) {
           send({ v: 1, type: "conversation.history", conversationId: activeConvIdRef.current });
         }
@@ -269,55 +333,100 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
         break;
       }
 
-      case "stream.error":
-        setPendingStream(null);
-        setStreamingConversationId(null);
-        streamBufferRef.current = "";
-        pendingConvIdRef.current = null;
-        setToolActivities([]);
-        setBrowserPreview(null);
-        break;
-
-      case "tool.calling":
-        setToolActivities((prev) => {
-          const activity: ToolActivity = {
-            toolCallId: envelope.toolCall.id,
-            toolName: envelope.toolCall.name,
-            startedAt: Date.now(),
-          };
-          const next = [...prev, activity];
-          return next.length > 20 ? next.slice(-20) : next;
+      case "stream.error": {
+        const errorConvId = pendingConvIdRef.current;
+        if (errorConvId) {
+          streamStateMap.current.delete(errorConvId);
+        }
+        setStreamingConversationIds((prev) => {
+          if (!errorConvId || !prev.has(errorConvId)) return prev;
+          const next = new Set(prev);
+          next.delete(errorConvId);
+          return next;
         });
-        break;
-
-      case "tool.result":
-        setToolActivities((prev) =>
-          prev.map((a) =>
-            a.toolCallId === envelope.toolResult.toolCallId
-              ? {
-                  ...a,
-                  result: {
-                    content: envelope.toolResult.content,
-                    isError: !!envelope.toolResult.isError,
-                  },
-                  completedAt: Date.now(),
-                }
-              : a,
-          ),
-        );
-        break;
-
-      case "browser.frame":
-        if ("closed" in envelope && envelope.closed) {
+        pendingConvIdRef.current = null;
+        if (errorConvId === activeConvIdRef.current || !errorConvId) {
+          setPendingStream(null);
+          setToolActivities([]);
           setBrowserPreview(null);
+        }
+        break;
+      }
+
+      case "tool.calling": {
+        const convId = pendingConvIdRef.current;
+        if (!convId) break;
+        const s = getStreamState(convId);
+        const activity: ToolActivity = {
+          toolCallId: envelope.toolCall.id,
+          toolName: envelope.toolCall.name,
+          startedAt: Date.now(),
+        };
+        s.toolActivities = [...s.toolActivities, activity];
+        if (s.toolActivities.length > 20) {
+          s.toolActivities = s.toolActivities.slice(-20);
+        }
+        if (convId === activeConvIdRef.current) {
+          setToolActivities([...s.toolActivities]);
+        }
+        break;
+      }
+
+      case "tool.result": {
+        const convId = pendingConvIdRef.current;
+        if (!convId) break;
+        const s = getStreamState(convId);
+        s.toolActivities = s.toolActivities.map((a) =>
+          a.toolCallId === envelope.toolResult.toolCallId
+            ? {
+                ...a,
+                result: {
+                  content: envelope.toolResult.content,
+                  isError: !!envelope.toolResult.isError,
+                },
+                completedAt: Date.now(),
+              }
+            : a,
+        );
+        if (convId === activeConvIdRef.current) {
+          setToolActivities([...s.toolActivities]);
+        }
+        break;
+      }
+
+      case "browser.frame": {
+        const convId = pendingConvIdRef.current;
+        if (!convId) break;
+        const s = getStreamState(convId);
+        if ("closed" in envelope && envelope.closed) {
+          s.browserPreview = null;
         } else if ("data" in envelope) {
-          setBrowserPreview({
+          s.browserPreview = {
             dataUrl: `data:image/${envelope.format};base64,${envelope.data}`,
             url: envelope.url,
             timestamp: Date.now(),
-          });
+          };
+        }
+        if (convId === activeConvIdRef.current) {
+          setBrowserPreview(s.browserPreview);
         }
         break;
+      }
+
+      case "run.active": {
+        const ids = envelope.conversationIds;
+        setStreamingConversationIds(new Set(ids));
+        for (const id of ids) {
+          const s = getStreamState(id);
+          if (!s.pendingStream) {
+            s.pendingStream = { requestId: "", conversationId: id, content: "" };
+          }
+        }
+        if (activeConvIdRef.current && ids.includes(activeConvIdRef.current)) {
+          projectViewState(activeConvIdRef.current);
+        }
+        break;
+      }
 
       case "error":
         console.error("[spaceduck ws]", envelope.code, envelope.message);
@@ -364,6 +473,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
   const deleteConversation = useCallback(
     (conversationId: string) => {
       send({ v: 1, type: "conversation.delete", conversationId });
+      streamStateMap.current.delete(conversationId);
       setConversations((prev) => prev.filter((c) => c.id !== conversationId));
       if (activeConvIdRef.current === conversationId) {
         setActiveConversationId(null);
@@ -384,10 +494,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
     (conversationId: string) => {
       setActiveConversationId(conversationId);
       setMessages([]);
-      setPendingStream(null);
-      streamBufferRef.current = "";
-      setToolActivities([]);
-      setBrowserPreview(null);
+      projectViewState(conversationId);
       setUnreadConversationIds((prev) => {
         if (!prev.has(conversationId)) return prev;
         const next = new Set(prev);
@@ -410,7 +517,7 @@ export function useSpaceduckWs(enabled = true): UseSpaceduckWs {
     messages,
     activeConversationId,
     pendingStream,
-    streamingConversationId,
+    streamingConversationIds,
     unreadConversationIds,
     toolActivities,
     connectionEpoch,

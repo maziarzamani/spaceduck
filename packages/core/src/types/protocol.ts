@@ -31,6 +31,7 @@ export type WsServerEnvelope =
   | { v: 1; type: "conversation.created"; conversationId: string }
   | { v: 1; type: "conversation.deleted"; conversationId: string }
   | { v: 1; type: "conversation.renamed"; conversationId: string; title: string }
+  | { v: 1; type: "run.active"; conversationIds: string[] }
   | { v: 1; type: "error"; code: string; message: string };
 
 export interface ConversationSummary {
