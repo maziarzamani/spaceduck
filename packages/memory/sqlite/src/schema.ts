@@ -340,3 +340,92 @@ export function reconcileVecFacts(
     backup: backupPath ?? "none (in-memory DB)",
   });
 }
+
+// ── vec_memories fingerprint reconciliation ────────────────────────────
+
+/**
+ * Ensure the vec_memories virtual table matches the active embedding provider.
+ *
+ * Same reconciliation logic as reconcileVecFacts but for the Memory v2 table.
+ * Compares the provider's identity against vec_memories_meta. If anything
+ * differs, drops and recreates vec_memories with the correct dimensions.
+ */
+export function reconcileVecMemories(
+  db: Database,
+  embedding: EmbeddingProvider | undefined,
+  logger: Logger,
+  dbPath: string = ":memory:",
+): void {
+  if (!embedding) {
+    logger.info("Embeddings disabled — skipping vec_memories reconciliation");
+    return;
+  }
+
+  const current: VecFingerprint = {
+    provider: embedding.name,
+    model: embedding.model,
+    dimensions: String(embedding.dimensions),
+  };
+
+  const stored = readVecMemoriesMeta(db);
+
+  if (
+    stored &&
+    stored.provider === current.provider &&
+    stored.model === current.model &&
+    stored.dimensions === current.dimensions
+  ) {
+    logger.info("vec_memories fingerprint matches — no rebuild needed");
+    return;
+  }
+
+  const reason = stored
+    ? `changed from ${stored.provider}/${stored.model}/${stored.dimensions} to ${current.provider}/${current.model}/${current.dimensions}`
+    : "no previous fingerprint recorded";
+
+  logger.warn("Embedding identity mismatch — rebuilding vec_memories", { reason });
+
+  const backupPath = backupDb(dbPath, logger);
+
+  db.exec("DROP TABLE IF EXISTS vec_memories");
+  db.exec(
+    `CREATE VIRTUAL TABLE vec_memories USING vec0(
+      memory_id TEXT PRIMARY KEY,
+      embedding float[${embedding.dimensions}]
+    )`,
+  );
+
+  writeVecMemoriesMeta(db, current);
+
+  logger.warn("vec_memories rebuilt", {
+    provider: current.provider,
+    model: current.model,
+    dimensions: current.dimensions,
+    backup: backupPath ?? "none (in-memory DB)",
+  });
+}
+
+function readVecMemoriesMeta(db: Database): VecFingerprint | null {
+  try {
+    const rows = db
+      .query("SELECT key, value FROM vec_memories_meta WHERE key IN ('provider', 'model', 'dimensions')")
+      .all() as Array<{ key: string; value: string }>;
+
+    if (rows.length === 0) return null;
+
+    const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    if (!map.provider || !map.model || !map.dimensions) return null;
+    return { provider: map.provider, model: map.model, dimensions: map.dimensions };
+  } catch {
+    return null;
+  }
+}
+
+function writeVecMemoriesMeta(db: Database, fp: VecFingerprint): void {
+  const stmt = db.query(
+    "INSERT OR REPLACE INTO vec_memories_meta (key, value) VALUES (?1, ?2)",
+  );
+  stmt.run("provider", fp.provider);
+  stmt.run("model", fp.model);
+  stmt.run("dimensions", fp.dimensions);
+}

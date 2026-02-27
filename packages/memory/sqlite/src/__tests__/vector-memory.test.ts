@@ -407,7 +407,7 @@ describe("FactExtractor + SqliteLongTermMemory integration", () => {
   });
 
   it("should extract name via regex and supersede on change", async () => {
-    const { FactExtractor } = await import("@spaceduck/core");
+    const { FactExtractor } = await import("@spaceduck/core/src/fact-extractor");
     const { SimpleEventBus } = await import("@spaceduck/core");
     const bus = new SimpleEventBus(logger);
     const extractor = new FactExtractor(ltm, logger);

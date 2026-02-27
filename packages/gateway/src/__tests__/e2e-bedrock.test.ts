@@ -20,8 +20,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { createGateway, type Gateway } from "../gateway";
 import { BedrockProvider, BedrockEmbeddingProvider } from "@spaceduck/provider-bedrock";
-import type { WsServerEnvelope } from "@spaceduck/core";
+import type { WsServerEnvelope, MemoryRecord, ScoredMemory } from "@spaceduck/core";
 import { ConsoleLogger } from "@spaceduck/core";
+import { SqliteMemoryStore } from "@spaceduck/memory-sqlite";
 
 process.env.SPACEDUCK_REQUIRE_AUTH = "0";
 
@@ -314,37 +315,39 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
   }, 80_000);
 
   it("cross-conversation memory: fact told in conv A recalled in conv B (topK)", async () => {
-    const { longTermMemory } = gateway.deps;
+    const { memoryStore } = gateway.deps;
+    expect(memoryStore).toBeTruthy();
 
-    const stored = await longTermMemory.remember({
-      conversationId: "conv-a",
+    const stored = await memoryStore!.store({
+      kind: "fact",
+      title: "User's name is Alice",
       content: "User's name is Alice and they live in Copenhagen",
-      source: "auto-extracted",
+      scope: { type: "global" },
+      source: { type: "user_message" },
       confidence: 0.9,
-      slot: "name",
-      slotValue: "Alice",
-      lang: "en",
     });
     expect(stored.ok).toBe(true);
     console.log("  Seeded fact:", stored.ok ? stored.value.content : "FAILED");
 
     await Bun.sleep(500);
 
-    const recalled = await longTermMemory.recall("What is the user's name?", 5, {
+    const recalled = await memoryStore!.recall("What is the user's name?", {
+      topK: 5,
       strategy: "vector",
     });
 
     expect(recalled.ok).toBe(true);
     if (!recalled.ok) return;
 
-    console.log("  Recalled facts (topK=5):", recalled.value.map((f) => f.content));
+    console.log("  Recalled facts (topK=5):", recalled.value.map((f: ScoredMemory) => f.memory.content));
     expect(recalled.value.length).toBeGreaterThan(0);
-    const hasAlice = recalled.value.some((f) => f.content.toLowerCase().includes("alice"));
+    const hasAlice = recalled.value.some((f: ScoredMemory) => f.memory.content.toLowerCase().includes("alice"));
     expect(hasAlice).toBe(true);
   }, 60_000);
 
   it("afterTurn flush: fact told in web UI is recalled in a fresh WhatsApp conversation", async () => {
-    const { longTermMemory } = gateway.deps;
+    const { memoryStore } = gateway.deps;
+    expect(memoryStore).toBeTruthy();
 
     const wsA = await connectWs("web-ui-age-" + Date.now());
     try {
@@ -367,12 +370,12 @@ describe.skipIf(!LIVE)("Bedrock gateway E2E — full stack", () => {
     let factPersisted = false;
     for (let attempt = 0; attempt < 30; attempt++) {
       await Bun.sleep(1000);
-      const check = await longTermMemory.recall("How old is the user?", 5);
-      if (check.ok && check.value.some((f) => /42/.test(f.content))) {
+      const check = await memoryStore!.recall("How old is the user?", { topK: 5 });
+      if (check.ok && check.value.some((f: ScoredMemory) => /42/.test(f.memory.content))) {
         factPersisted = true;
         console.log(
           `  Fact persisted after ${attempt + 1}s:`,
-          check.value.find((f) => /42/.test(f.content))?.content,
+          check.value.find((f: ScoredMemory) => /42/.test(f.memory.content))?.memory.content,
         );
         break;
       }
@@ -413,7 +416,6 @@ describe.skipIf(!LIVE)("Slot superseding: newer fact deactivates older", () => {
       region,
     });
 
-    const { SqliteLongTermMemory } = await import("@spaceduck/memory-sqlite");
     const { ensureCustomSQLite, SchemaManager } = await import("@spaceduck/memory-sqlite");
     const { Database } = await import("bun:sqlite");
 
@@ -424,46 +426,47 @@ describe.skipIf(!LIVE)("Slot superseding: newer fact deactivates older", () => {
     schema.loadExtensions();
     await schema.migrate();
 
-    const ltm = new SqliteLongTermMemory(db, logger, bedrockEmbedding);
+    const memStore = new SqliteMemoryStore(db, logger, bedrockEmbedding);
 
     // Store name = Alice
-    const r1 = await ltm.remember({
-      conversationId: "slot-test",
+    const r1 = await memStore.store({
+      kind: "fact",
+      title: "User's name is Alice",
       content: "User's name is Alice",
-      source: "regex",
+      scope: { type: "global" },
+      source: { type: "user_message" },
       confidence: 0.9,
-      slot: "name",
-      slotValue: "Alice",
-      lang: "en",
     });
     expect(r1.ok).toBe(true);
     const aliceId = r1.ok ? r1.value.id : "";
 
-    // Store name = Bob (should supersede Alice)
-    const r2 = await ltm.remember({
-      conversationId: "slot-test",
+    // Store name = Bob (supersede Alice)
+    const r2 = await memStore.supersede(aliceId, {
+      kind: "fact",
+      title: "User's name is Bob",
       content: "User's name is Bob",
-      source: "regex",
+      scope: { type: "global" },
+      source: { type: "user_message" },
       confidence: 0.9,
-      slot: "name",
-      slotValue: "Bob",
-      lang: "en",
     });
     expect(r2.ok).toBe(true);
 
     await Bun.sleep(500);
 
-    // Recall: should only return Bob (Alice is deactivated)
-    const recalled = await ltm.recall("What is the user's name?", 5, { strategy: "vector" });
+    // Recall: should only return Bob (Alice is superseded)
+    const recalled = await memStore.recall("What is the user's name?", {
+      topK: 5,
+      strategy: "vector",
+    });
     expect(recalled.ok).toBe(true);
     if (!recalled.ok) return;
 
-    console.log("  Recalled after supersede:", recalled.value.map((f) => ({ content: f.content, isActive: f.isActive })));
-    const activeNames = recalled.value.filter((f) => f.content.toLowerCase().includes("name"));
+    console.log("  Recalled after supersede:", recalled.value.map((f: ScoredMemory) => ({ content: f.memory.content, status: f.memory.status })));
+    const activeNames = recalled.value.filter((f: ScoredMemory) => f.memory.content.toLowerCase().includes("name"));
     for (const fact of activeNames) {
-      expect(fact.content.toLowerCase()).not.toContain("alice");
+      expect(fact.memory.content.toLowerCase()).not.toContain("alice");
     }
-    expect(recalled.value.some((f) => f.content.toLowerCase().includes("bob"))).toBe(true);
+    expect(recalled.value.some((f: ScoredMemory) => f.memory.content.toLowerCase().includes("bob"))).toBe(true);
   }, 60_000);
 });
 

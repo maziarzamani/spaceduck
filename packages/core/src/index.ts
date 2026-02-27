@@ -19,13 +19,19 @@ export {
   type ContextWindowManager,
   DEFAULT_TOKEN_BUDGET,
   DefaultContextBuilder,
+  prioritizeProcedures,
 } from "./context-builder";
 
 // Session manager
 export { InMemorySessionManager } from "./session-manager";
 
-// Fact extractor
-export { FactExtractor, guardFact, type FactCandidate } from "./fact-extractor";
+// Memory extractor (v2)
+export {
+  MemoryExtractor,
+  guardMemory,
+  type MemoryExtractorConfig,
+  type ClassifiedMemory,
+} from "./memory-extractor";
 
 // Agent
 export { type AgentDeps, type AgentRunResult, type AgentChunk, AgentLoop } from "./agent";

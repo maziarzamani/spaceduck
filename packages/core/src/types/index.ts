@@ -37,7 +37,27 @@ export type {
   FactSlot,
   SlotFactInput,
   RecallOptions,
+  MemoryKind,
+  MemoryStatus,
+  ProcedureSubtype,
+  MemoryScope,
+  MemorySource,
+  MemoryRecord,
+  FactMemoryInput,
+  EpisodeMemoryInput,
+  ProcedureMemoryInput,
+  MemoryInput,
+  MemoryPatch,
+  RetentionReason,
+  RetentionDecision,
+  MemoryRecallOptions,
+  ScoredMemory,
+  MemoryFilter,
+  MemoryStore,
+  ImportanceBucket,
+  ConfidenceBucket,
 } from "./memory";
+export { IMPORTANCE_MAP, CONFIDENCE_MAP } from "./memory";
 
 export type {
   EmbeddingProvider,
