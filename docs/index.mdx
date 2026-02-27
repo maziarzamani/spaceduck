@@ -56,12 +56,12 @@ Every conversation flows through the gateway. The gateway manages context budget
 
 ## Key features
 
+- **Typed memory** — facts, episodes, and procedures with semantic dedup and automatic contradiction detection
 - **Hybrid recall** — Reciprocal Rank Fusion combining vector cosine similarity and FTS5 BM25, with recency decay
-- **Slot-based identity** — `name`, `age`, `location` slots with transactional upsert and automatic deactivation of stale facts
-- **Contamination guard** — assistant-generated text can never overwrite your identity
+- **Self-correcting** — when you change a fact ("I moved to Tokyo"), the old one is automatically superseded
 - **Hot-swap providers** — change your chat model or embedding model at runtime from the Settings UI or CLI
 - **Two-server pattern** — run chat and embeddings on separate endpoints (local, cloud, or mixed)
-- **Eager extraction** — facts are persisted after every turn, not only at compaction
+- **Eager extraction** — memories are classified and stored after every turn, not only at compaction
 
 ## Next steps
 
