@@ -32,7 +32,7 @@ Spaceduck is a personal AI assistant you run on your own machine. It remembers w
 No agent frameworks, no orchestration wrappers — every layer is handwritten TypeScript.
 
 <p align="center">
-  <img src="assets/desktop-app-screen.png" alt="Spaceduck Desktop App" width="720">
+  <img src="assets/desktop-app.gif" alt="Spaceduck Desktop App">
 </p>
 
 ## Install

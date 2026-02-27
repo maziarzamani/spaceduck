@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spaceduck Memory Layers</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #0f0f1a;
+    color: #f5f5f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 40px;
+  }
+
+  .container {
+    width: 720px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #f5f5f5;
+  }
+
+  .header h1 span {
+    color: #818cf8;
+  }
+
+  .header p {
+    font-size: 14px;
+    color: #8b8ba0;
+    margin-top: 6px;
+  }
+
+  .layers {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .layer {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    border-radius: 14px;
+    background: #1a1a2e;
+    border: 1px solid rgba(99, 102, 241, 0.12);
+    transition: border-color 0.2s;
+  }
+
+  .layer:hover {
+    border-color: rgba(99, 102, 241, 0.35);
+  }
+
+  .icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .layer-facts .icon { background: rgba(99, 102, 241, 0.15); }
+  .layer-episodes .icon { background: rgba(45, 166, 142, 0.15); }
+  .layer-procedures .icon { background: rgba(234, 179, 80, 0.15); }
+  .layer-context .icon { background: rgba(232, 121, 89, 0.15); }
+
+  .text { flex: 1; }
+
+  .text h3 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+  }
+
+  .layer-facts .text h3 { color: #818cf8; }
+  .layer-episodes .text h3 { color: #2dd4a8; }
+  .layer-procedures .text h3 { color: #eab350; }
+  .layer-context .text h3 { color: #e87959; }
+
+  .text p {
+    font-size: 13.5px;
+    color: #8b8ba0;
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
+  .badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .layer-facts .badge { background: rgba(99, 102, 241, 0.12); color: #818cf8; }
+  .layer-episodes .badge { background: rgba(45, 166, 142, 0.12); color: #2dd4a8; }
+  .layer-procedures .badge { background: rgba(234, 179, 80, 0.12); color: #eab350; }
+  .layer-context .badge { background: rgba(232, 121, 89, 0.12); color: #e87959; }
+
+  .footer {
+    text-align: center;
+    margin-top: 4px;
+  }
+
+  .footer p {
+    font-size: 12px;
+    color: #555568;
+  }
+
+  .footer span {
+    color: #6366f1;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1><span>spaceduck</span> memory layers</h1>
+    </div>
+
+    <div class="layers">
+      <div class="layer layer-facts">
+        <div class="icon">🧠</div>
+        <div class="text">
+          <h3>Facts</h3>
+          <p>Stable truths and preferences — who you are, what you like, where you live</p>
+        </div>
+        <div class="badge">permanent</div>
+      </div>
+
+      <div class="layer layer-episodes">
+        <div class="icon">📅</div>
+        <div class="text">
+          <h3>Episodes</h3>
+          <p>Dated events and outcomes — decisions made, milestones reached</p>
+        </div>
+        <div class="badge">decays</div>
+      </div>
+
+      <div class="layer layer-procedures">
+        <div class="icon">⚙️</div>
+        <div class="text">
+          <h3>Procedures</h3>
+          <p>How to behave, workflows, hard constraints — your rules, always followed</p>
+        </div>
+        <div class="badge">permanent</div>
+      </div>
+
+      <div class="layer layer-context">
+        <div class="icon">💬</div>
+        <div class="text">
+          <h3>Conversation context</h3>
+          <p>Short-term history with automatic compaction — the current conversation</p>
+        </div>
+        <div class="badge">session</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p><span>●</span> self-correcting · deduplicating · locally stored</p>
+    </div>
+  </div>
+</body>
+</html>
