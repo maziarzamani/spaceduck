@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.19.0...gateway-v0.20.0) (2026-02-27)
+
+
+### Features
+
+* **browser:** add live preview panel with CDP screencast streaming ([b18455f](https://github.com/maziarzamani/spaceduck/commit/b18455f58c7042f21696c732d94c91196dd60474))
+* **gateway:** per-conversation browser sessions with configurable pool ([29c1cff](https://github.com/maziarzamani/spaceduck/commit/29c1cff2339d3762eaa9c9b0e340bfbd9c29635c))
+* **ui:** per-conversation stream state map and reconnect run status ([5b66179](https://github.com/maziarzamani/spaceduck/commit/5b6617980b24d28ccc170c91a943dee9b8635edd))
+
+
+### Bug Fixes
+
+* **ws:** replace WKWebView WebSocket with Tauri Rust plugin for reliable reconnection ([cb1aebf](https://github.com/maziarzamani/spaceduck/commit/cb1aebf8829b7faf8185368752635e6b5ead07d9))
+
 ## [0.19.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.18.0...gateway-v0.19.0) (2026-02-26)
 
 
