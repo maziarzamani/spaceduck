@@ -54,7 +54,8 @@ export interface AgentRunResult {
 export type AgentChunk =
   | { type: "text"; text: string }
   | { type: "tool_call"; toolCall: ToolCall }
-  | { type: "tool_result"; toolResult: ToolResult };
+  | { type: "tool_result"; toolResult: ToolResult }
+  | { type: "usage"; usage: import("./types/provider").ProviderUsage };
 
 const DEFAULT_MAX_TOOL_ROUNDS = 30;
 const MAX_CONSECUTIVE_SAME_TOOL = 3;
@@ -158,6 +159,8 @@ export class AgentLoop {
             yield { type: "text", text: chunk.text };
           } else if (chunk.type === "tool_call") {
             pendingToolCalls.push(chunk.toolCall);
+          } else if (chunk.type === "usage") {
+            yield { type: "usage", usage: chunk.usage };
           }
         }
         status = pendingToolCalls.length > 0 || textContent.length > 0 ? "completed" : status;

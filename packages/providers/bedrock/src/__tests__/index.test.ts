@@ -46,6 +46,7 @@ describe("BedrockProvider", () => {
               },
             },
             stopReason: "end_turn",
+            usage: { inputTokens: 12, outputTokens: 5, totalTokens: 17 },
           }),
           { status: 200 },
         ),
@@ -55,7 +56,31 @@ describe("BedrockProvider", () => {
     const p = new BedrockProvider({ apiKey: "test-key" });
     const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
 
-    expect(chunks).toEqual([{ type: "text", text: "Hello from Bedrock" }]);
+    expect(chunks).toEqual([
+      { type: "text", text: "Hello from Bedrock" },
+      { type: "usage", usage: { inputTokens: 12, outputTokens: 5, totalTokens: 17 } },
+    ]);
+  });
+
+  test("omits usage chunk when API response has no usage field", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            output: {
+              message: { role: "assistant", content: [{ text: "ok" }] },
+            },
+            stopReason: "end_turn",
+          }),
+          { status: 200 },
+        ),
+      ),
+    ) as any;
+
+    const p = new BedrockProvider({ apiKey: "test-key" });
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+
+    expect(chunks).toEqual([{ type: "text", text: "ok" }]);
   });
 
   test("yields tool_call chunks from Converse API response", async () => {

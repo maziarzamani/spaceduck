@@ -69,6 +69,8 @@ export function createTaskRunner(deps: TaskRunnerDeps): TaskRunnerFn {
           guard.trackChars(chunk.text.length);
         } else if (chunk.type === "tool_call") {
           guard.trackToolCall();
+        } else if (chunk.type === "usage") {
+          guard.replaceWithExactUsage(chunk.usage.inputTokens, chunk.usage.outputTokens);
         }
       }
 

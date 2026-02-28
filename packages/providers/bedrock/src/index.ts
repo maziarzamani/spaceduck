@@ -66,6 +66,11 @@ interface ConverseResponse {
     };
   };
   stopReason: "end_turn" | "tool_use" | "max_tokens" | string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
 }
 
 // ── Message conversion ────────────────────────────────────────────────────────
@@ -313,6 +318,17 @@ export class BedrockProvider implements Provider {
           },
         };
       }
+    }
+
+    if (data.usage) {
+      yield {
+        type: "usage",
+        usage: {
+          inputTokens: data.usage.inputTokens,
+          outputTokens: data.usage.outputTokens,
+          totalTokens: data.usage.totalTokens,
+        },
+      };
     }
   }
 }

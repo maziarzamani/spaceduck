@@ -15,6 +15,7 @@ export type {
   ProviderOptions,
   ProviderErrorCode,
   ProviderChunk,
+  ProviderUsage,
 } from "./provider";
 
 export type {

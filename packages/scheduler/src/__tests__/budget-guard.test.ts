@@ -175,4 +175,20 @@ describe("BudgetGuard", () => {
     const snap2 = guard.snapshot.wallClockMs;
     expect(snap2).toBeGreaterThan(snap1);
   });
+
+  it("replaceWithExactUsage overwrites char-estimated tokens", () => {
+    guard.trackChars(300); // char estimate: 100 tokens
+    expect(guard.snapshot.tokensUsed).toBe(100);
+
+    guard.replaceWithExactUsage(150, 5); // exact: 155 total
+    expect(guard.snapshot.tokensUsed).toBe(155);
+  });
+
+  it("replaceWithExactUsage triggers abort when over budget", () => {
+    guard.replaceWithExactUsage(900, 200); // 1100 > 1000 limit
+    expect(guard.isExceeded).toBe(true);
+    const exceeded = eventBus.emitted.filter((e) => e.event === "task:budget_exceeded");
+    expect(exceeded.length).toBe(1);
+    expect(exceeded[0].data.limitExceeded).toBe("tokens");
+  });
 });

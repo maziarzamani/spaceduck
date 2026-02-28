@@ -70,6 +70,18 @@ export class BudgetGuard {
     this.checkThresholds();
   }
 
+  /**
+   * Replace the char-estimated token count with exact provider-reported usage.
+   * Call once when the provider yields a usage chunk at end of response.
+   */
+  replaceWithExactUsage(inputTokens: number, outputTokens: number): void {
+    this._snapshot = {
+      ...this._snapshot,
+      tokensUsed: inputTokens + outputTokens,
+    };
+    this.checkThresholds();
+  }
+
   trackToolCall(): void {
     this._snapshot = {
       ...this._snapshot,
