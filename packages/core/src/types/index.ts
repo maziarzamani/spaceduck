@@ -87,6 +87,23 @@ export type {
   ConversationSummary,
 } from "./protocol";
 
+export type {
+  TaskType,
+  TaskDefinition,
+  TaskSchedule,
+  TaskBudget,
+  TaskResultRoute,
+  TaskStatus,
+  BudgetSnapshot,
+  Task,
+  TaskInput,
+  TaskPatch,
+  TaskRunStatus,
+  TaskRun,
+  SpendPeriod,
+  TaskStore,
+} from "./task";
+
 export {
   SpaceduckError,
   ProviderError,

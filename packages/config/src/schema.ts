@@ -142,6 +142,35 @@ const OnboardingSchema = z.object({
   skippedAt: z.string().nullable().default(null),
 });
 
+const SchedulerBudgetSchema = z.object({
+  maxTokens: z.number().int().positive().default(50_000),
+  maxCostUsd: z.number().positive().default(0.50),
+  maxWallClockMs: z.number().int().positive().default(300_000),
+  maxToolCalls: z.number().int().positive().default(10),
+});
+
+const GlobalBudgetSchema = z.object({
+  dailyLimitUsd: z.number().positive().default(5.00),
+  monthlyLimitUsd: z.number().positive().default(50.00),
+  alertThresholds: z.array(z.number().min(0).max(1)).default([0.5, 0.8, 0.9]),
+  onLimitReached: z.enum(["pause-all", "pause-non-critical", "alert-only"]).default("pause-all"),
+});
+
+const SchedulerRetrySchema = z.object({
+  maxAttempts: z.number().int().min(0).default(3),
+  backoffBaseMs: z.number().int().positive().default(5_000),
+  backoffMaxMs: z.number().int().positive().default(300_000),
+});
+
+const SchedulerSchema = z.object({
+  enabled: z.boolean().default(false),
+  heartbeatIntervalMs: z.number().int().positive().default(60_000),
+  maxConcurrentTasks: z.number().int().positive().default(3),
+  defaultBudget: SchedulerBudgetSchema.default({}),
+  globalBudget: GlobalBudgetSchema.default({}),
+  retry: SchedulerRetrySchema.default({}),
+});
+
 export const SpaceduckConfigSchema = z.object({
   version: z.literal(1).default(1),
   gateway: GatewaySchema.default({}),
@@ -152,4 +181,5 @@ export const SpaceduckConfigSchema = z.object({
   tools: ToolsSchema.default({}),
   channels: ChannelsSchema.default({}),
   onboarding: OnboardingSchema.default({}),
+  scheduler: SchedulerSchema.default({}),
 });

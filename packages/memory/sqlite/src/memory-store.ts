@@ -107,6 +107,8 @@ interface MemoryRow {
   source_conversation_id: string | null;
   source_run_id: string | null;
   source_tool_name: string | null;
+  source_task_id: string | null;
+  source_skill_id: string | null;
   created_at: number;
   updated_at: number;
   last_seen_at: number;
@@ -120,7 +122,10 @@ interface MemoryRow {
   embedding_version: string | null;
   tags: string;
   content_hash: string | null;
+  estimated_tokens: number | null;
 }
+
+const CHARS_PER_TOKEN = 3;
 
 function scopeFromRow(type: string, id: string | null): MemoryScope {
   switch (type) {
@@ -146,7 +151,13 @@ function sourceFromRow(row: MemoryRow): MemorySource {
   if (row.source_conversation_id) (src as any).conversationId = row.source_conversation_id;
   if (row.source_run_id) (src as any).runId = row.source_run_id;
   if (row.source_tool_name) (src as any).toolName = row.source_tool_name;
+  if (row.source_task_id) (src as any).taskId = row.source_task_id;
+  if (row.source_skill_id) (src as any).skillId = row.source_skill_id;
   return src;
+}
+
+function estimateTokens(content: string): number {
+  return Math.ceil(content.length / CHARS_PER_TOKEN);
 }
 
 function rowToRecord(row: MemoryRow): MemoryRecord {
@@ -176,9 +187,10 @@ function rowToRecord(row: MemoryRow): MemoryRecord {
 
 const SELECT_COLS = `m.id, m.kind, m.title, m.content, m.summary, m.scope_type, m.scope_id,
   m.entity_refs, m.source_type, m.source_id, m.source_conversation_id, m.source_run_id,
-  m.source_tool_name, m.created_at, m.updated_at, m.last_seen_at, m.occurred_at, m.expires_at,
+  m.source_tool_name, m.source_task_id, m.source_skill_id,
+  m.created_at, m.updated_at, m.last_seen_at, m.occurred_at, m.expires_at,
   m.procedure_subtype, m.importance, m.confidence, m.status, m.superseded_by,
-  m.embedding_version, m.tags, m.content_hash`;
+  m.embedding_version, m.tags, m.content_hash, m.estimated_tokens`;
 
 export class SqliteMemoryStore implements MemoryStore {
   constructor(
@@ -240,24 +252,29 @@ export class SqliteMemoryStore implements MemoryStore {
       const procedureSubtype = input.kind === "procedure" ? input.procedureSubtype : null;
       const expiresAt = input.expiresAt ?? null;
 
+      const estTokens = estimateTokens(input.content);
+
       this.db
         .query(
           `INSERT INTO memories
              (id, kind, title, content, summary, scope_type, scope_id,
               entity_refs, source_type, source_id, source_conversation_id,
-              source_run_id, source_tool_name, created_at, updated_at, last_seen_at,
+              source_run_id, source_tool_name, source_task_id, source_skill_id,
+              created_at, updated_at, last_seen_at,
               occurred_at, expires_at, procedure_subtype, importance, confidence,
-              status, tags, content_hash)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?14,?14,?15,?16,?17,?18,?19,?20,?21,?22)`,
+              status, tags, content_hash, estimated_tokens)
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?16,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25)`,
         )
         .run(
           id, input.kind, input.title, input.content, summary,
           scope.type, scope.id, entityRefs,
           input.source.type, input.source.id ?? null,
           input.source.conversationId ?? null, input.source.runId ?? null,
-          input.source.toolName ?? null, now,
+          input.source.toolName ?? null,
+          input.source.taskId ?? null, input.source.skillId ?? null,
+          now,
           occurredAt, expiresAt, procedureSubtype,
-          importance, confidence, status, tags, hash,
+          importance, confidence, status, tags, hash, estTokens,
         );
 
       // Embed summary for vector search (reuse vector from dedup check if available)
@@ -621,19 +638,50 @@ Respond with EXACTLY one word: "contradiction" or "consistent"`;
     const topK = options?.topK ?? 10;
     const strategy = options?.strategy ?? (this.embedding ? "hybrid" : "fts");
 
+    let result: Result<ScoredMemory[]>;
     try {
-      if (strategy === "hybrid") return await this.recallHybrid(query, topK, options);
-      if (strategy === "vector" && this.embedding) return await this.recallByVector(query, topK);
-      return this.recallByFts(query, topK, options);
+      if (strategy === "hybrid") result = await this.recallHybrid(query, topK, options);
+      else if (strategy === "vector" && this.embedding) result = await this.recallByVector(query, topK);
+      else result = this.recallByFts(query, topK, options);
     } catch (cause) {
       if (strategy === "vector") {
         this.logger.warn("Vector recall failed, falling back to FTS", { error: String(cause) });
-        try { return this.recallByFts(query, topK, options); } catch (e) {
+        try { result = this.recallByFts(query, topK, options); } catch (e) {
           return err(new MemoryError(`Failed to recall memories: ${e}`, e));
         }
+      } else {
+        return err(new MemoryError(`Failed to recall memories: ${cause}`, cause));
       }
-      return err(new MemoryError(`Failed to recall memories: ${cause}`, cause));
     }
+
+    if (!result!.ok) return result!;
+
+    return ok(this.applyRetrievalBudget(result!.value, options));
+  }
+
+  private applyRetrievalBudget(
+    results: ScoredMemory[],
+    options?: MemoryRecallOptions,
+  ): ScoredMemory[] {
+    const maxEntries = options?.maxEntries;
+    const maxTokens = options?.maxMemoryTokens;
+
+    if (!maxEntries && !maxTokens) return results;
+
+    let tokenSum = 0;
+    const budgeted: ScoredMemory[] = [];
+
+    for (const scored of results) {
+      if (maxEntries && budgeted.length >= maxEntries) break;
+
+      const tokens = estimateTokens(scored.memory.content);
+      if (maxTokens && tokenSum + tokens > maxTokens && budgeted.length > 0) break;
+
+      tokenSum += tokens;
+      budgeted.push(scored);
+    }
+
+    return budgeted;
   }
 
   private async recallHybrid(

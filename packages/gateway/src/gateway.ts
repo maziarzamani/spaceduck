@@ -47,6 +47,15 @@ import { createEmbeddingProvider } from "./embedding-factory";
 import { AttachmentStore } from "./attachment-store";
 import { SwappableProvider } from "./swappable-provider";
 import { SwappableEmbeddingProvider } from "./swappable-embedding-provider";
+import {
+  SqliteTaskStore,
+  TaskScheduler,
+  TaskQueue,
+  GlobalBudgetGuard,
+  createTaskRunner,
+} from "@spaceduck/scheduler";
+import type { TaskRunResult } from "@spaceduck/scheduler";
+import { handleSchedulerRoute } from "./scheduler-routes";
 import { WhisperStt, SttError } from "@spaceduck/stt-whisper";
 import { AwsTranscribeStt, SttError as AwsSttError } from "@spaceduck/stt-aws-transcribe";
 import { createWriteStream } from "node:fs";
@@ -160,6 +169,9 @@ export class Gateway implements Lifecycle {
   private readonly browserFrame: ReturnType<typeof createBrowserFrameTarget>;
   private readonly browserPool: BrowserSessionPool | undefined;
   private readonly conversationIdRef: { current: string };
+  private taskStore: SqliteTaskStore | null = null;
+  private taskScheduler: TaskScheduler | null = null;
+  private taskQueue: TaskQueue | null = null;
 
   constructor(deps: GatewayDeps, db?: Database) {
     this.deps = deps;
@@ -233,6 +245,9 @@ export class Gateway implements Lifecycle {
     // Start external channels (WhatsApp, etc.)
     await this.startChannels();
 
+    // Initialize scheduler if enabled
+    await this.initScheduler();
+
     const productCfg = this.deps.configStore?.current;
     const embeddingRef =
       this.deps.swappableEmbeddingProvider ?? this.deps.embeddingProvider;
@@ -242,12 +257,19 @@ export class Gateway implements Lifecycle {
       model: productCfg?.ai.model ?? config.provider.model,
       memory: config.memory.backend,
       embedding: embeddingRef?.name ?? "disabled",
+      scheduler: productCfg?.scheduler?.enabled ? "enabled" : "disabled",
     });
   }
 
   async stop(): Promise<void> {
     if (this._status === "stopped" || this._status === "stopping") return;
     this._status = "stopping";
+
+    // Stop scheduler
+    if (this.taskScheduler) {
+      await this.taskScheduler.stop();
+      this.taskScheduler = null;
+    }
 
     // Stop external channels
     await this.stopChannels();
@@ -283,6 +305,77 @@ export class Gateway implements Lifecycle {
   private async stopChannel(channel: Channel): Promise<void> {
     await channel.stop();
     this.deps.logger.info("Channel stopped", { channel: channel.name });
+  }
+
+  private async initScheduler(): Promise<void> {
+    const productConfig = this.deps.configStore?.current;
+    if (!productConfig?.scheduler?.enabled || !this.db) return;
+
+    const { logger, eventBus, agent, conversationStore, memoryStore, runLock } = this.deps;
+    const schedCfg = productConfig.scheduler;
+    const log = logger.child({ component: "Scheduler" });
+
+    try {
+      this.taskStore = new SqliteTaskStore(this.db, log);
+      await this.taskStore.migrate();
+
+      const defaultBudget = {
+        maxTokens: schedCfg.defaultBudget.maxTokens,
+        maxCostUsd: schedCfg.defaultBudget.maxCostUsd,
+        maxWallClockMs: schedCfg.defaultBudget.maxWallClockMs,
+        maxToolCalls: schedCfg.defaultBudget.maxToolCalls,
+      };
+
+      const runner = createTaskRunner({
+        agent,
+        conversationStore,
+        memoryStore,
+        eventBus,
+        logger: log,
+        defaultBudget,
+      });
+
+      const globalBudget = new GlobalBudgetGuard(
+        this.taskStore,
+        {
+          dailyLimitUsd: schedCfg.globalBudget.dailyLimitUsd,
+          monthlyLimitUsd: schedCfg.globalBudget.monthlyLimitUsd,
+          alertThresholds: schedCfg.globalBudget.alertThresholds,
+          onLimitReached: schedCfg.globalBudget.onLimitReached,
+        },
+        eventBus,
+        { pause: () => this.taskScheduler?.pause(), resume: () => this.taskScheduler?.resume(), get isPaused() { return false; } },
+        log,
+      );
+
+      this.taskQueue = new TaskQueue(
+        this.taskStore,
+        runLock,
+        runner,
+        globalBudget,
+        eventBus,
+        log,
+        {
+          maxConcurrent: schedCfg.maxConcurrentTasks,
+          maxRetries: schedCfg.retry.maxAttempts,
+          backoffBaseMs: schedCfg.retry.backoffBaseMs,
+          backoffMaxMs: schedCfg.retry.backoffMaxMs,
+        },
+      );
+
+      this.taskScheduler = new TaskScheduler(
+        this.taskStore,
+        this.taskQueue,
+        eventBus,
+        log,
+        { heartbeatIntervalMs: schedCfg.heartbeatIntervalMs },
+      );
+
+      await this.taskScheduler.start();
+      log.info("Scheduler initialized and started");
+    } catch (e) {
+      log.error("Failed to initialize scheduler", { error: String(e) });
+    }
   }
 
   private async startChannels(): Promise<void> {
@@ -1110,6 +1203,19 @@ export class Gateway implements Lifecycle {
           );
         }
       }
+    }
+
+    // ── Scheduler routes ────────────────────────────────────────────
+    if (url.pathname.startsWith("/api/tasks") && this.taskStore && this.taskScheduler) {
+      const token = this.db ? requireAuth(req, this.db, this.authRequired) : true;
+      if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      const schedulerResp = await handleSchedulerRoute(req, url, {
+        store: this.taskStore,
+        scheduler: this.taskScheduler,
+        logger: this.deps.logger,
+      });
+      if (schedulerResp) return schedulerResp;
     }
 
     // 404

@@ -1,6 +1,6 @@
 // EventBus: typed pub/sub for cross-cutting concerns
 
-import type { Message, Conversation, Fact, Logger, ToolCall, ToolResult } from "./types";
+import type { Message, Conversation, Fact, Logger, ToolCall, ToolResult, Task, BudgetSnapshot } from "./types";
 import type { SpaceduckError } from "./types";
 
 export interface SpaceduckEvents {
@@ -12,6 +12,13 @@ export interface SpaceduckEvents {
   "fact:extracted": { fact: Fact };
   "tool:calling": { conversationId: string; toolCall: ToolCall };
   "tool:result": { conversationId: string; toolResult: ToolResult; durationMs: number };
+  "task:scheduled": { task: Task };
+  "task:started": { task: Task };
+  "task:completed": { task: Task; snapshot: BudgetSnapshot };
+  "task:failed": { task: Task; error: string; retryCount: number };
+  "task:dead_letter": { task: Task; error: string };
+  "task:budget_warning": { task: Task; snapshot: BudgetSnapshot; thresholdPct: number };
+  "task:budget_exceeded": { task: Task; snapshot: BudgetSnapshot; limitExceeded: string };
   "error": { error: SpaceduckError; context: string };
 }
 
