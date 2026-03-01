@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { cn } from "../lib/utils";
 import type { ConversationSummary } from "@spaceduck/core";
-import { MessageSquarePlus, Trash2, MessageCircle, Settings, Sun, Moon, MoreHorizontal, Pencil, Loader2 } from "lucide-react";
+import { MessageSquarePlus, Trash2, MessageCircle, Settings, Sun, Moon, MoreHorizontal, Pencil, Loader2, ListTodo } from "lucide-react";
 import { SpaceduckLogo } from "./spaceduck-logo";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { useTheme } from "../hooks/use-theme";
+import { useTasks } from "../hooks/use-tasks";
 
 interface SidebarProps {
   conversations: ConversationSummary[];
@@ -30,6 +31,7 @@ interface SidebarProps {
   onDelete: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onOpenSettings?: () => void;
+  onOpenTasks?: () => void;
 }
 
 function timeAgo(ts: number): string {
@@ -40,8 +42,10 @@ function timeAgo(ts: number): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-export function Sidebar({ conversations, activeId, streamingIds, unreadIds, onSelect, onCreate, onDelete, onRename, onOpenSettings }: SidebarProps) {
+export function Sidebar({ conversations, activeId, streamingIds, unreadIds, onSelect, onCreate, onDelete, onRename, onOpenSettings, onOpenTasks }: SidebarProps) {
   const { resolved, setTheme } = useTheme();
+  const { tasks, budget } = useTasks({ pollIntervalMs: 30_000 });
+  const runningCount = tasks.filter((t) => t.status === "running").length;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ConversationSummary | null>(null);
@@ -198,6 +202,28 @@ export function Sidebar({ conversations, activeId, streamingIds, unreadIds, onSe
         </nav>
       </ScrollArea>
 
+      {/* Task indicator pill */}
+      {(runningCount > 0 || (budget.daily !== null && budget.daily > 0)) && onOpenTasks && (
+        <>
+          <Separator />
+          <button
+            type="button"
+            onClick={onOpenTasks}
+            className="flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:bg-muted transition-colors w-full text-left"
+          >
+            {runningCount > 0 && (
+              <span className="flex items-center gap-1.5">
+                <Loader2 size={12} className="animate-spin text-primary" />
+                <span>{runningCount} running</span>
+              </span>
+            )}
+            {budget.daily !== null && budget.daily > 0 && (
+              <span className="ml-auto tabular-nums">${budget.daily.toFixed(4)} today</span>
+            )}
+          </button>
+        </>
+      )}
+
       <Separator />
       <div className="flex items-center justify-between px-4 py-3">
         <p className="text-xs text-muted-foreground">spaceduck v0.1.0</p>
@@ -215,6 +241,16 @@ export function Sidebar({ conversations, activeId, streamingIds, unreadIds, onSe
             </TooltipTrigger>
             <TooltipContent side="top">Toggle theme</TooltipContent>
           </Tooltip>
+          {onOpenTasks && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={onOpenTasks} className="h-7 w-7">
+                  <ListTodo size={16} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Tasks</TooltipContent>
+            </Tooltip>
+          )}
           {onOpenSettings && (
             <Tooltip>
               <TooltipTrigger asChild>

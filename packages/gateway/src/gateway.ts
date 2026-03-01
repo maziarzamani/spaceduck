@@ -52,6 +52,7 @@ import {
   TaskScheduler,
   TaskQueue,
   GlobalBudgetGuard,
+  PricingLookup,
   createTaskRunner,
 } from "@spaceduck/scheduler";
 import type { TaskRunResult, SkillResolver } from "@spaceduck/scheduler";
@@ -336,6 +337,9 @@ export class Gateway implements Lifecycle {
         ? { get: (id: string) => this.skillRegistry?.get(id) }
         : undefined;
 
+      const modelName = productConfig.ai.model ?? undefined;
+      const pricingLookup = new PricingLookup(log, schedCfg.pricing);
+
       const runner = createTaskRunner({
         agent,
         conversationStore,
@@ -344,6 +348,8 @@ export class Gateway implements Lifecycle {
         logger: log,
         defaultBudget,
         skillResolver,
+        pricingLookup,
+        modelName,
       });
 
       const globalBudget = new GlobalBudgetGuard(
@@ -1108,6 +1114,32 @@ export class Gateway implements Lifecycle {
                 if (!r.ok) warnings.push({ code: r.code, message: r.message });
               }
 
+              // Hot-start scheduler if enabled via config
+              if (changedPaths.has("/scheduler/enabled")) {
+                const schedEnabled = configStore.current.scheduler?.enabled;
+                if (schedEnabled && !this.taskScheduler) {
+                  try {
+                    await this.initScheduler();
+                    if (this.taskScheduler) {
+                      this.deps.logger.info("Scheduler hot-started");
+                    }
+                  } catch (err) {
+                    this.deps.logger.error("Scheduler hot-start failed", {
+                      error: err instanceof Error ? err.message : String(err),
+                    });
+                    warnings.push({
+                      code: "SCHEDULER_START_FAILED",
+                      message: err instanceof Error ? err.message : String(err),
+                    });
+                  }
+                } else if (!schedEnabled && this.taskScheduler) {
+                  await this.taskScheduler.stop();
+                  this.taskScheduler = null;
+                  this.taskStore = null;
+                  this.deps.logger.info("Scheduler stopped via config");
+                }
+              }
+
               // Hot-reload skills if skill config changed
               if (shouldReloadSkills(changedPaths) && this.skillRegistry) {
                 try {
@@ -1272,7 +1304,13 @@ export class Gateway implements Lifecycle {
     }
 
     // ── Scheduler routes ────────────────────────────────────────────
-    if (url.pathname.startsWith("/api/tasks") && this.taskStore && this.taskScheduler) {
+    if (url.pathname.startsWith("/api/tasks")) {
+      if (!this.taskStore || !this.taskScheduler) {
+        return Response.json(
+          { error: "SCHEDULER_DISABLED", message: "Scheduler is not enabled. Enable it in settings." },
+          { status: 503 },
+        );
+      }
       const token = this.db ? requireAuth(req, this.db, this.authRequired) : true;
       if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -1282,6 +1320,23 @@ export class Gateway implements Lifecycle {
         logger: this.deps.logger,
       });
       if (schedulerResp) return schedulerResp;
+    }
+
+    // ── Skills routes ─────────────────────────────────────────────
+    if (req.method === "GET" && url.pathname === "/api/skills" && this.skillRegistry) {
+      const token = this.db ? requireAuth(req, this.db, this.authRequired) : true;
+      if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      const skills = this.skillRegistry.list().map((s) => ({
+        id: s.id,
+        description: s.description,
+        version: s.version,
+        author: s.author,
+        toolAllow: s.toolAllow,
+        budget: s.budget,
+        resultRoute: s.resultRoute,
+      }));
+      return Response.json({ skills });
     }
 
     // 404

@@ -53,13 +53,13 @@ describe("SqliteTaskStore", () => {
   describe("migrate", () => {
     it("creates tables and schema version", () => {
       const row = db.query("SELECT MAX(version) as v FROM scheduler_schema_version").get() as any;
-      expect(row.v).toBe(1);
+      expect(row.v).toBe(3);
     });
 
     it("is idempotent", async () => {
       await store.migrate();
       const row = db.query("SELECT MAX(version) as v FROM scheduler_schema_version").get() as any;
-      expect(row.v).toBe(1);
+      expect(row.v).toBe(3);
     });
   });
 

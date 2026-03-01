@@ -29,10 +29,11 @@ interface SttStatus {
 interface ChatViewProps {
   ws: UseSpaceduckWs;
   onOpenSettings: () => void;
+  onOpenTasks?: () => void;
   recorderRef?: React.MutableRefObject<ChatInputRecorderHandle | null>;
 }
 
-export function ChatView({ ws, onOpenSettings, recorderRef }: ChatViewProps) {
+export function ChatView({ ws, onOpenSettings, onOpenTasks, recorderRef }: ChatViewProps) {
   const [stt, setStt] = useState<SttStatus>({ available: false });
   const toastDedupeRef = useRef<Set<string>>(new Set());
 
@@ -86,6 +87,7 @@ export function ChatView({ ws, onOpenSettings, recorderRef }: ChatViewProps) {
         onDelete={ws.deleteConversation}
         onRename={ws.renameConversation}
         onOpenSettings={onOpenSettings}
+        onOpenTasks={onOpenTasks}
       />
 
       <main className="flex-1 flex flex-col min-w-0">
