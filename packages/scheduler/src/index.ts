@@ -9,7 +9,7 @@ export { BudgetGuard } from "./budget-guard";
 export { GlobalBudgetGuard } from "./global-budget-guard";
 export type { GlobalBudgetConfig, SchedulerControl } from "./global-budget-guard";
 export { createTaskRunner } from "./runner";
-export type { TaskRunnerDeps, TaskRunnerFn } from "./runner";
+export type { TaskRunnerDeps, TaskRunnerFn, SkillResolver } from "./runner";
 export type { RunLock } from "./run-lock";
 export { PricingLookup } from "./pricing";
 export type { ModelPricing } from "./pricing";

@@ -1,9 +1,9 @@
 ---
 title: "Memory"
-description: "How Spaceduck remembers, deduplicates, and self-corrects across conversations."
+description: "How spaceduck remembers, deduplicates, and self-corrects across conversations."
 ---
 
-Spaceduck uses a layered memory system. Short-term memory lives inside each conversation. Long-term memory persists across conversations and is automatically extracted, classified, and deduplicated.
+spaceduck uses a layered memory system. Short-term memory lives inside each conversation. Long-term memory persists across conversations and is automatically extracted, classified, and deduplicated.
 
 ## Layers
 
@@ -42,7 +42,7 @@ flowchart LR
 
 ## Extraction pipeline
 
-After every message, Spaceduck runs a two-stage extraction pipeline asynchronously (never blocks the response):
+After every message, spaceduck runs a two-stage extraction pipeline asynchronously (never blocks the response):
 
 1. **Regex extraction** -- pattern-matches identity facts ("My name is...", "I live in...") for immediate capture
 2. **LLM classification** -- the chat model extracts and classifies memories with structured output
@@ -89,7 +89,7 @@ This handles corrections like "I live in Paris" followed by "I live in Tokyo" --
 
 ## Recall
 
-When building context for a response, Spaceduck retrieves memories using hybrid scoring:
+When building context for a response, spaceduck retrieves memories using hybrid scoring:
 
 1. **Vector search** -- cosine similarity between query embedding and stored memory embeddings
 2. **Keyword search** -- FTS5 BM25 full-text search
@@ -122,6 +122,19 @@ stateDiagram-v2
     superseded --> [*]
     archived --> [*]
 ```
+
+## Memory isolation
+
+When the [scheduler](/concepts/scheduler) runs tasks autonomously, their memory writes carry provenance so they don't pollute interactive recall.
+
+Each memory record stores a `taskId` (which task wrote it) and optionally a `skillId` (which skill was active). This enables:
+
+- **Scoped recall** -- scheduled tasks see their own memories plus global ones, not noise from other tasks. Controlled via `excludeTaskMemories` and `sourceTaskId` filters.
+- **Write budgets** -- each task is limited to `maxMemoryWrites` (default 10). A counting proxy wraps the store and silently drops writes once the limit is reached.
+- **Cascading purge** -- when a [skill](/concepts/skills) is uninstalled, all memories tagged with its `skillId` are deleted automatically.
+- **Injection detection** -- all content passes through `detectInjection` before storage. Task-sourced content uses strict mode (single pattern match rejects); user input uses relaxed mode (2+ matches required).
+
+See [Security](/concepts/security) for the full defense-in-depth model.
 
 ## Configuration
 

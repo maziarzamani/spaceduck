@@ -142,6 +142,12 @@ const OnboardingSchema = z.object({
   skippedAt: z.string().nullable().default(null),
 });
 
+const SkillsSchema = z.object({
+  paths: z.array(z.string()).default(["./skills"]),
+  enabled: z.array(z.string()).default([]),
+  autoScan: z.boolean().default(true),
+});
+
 const SchedulerBudgetSchema = z.object({
   maxTokens: z.number().int().positive().default(50_000),
   maxCostUsd: z.number().positive().default(0.50),
@@ -191,4 +197,5 @@ export const SpaceduckConfigSchema = z.object({
   channels: ChannelsSchema.default({}),
   onboarding: OnboardingSchema.default({}),
   scheduler: SchedulerSchema.default({}),
+  skills: SkillsSchema.default({}),
 });

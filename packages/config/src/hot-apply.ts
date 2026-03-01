@@ -50,6 +50,9 @@ export const HOT_APPLY_PATHS: ReadonlySet<string> = new Set([
   "/scheduler/retry/maxAttempts",
   "/scheduler/retry/backoffBaseMs",
   "/scheduler/retry/backoffMaxMs",
+  "/skills/paths",
+  "/skills/enabled",
+  "/skills/autoScan",
 ]);
 
 /**

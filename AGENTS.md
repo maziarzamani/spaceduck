@@ -18,6 +18,7 @@ bun run typecheck              # tsc --noEmit (must be clean)
 bun test --recursive           # all tests
 bun test packages/core/        # unit tests only
 bun test packages/memory/      # memory + vector tests
+bun test packages/scheduler/   # scheduler + budget tests
 bun test packages/tools/       # tool tests
 ```
 
@@ -28,6 +29,9 @@ Always run `bun run typecheck` and `bun test --recursive` after making changes. 
 ```
 packages/
 ├── core/          # Zero-dep contracts: types, AgentLoop, ContextBuilder, EventBus, FactExtractor
+├── config/        # Zod-based config schema, hot-apply, model pricing
+├── scheduler/     # Task scheduler, persistent queue, budget guards, task runner
+├── skills/        # Skill runtime: SKILL.md parser, security scanner, registry
 ├── gateway/       # Composition root: HTTP/WS server, wires all dependencies
 ├── channels/
 │   ├── web/       # React web UI + WebSocket channel

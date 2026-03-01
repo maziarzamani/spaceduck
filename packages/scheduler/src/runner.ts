@@ -11,6 +11,10 @@ import type { TaskRunResult } from "./queue";
 
 export type TaskRunnerFn = (task: Task, chainedContext?: string) => Promise<TaskRunResult>;
 
+export interface SkillResolver {
+  readonly get: (skillId: string) => { toolAllow?: string[]; toolDeny?: string[] } | undefined;
+}
+
 export interface TaskRunnerDeps {
   readonly agent: AgentLoop;
   readonly conversationStore: ConversationStore;
@@ -21,6 +25,8 @@ export interface TaskRunnerDeps {
   readonly enqueueFn?: (taskDefinitionId: string, context?: string) => Promise<void>;
   readonly pricingLookup?: PricingLookup;
   readonly modelName?: string;
+  /** Resolves skill metadata for tool scoping. Provided by gateway when SkillRegistry is available. */
+  readonly skillResolver?: SkillResolver;
 }
 
 function generateId(): string {
@@ -108,11 +114,15 @@ export function createTaskRunner(deps: TaskRunnerDeps): TaskRunnerFn {
         maxEntries: 15,
       };
 
+      // Compute merged tool filter: intersection for allow, union for deny
+      const toolFilter = mergeToolFilter(task.definition, deps.skillResolver);
+
       let fullResponse = "";
 
       for await (const chunk of deps.agent.run(convId, userMessage, {
         signal: guard.signal,
         memoryRecallOptions,
+        toolFilter,
       })) {
         if (chunk.type === "text") {
           fullResponse += chunk.text;
@@ -176,6 +186,7 @@ async function routeResult(
       source: {
         type: "system",
         taskId: task.id,
+        skillId: task.definition.skillId,
       },
       tags: ["task-result", task.definition.type],
       occurredAt: Date.now(),
@@ -202,4 +213,54 @@ async function routeResult(
     }
     return;
   }
+}
+
+/**
+ * Merge task-level and skill-level tool filters.
+ * - allow: intersection (skill declares what it needs, task can further restrict)
+ * - deny: union (both contribute)
+ * Returns undefined if no filtering is needed.
+ */
+function mergeToolFilter(
+  definition: Task["definition"],
+  skillResolver?: SkillResolver,
+): { allow?: string[]; deny?: string[] } | undefined {
+  const taskAllow = definition.toolAllow;
+  const taskDeny = definition.toolDeny;
+
+  let skillAllow: string[] | undefined;
+  let skillDeny: string[] | undefined;
+
+  if (definition.skillId && skillResolver) {
+    const skill = skillResolver.get(definition.skillId);
+    if (skill) {
+      skillAllow = skill.toolAllow;
+      skillDeny = skill.toolDeny;
+    }
+  }
+
+  const hasAllow = !!(taskAllow?.length || skillAllow?.length);
+  const hasDeny = !!(taskDeny?.length || skillDeny?.length);
+
+  if (!hasAllow && !hasDeny) return undefined;
+
+  let allow: string[] | undefined;
+  if (taskAllow && skillAllow) {
+    const skillSet = new Set(skillAllow);
+    allow = taskAllow.filter((t) => skillSet.has(t));
+  } else {
+    allow = taskAllow ?? skillAllow;
+  }
+
+  let deny: string[] | undefined;
+  if (taskDeny || skillDeny) {
+    deny = [...new Set([...(taskDeny ?? []), ...(skillDeny ?? [])])];
+  }
+
+  if (!allow?.length && !deny?.length) return undefined;
+
+  return {
+    ...(allow?.length ? { allow } : {}),
+    ...(deny?.length ? { deny } : {}),
+  };
 }

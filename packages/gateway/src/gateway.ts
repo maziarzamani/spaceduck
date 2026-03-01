@@ -54,7 +54,8 @@ import {
   GlobalBudgetGuard,
   createTaskRunner,
 } from "@spaceduck/scheduler";
-import type { TaskRunResult } from "@spaceduck/scheduler";
+import type { TaskRunResult, SkillResolver } from "@spaceduck/scheduler";
+import { SkillRegistry } from "@spaceduck/skills";
 import { handleSchedulerRoute } from "./scheduler-routes";
 import { WhisperStt, SttError } from "@spaceduck/stt-whisper";
 import { AwsTranscribeStt, SttError as AwsSttError } from "@spaceduck/stt-aws-transcribe";
@@ -172,6 +173,7 @@ export class Gateway implements Lifecycle {
   private taskStore: SqliteTaskStore | null = null;
   private taskScheduler: TaskScheduler | null = null;
   private taskQueue: TaskQueue | null = null;
+  private skillRegistry: SkillRegistry | null = null;
 
   constructor(deps: GatewayDeps, db?: Database) {
     this.deps = deps;
@@ -244,6 +246,9 @@ export class Gateway implements Lifecycle {
 
     // Start external channels (WhatsApp, etc.)
     await this.startChannels();
+
+    // Initialize skill registry
+    await this.initSkills();
 
     // Initialize scheduler if enabled
     await this.initScheduler();
@@ -327,6 +332,10 @@ export class Gateway implements Lifecycle {
         maxMemoryWrites: schedCfg.defaultBudget.maxMemoryWrites,
       };
 
+      const skillResolver: SkillResolver | undefined = this.skillRegistry
+        ? { get: (id: string) => this.skillRegistry?.get(id) }
+        : undefined;
+
       const runner = createTaskRunner({
         agent,
         conversationStore,
@@ -334,6 +343,7 @@ export class Gateway implements Lifecycle {
         eventBus,
         logger: log,
         defaultBudget,
+        skillResolver,
       });
 
       const globalBudget = new GlobalBudgetGuard(
@@ -376,6 +386,37 @@ export class Gateway implements Lifecycle {
       log.info("Scheduler initialized and started");
     } catch (e) {
       log.error("Failed to initialize scheduler", { error: String(e) });
+    }
+  }
+
+  private async initSkills(): Promise<void> {
+    const productConfig = this.deps.configStore?.current;
+    const skillsCfg = productConfig?.skills;
+    if (!skillsCfg) return;
+
+    const { logger } = this.deps;
+
+    const purgeMemoriesBySkillId = this.db
+      ? ((skillId: string) => {
+          const stmt = this.db!.prepare("DELETE FROM memories WHERE source_skill_id = ?");
+          const result = stmt.run(skillId);
+          return Promise.resolve(result.changes);
+        })
+      : undefined;
+
+    this.skillRegistry = new SkillRegistry({
+      logger,
+      autoScan: skillsCfg.autoScan,
+      purgeMemoriesBySkillId,
+    });
+
+    try {
+      await this.skillRegistry.loadFromPaths(skillsCfg.paths);
+    } catch (err) {
+      logger.warn("Failed to load skills", {
+        paths: skillsCfg.paths,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -1067,6 +1108,30 @@ export class Gateway implements Lifecycle {
                 if (!r.ok) warnings.push({ code: r.code, message: r.message });
               }
 
+              // Hot-reload skills if skill config changed
+              if (shouldReloadSkills(changedPaths) && this.skillRegistry) {
+                try {
+                  const skillsCfg = configStore.current.skills;
+                  this.skillRegistry = new SkillRegistry({
+                    logger: this.deps.logger,
+                    autoScan: skillsCfg?.autoScan ?? true,
+                    purgeMemoriesBySkillId: this.db
+                      ? ((skillId: string) => {
+                          const stmt = this.db!.prepare("DELETE FROM memories WHERE source_skill_id = ?");
+                          const result = stmt.run(skillId);
+                          return Promise.resolve(result.changes);
+                        })
+                      : undefined,
+                  });
+                  await this.skillRegistry.loadFromPaths(skillsCfg?.paths ?? ["./skills"]);
+                  this.deps.logger.info("Skills hot-reloaded", { paths: skillsCfg?.paths });
+                } catch (err) {
+                  this.deps.logger.warn("Skill hot-reload failed", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                }
+              }
+
               // Hot-swap STT backend if STT config changed
               if (shouldRebuildStt(changedPaths)) {
                 const r = await this.rebuildAndSwapStt("config_patch", [...changedPaths]);
@@ -1671,6 +1736,19 @@ function shouldRebuildChannels(changedPaths: Set<string>): boolean {
 
 function shouldRebuildStt(changedPaths: Set<string>): boolean {
   for (const p of STT_REBUILD_PATHS) {
+    if (changedPaths.has(p)) return true;
+  }
+  return false;
+}
+
+const SKILL_RELOAD_PATHS = new Set([
+  "/skills/paths",
+  "/skills/enabled",
+  "/skills/autoScan",
+]);
+
+function shouldReloadSkills(changedPaths: Set<string>): boolean {
+  for (const p of SKILL_RELOAD_PATHS) {
     if (changedPaths.has(p)) return true;
   }
   return false;

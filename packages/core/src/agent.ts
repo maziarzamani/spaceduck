@@ -95,7 +95,11 @@ export class AgentLoop {
   async *run(
     conversationId: string,
     userMessage: Message,
-    options?: { signal?: AbortSignal; memoryRecallOptions?: Partial<import("./types").MemoryRecallOptions> },
+    options?: {
+      signal?: AbortSignal;
+      memoryRecallOptions?: Partial<import("./types").MemoryRecallOptions>;
+      toolFilter?: { allow?: string[]; deny?: string[] };
+    },
   ): AsyncGenerator<AgentChunk> {
     const startTime = Date.now();
     const responseId = generateId();
@@ -118,8 +122,8 @@ export class AgentLoop {
       message: userMessage,
     });
 
-    // Get tool definitions if a registry is available
-    const toolDefs = this._toolRegistry?.getDefinitions() ?? [];
+    // Get tool definitions if a registry is available (filtered by allow/deny if provided)
+    const toolDefs = this._toolRegistry?.getDefinitions(options?.toolFilter) ?? [];
     let totalToolCalls = 0;
     let consecutiveSameTool = 0;
     let lastToolName = "";

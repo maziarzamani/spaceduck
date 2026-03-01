@@ -1,9 +1,9 @@
 ---
 title: "Scheduler"
-description: "How Spaceduck runs tasks on its own — on a timer, on a cron schedule, or in response to events — with budget limits that prevent surprise bills."
+description: "How spaceduck runs tasks on its own — on a timer, on a cron schedule, or in response to events — with budget limits that prevent surprise bills."
 ---
 
-Spaceduck can act without being asked. The scheduler lets the assistant wake up on a timer, run a task, and decide what to do with the result — notify you, update memory, chain to another task, or stay silent.
+spaceduck can act without being asked. The scheduler lets the assistant wake up on a timer, run a task, and decide what to do with the result — notify you, update memory, chain to another task, or stay silent.
 
 Every task runs within a budget. No budget, no execution.
 
@@ -49,8 +49,11 @@ Every task has per-run limits. If you don't set them, defaults apply.
 | Cost | $0.50 | Task aborted |
 | Wall clock | 5 minutes | Task aborted |
 | Tool calls | 10 | Task aborted |
+| Memory writes | 10 | Writes silently dropped |
 
 A warning fires at 80%. Budget-exceeded tasks go straight to the dead letter queue — no retries.
+
+Cost tracking is cache-aware. Providers that report cache read/write token counts get accurate pricing. Unknown models fall back to a conservative default rate with a log warning.
 
 ### Global limits
 
@@ -89,6 +92,16 @@ Scheduler settings live in `spaceduck.config.json5` under the `scheduler` key. A
 | `maxConcurrentTasks` | `3` | Max tasks running in parallel |
 
 Budget defaults and retry settings are also configurable. See **Settings > Scheduler** once enabled.
+
+## Skills integration
+
+Tasks can reference a `skillId` to run with a specific [skill's](/concepts/skills) instructions and tool restrictions. When a task runs with a skill:
+
+- The agent only sees tools permitted by the skill's `toolAllow`/`toolDeny` lists (intersected with any task-level restrictions)
+- Memory writes are tagged with the skill's ID for provenance
+- The skill's budget fields merge with the task's budget (task-level overrides win)
+
+See [Skills](/concepts/skills) for the SKILL.md format and [Security](/concepts/security) for how these layers compose.
 
 <Warning>
 The scheduler is opt-in. It does nothing until you set `scheduler.enabled: true` and create at least one task.

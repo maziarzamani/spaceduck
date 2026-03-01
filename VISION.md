@@ -35,7 +35,7 @@ Tool usage must be transparent (the user sees what ran), scoped (not everything 
 
 Small, shippable increments beat big rewrites. Tests and deterministic behavior (regex extraction, transactional upserts, SHA-256 dedup) provide confidence. E2E tests run against real models.
 
-## What good looks like (12–18 months)
+## What good looks like (12-18 months)
 
 A Spaceduck user can:
 
@@ -44,6 +44,19 @@ A Spaceduck user can:
 - Connect any model provider (local or cloud) in minutes
 - Browse, fetch, and parse documents with clear tool traces
 - Run the gateway locally or on a server and use clients safely from anywhere
+- Schedule autonomous tasks (heartbeat, cron, event-driven) with per-task budget enforcement
+- Install community skills with sandboxed execution and automatic security scanning
+- Trust that no task can run up an unbounded bill or flood the memory store
+
+## Autonomous agent roadmap
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 1 | Budget-aware task scheduler, persistent queue with session lanes, per-task + global budget enforcement | Done |
+| 1.5 | Universal injection detection, cache-aware pricing, memory isolation hardening | Done |
+| 2a | Skill runtime -- SKILL.md parser, sandboxed execution, security scanner, first-party skills | Next |
+| 2b | Marketplace -- skill registry, trust scoring, install/uninstall, revenue sharing | Planned |
+| 3 | Checkpointing, multi-agent coordination, workflow builder UI | Planned |
 
 ## Anti-goals
 

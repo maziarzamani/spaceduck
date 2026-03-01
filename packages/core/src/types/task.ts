@@ -22,6 +22,8 @@ export interface TaskDefinition {
   /** These tools are blocked for the task (denylist). */
   readonly toolDeny?: string[];
   readonly resultRoute: TaskResultRoute;
+  /** Which skill this task belongs to (set automatically by the scheduler when a skill creates a task). */
+  readonly skillId?: string;
 }
 
 // ---------------------------------------------------------------------------
