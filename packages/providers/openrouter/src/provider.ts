@@ -4,13 +4,12 @@
 
 import type {
   Message,
-  Provider,
   ProviderOptions,
   ProviderChunk,
   ProviderErrorCode,
   ToolDefinition,
 } from "@spaceduck/core";
-import { ProviderError } from "@spaceduck/core";
+import { ProviderError, AbstractProvider } from "@spaceduck/core";
 
 export interface OpenRouterProviderConfig {
   readonly apiKey: string;
@@ -61,8 +60,19 @@ interface WireChoice {
   finish_reason?: string | null;
 }
 
+interface WireUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+    cache_write_tokens?: number;
+  };
+}
+
 interface WireChunk {
   choices?: WireChoice[];
+  usage?: WireUsage;
 }
 
 // ── Conversion helpers ──────────────────────────────────────────────────
@@ -156,18 +166,19 @@ function classifyError(err: unknown): ProviderErrorCode {
 
 // ── Provider ────────────────────────────────────────────────────────────
 
-export class OpenRouterProvider implements Provider {
+export class OpenRouterProvider extends AbstractProvider {
   readonly name = "openrouter";
   private readonly apiKey: string;
   private readonly model: string;
   private readonly baseUrl = "https://openrouter.ai/api/v1";
 
   constructor(config: OpenRouterProviderConfig) {
+    super();
     this.apiKey = config.apiKey;
     this.model = config.model ?? "nvidia/nemotron-3-nano-30b-a3b:free";
   }
 
-  async *chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {
+  protected async *_chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {
     const wireMessages = toWireMessages(messages);
 
     // Build request body
@@ -223,6 +234,7 @@ export class OpenRouterProvider implements Provider {
         number,
         { id: string; name: string; arguments: string }
       >();
+      let lastUsage: WireUsage | undefined;
 
       while (true) {
         if (options?.signal?.aborted) return;
@@ -248,6 +260,10 @@ export class OpenRouterProvider implements Provider {
             chunk = JSON.parse(data);
           } catch {
             continue;
+          }
+
+          if (chunk.usage) {
+            lastUsage = chunk.usage;
           }
 
           const choice = chunk.choices?.[0];
@@ -315,6 +331,20 @@ export class OpenRouterProvider implements Provider {
             toolCall: { id: tc.id, name: tc.name, args },
           };
         }
+      }
+
+      if (lastUsage) {
+        const details = lastUsage.prompt_tokens_details;
+        yield {
+          type: "usage",
+          usage: {
+            inputTokens: lastUsage.prompt_tokens,
+            outputTokens: lastUsage.completion_tokens,
+            totalTokens: lastUsage.total_tokens,
+            ...(details?.cached_tokens != null && { cacheReadTokens: details.cached_tokens }),
+            ...(details?.cache_write_tokens != null && { cacheWriteTokens: details.cache_write_tokens }),
+          },
+        };
       }
     } catch (err) {
       if (options?.signal?.aborted) return;

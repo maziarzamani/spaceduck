@@ -14,6 +14,7 @@ export type SSEEvent =
   | { type: "reasoning"; text: string }
   | { type: "tool_delta"; index: number; id?: string; name?: string; arguments?: string }
   | { type: "finish"; reason: string | null }
+  | { type: "usage"; promptTokens: number; completionTokens: number; totalTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number }
   | { type: "done" };
 
 /**
@@ -53,6 +54,18 @@ export function processSSEBuffer(
 
     const chunk = parseChunk(data);
     if (!chunk) continue;
+
+    if (chunk.usage) {
+      const details = chunk.usage.prompt_tokens_details;
+      events.push({
+        type: "usage",
+        promptTokens: chunk.usage.prompt_tokens,
+        completionTokens: chunk.usage.completion_tokens,
+        totalTokens: chunk.usage.total_tokens,
+        ...(details?.cached_tokens != null && { cacheReadTokens: details.cached_tokens }),
+        ...(details?.cache_write_tokens != null && { cacheWriteTokens: details.cache_write_tokens }),
+      });
+    }
 
     const choice = chunk.choices?.[0];
     if (!choice) continue;

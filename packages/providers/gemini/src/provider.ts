@@ -4,8 +4,8 @@
 
 import { GoogleGenAI } from "@google/genai";
 import type { Content, FunctionDeclaration } from "@google/genai";
-import type { Message, Provider, ProviderOptions, ProviderChunk, ProviderErrorCode, ToolDefinition } from "@spaceduck/core";
-import { ProviderError } from "@spaceduck/core";
+import type { Message, ProviderOptions, ProviderChunk, ProviderErrorCode, ToolDefinition } from "@spaceduck/core";
+import { ProviderError, AbstractProvider } from "@spaceduck/core";
 
 export interface GeminiProviderConfig {
   readonly apiKey: string;
@@ -123,17 +123,18 @@ function classifyError(err: unknown): ProviderErrorCode {
   return "unknown";
 }
 
-export class GeminiProvider implements Provider {
+export class GeminiProvider extends AbstractProvider {
   readonly name = "gemini";
   private readonly client: GoogleGenAI;
   private readonly model: string;
 
   constructor(config: GeminiProviderConfig) {
+    super();
     this.client = new GoogleGenAI({ apiKey: config.apiKey });
     this.model = config.model ?? "gemini-2.5-flash";
   }
 
-  async *chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {
+  protected async *_chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {
     const { contents, systemInstruction } = toGeminiContents(messages);
 
     // Build config with optional tools
@@ -155,9 +156,16 @@ export class GeminiProvider implements Provider {
         config: Object.keys(config).length > 0 ? config : undefined,
       });
 
+      let lastUsage: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number; cachedContentTokenCount?: number } | undefined;
+
       for await (const chunk of response) {
         if (options?.signal?.aborted) {
           return;
+        }
+
+        const meta = (chunk as any).usageMetadata;
+        if (meta) {
+          lastUsage = meta;
         }
 
         // Check for function calls in this chunk
@@ -180,6 +188,20 @@ export class GeminiProvider implements Provider {
         if (text) {
           yield { type: "text", text };
         }
+      }
+
+      if (lastUsage && lastUsage.promptTokenCount !== undefined) {
+        const input = lastUsage.promptTokenCount;
+        const output = lastUsage.candidatesTokenCount ?? 0;
+        yield {
+          type: "usage",
+          usage: {
+            inputTokens: input,
+            outputTokens: output,
+            totalTokens: lastUsage.totalTokenCount ?? (input + output),
+            ...(lastUsage.cachedContentTokenCount != null && { cacheReadTokens: lastUsage.cachedContentTokenCount }),
+          },
+        };
       }
     } catch (err) {
       if (options?.signal?.aborted) {

@@ -36,8 +36,17 @@ export interface WireChoice {
   finish_reason?: string | null;
 }
 
+export interface WireUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+    cache_write_tokens?: number;
+  };
+}
+
 export interface WireChunk {
   choices?: WireChoice[];
-  // Extra fields (timings, usage, system_fingerprint, etc.) are intentionally
-  // not typed here — they are ignored by the parser.
+  usage?: WireUsage;
 }

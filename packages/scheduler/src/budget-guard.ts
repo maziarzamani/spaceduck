@@ -1,6 +1,6 @@
 // BudgetGuard: per-task budget enforcement via provider counting proxy
 
-import type { TaskBudget, BudgetSnapshot, Task, EventBus } from "@spaceduck/core";
+import type { TaskBudget, BudgetSnapshot, Task, EventBus, ProviderUsage } from "@spaceduck/core";
 
 const CHARS_PER_TOKEN = 3;
 
@@ -74,10 +74,11 @@ export class BudgetGuard {
    * Replace the char-estimated token count with exact provider-reported usage.
    * Call once when the provider yields a usage chunk at end of response.
    */
-  replaceWithExactUsage(inputTokens: number, outputTokens: number): void {
+  replaceWithExactUsage(usage: ProviderUsage, estimatedCostUsd?: number): void {
     this._snapshot = {
       ...this._snapshot,
-      tokensUsed: inputTokens + outputTokens,
+      tokensUsed: usage.inputTokens + usage.outputTokens,
+      estimatedCostUsd: estimatedCostUsd ?? this._snapshot.estimatedCostUsd,
     };
     this.checkThresholds();
   }

@@ -11,12 +11,11 @@
 
 import type {
   Message,
-  Provider,
   ProviderOptions,
   ProviderChunk,
   ToolDefinition,
 } from "@spaceduck/core";
-import { ProviderError } from "@spaceduck/core";
+import { ProviderError, AbstractProvider } from "@spaceduck/core";
 import type { WireMessage, WireToolDef } from "./wire";
 import { processSSEBuffer } from "./sse";
 import { ThinkStripper } from "./think-stripper";
@@ -128,7 +127,7 @@ function toWireTools(tools: ToolDefinition[]): WireToolDef[] {
 
 // ── Provider ─────────────────────────────────────────────────────────────────
 
-export class OpenAICompatibleProvider implements Provider {
+export class OpenAICompatibleProvider extends AbstractProvider {
   readonly name: string;
   protected readonly model: string | null;
   protected readonly baseUrl: string;
@@ -139,6 +138,7 @@ export class OpenAICompatibleProvider implements Provider {
   private readonly extraBody: Record<string, unknown>;
 
   constructor(config: OpenAICompatibleConfig) {
+    super();
     this.name = config.name;
     this.model = config.model ?? null;
     this.baseUrl = normalizeBaseUrl(config.baseUrl);
@@ -149,7 +149,7 @@ export class OpenAICompatibleProvider implements Provider {
     this.extraBody = config.extraBody ?? {};
   }
 
-  async *chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {
+  protected async *_chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {
     const hasTools = !!(options?.tools && options.tools.length > 0);
 
     const body: Record<string, unknown> = {
@@ -179,6 +179,7 @@ export class OpenAICompatibleProvider implements Provider {
 
     const thinkStripper = this.stripThinkTags ? new ThinkStripper() : null;
     const toolCallAccumulator = new Map<number, { id: string; name: string; arguments: string }>();
+    let lastUsage: { promptTokens: number; completionTokens: number; totalTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number } | undefined;
 
     try {
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -242,6 +243,10 @@ export class OpenAICompatibleProvider implements Provider {
             }
           }
 
+          if (event.type === "usage") {
+            lastUsage = event;
+          }
+
           if (event.type === "finish") {
             if (
               (event.reason === "tool_calls" || event.reason === "stop") &&
@@ -265,6 +270,19 @@ export class OpenAICompatibleProvider implements Provider {
       // Emit any tool calls not yet flushed by a finish event
       if (toolCallAccumulator.size > 0) {
         yield* flushToolCalls(toolCallAccumulator);
+      }
+
+      if (lastUsage) {
+        yield {
+          type: "usage",
+          usage: {
+            inputTokens: lastUsage.promptTokens,
+            outputTokens: lastUsage.completionTokens,
+            totalTokens: lastUsage.totalTokens,
+            ...(lastUsage.cacheReadTokens != null && { cacheReadTokens: lastUsage.cacheReadTokens }),
+            ...(lastUsage.cacheWriteTokens != null && { cacheWriteTokens: lastUsage.cacheWriteTokens }),
+          },
+        };
       }
     } catch (err) {
       if (options?.signal?.aborted) return;

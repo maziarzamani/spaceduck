@@ -24,6 +24,10 @@ export interface ProviderUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly totalTokens: number;
+  /** Tokens served from prompt cache (billed at a discounted rate). */
+  readonly cacheReadTokens?: number;
+  /** Tokens written into prompt cache (typically billed at full input rate). */
+  readonly cacheWriteTokens?: number;
 }
 
 /**

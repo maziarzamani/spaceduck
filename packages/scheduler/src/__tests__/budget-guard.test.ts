@@ -180,15 +180,27 @@ describe("BudgetGuard", () => {
     guard.trackChars(300); // char estimate: 100 tokens
     expect(guard.snapshot.tokensUsed).toBe(100);
 
-    guard.replaceWithExactUsage(150, 5); // exact: 155 total
+    guard.replaceWithExactUsage({ inputTokens: 150, outputTokens: 5, totalTokens: 155 });
     expect(guard.snapshot.tokensUsed).toBe(155);
   });
 
   it("replaceWithExactUsage triggers abort when over budget", () => {
-    guard.replaceWithExactUsage(900, 200); // 1100 > 1000 limit
+    guard.replaceWithExactUsage({ inputTokens: 900, outputTokens: 200, totalTokens: 1100 });
     expect(guard.isExceeded).toBe(true);
     const exceeded = eventBus.emitted.filter((e) => e.event === "task:budget_exceeded");
     expect(exceeded.length).toBe(1);
     expect(exceeded[0].data.limitExceeded).toBe("tokens");
+  });
+
+  it("replaceWithExactUsage accepts cache token fields", () => {
+    guard.replaceWithExactUsage({
+      inputTokens: 500,
+      outputTokens: 100,
+      totalTokens: 600,
+      cacheReadTokens: 200,
+      cacheWriteTokens: 50,
+    }, 0.01);
+    expect(guard.snapshot.tokensUsed).toBe(600);
+    expect(guard.snapshot.estimatedCostUsd).toBe(0.01);
   });
 });

@@ -6,6 +6,7 @@ import type {
   ConversationStore, MemoryStore, MemoryInput,
 } from "@spaceduck/core";
 import { BudgetGuard } from "./budget-guard";
+import type { PricingLookup } from "./pricing";
 import type { TaskRunResult } from "./queue";
 
 export type TaskRunnerFn = (task: Task, chainedContext?: string) => Promise<TaskRunResult>;
@@ -18,6 +19,8 @@ export interface TaskRunnerDeps {
   readonly logger: Logger;
   readonly defaultBudget: Required<TaskBudget>;
   readonly enqueueFn?: (taskDefinitionId: string, context?: string) => Promise<void>;
+  readonly pricingLookup?: PricingLookup;
+  readonly modelName?: string;
 }
 
 function generateId(): string {
@@ -70,7 +73,10 @@ export function createTaskRunner(deps: TaskRunnerDeps): TaskRunnerFn {
         } else if (chunk.type === "tool_call") {
           guard.trackToolCall();
         } else if (chunk.type === "usage") {
-          guard.replaceWithExactUsage(chunk.usage.inputTokens, chunk.usage.outputTokens);
+          const cost = deps.pricingLookup && deps.modelName
+            ? deps.pricingLookup.estimate(deps.modelName, chunk.usage)
+            : undefined;
+          guard.replaceWithExactUsage(chunk.usage, cost);
         }
       }
 

@@ -226,6 +226,65 @@ describe("OpenRouterProvider", () => {
     }
   });
 
+  test("yields usage chunk when present in SSE stream", async () => {
+    const usageChunk = `data: ${JSON.stringify({
+      choices: [{ delta: {}, finish_reason: "stop" }],
+      usage: { prompt_tokens: 25, completion_tokens: 8, total_tokens: 33 },
+    })}`;
+
+    globalThis.fetch = mock(() =>
+      Promise.resolve(sseResponse([sseTextChunk("Hi"), usageChunk, sseDone])),
+    ) as any;
+
+    const p = makeProvider();
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+
+    const usage = chunks.find((c) => c.type === "usage");
+    expect(usage).toBeDefined();
+    if (usage && usage.type === "usage") {
+      expect(usage.usage.inputTokens).toBe(25);
+      expect(usage.usage.outputTokens).toBe(8);
+      expect(usage.usage.totalTokens).toBe(33);
+    }
+  });
+
+  test("includes cache token fields in usage chunk when present", async () => {
+    const usageChunk = `data: ${JSON.stringify({
+      choices: [{ delta: {}, finish_reason: "stop" }],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 20,
+        total_tokens: 120,
+        prompt_tokens_details: { cached_tokens: 60, cache_write_tokens: 10 },
+      },
+    })}`;
+
+    globalThis.fetch = mock(() =>
+      Promise.resolve(sseResponse([sseTextChunk("ok"), usageChunk, sseDone])),
+    ) as any;
+
+    const p = makeProvider();
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+
+    const usage = chunks.find((c) => c.type === "usage");
+    expect(usage).toBeDefined();
+    if (usage && usage.type === "usage") {
+      expect(usage.usage.cacheReadTokens).toBe(60);
+      expect(usage.usage.cacheWriteTokens).toBe(10);
+    }
+  });
+
+  test("omits usage chunk when not present in stream", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(sseResponse([sseTextChunk("Hello"), sseFinish("stop"), sseDone])),
+    ) as any;
+
+    const p = makeProvider();
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+
+    expect(chunks.every((c) => c.type !== "usage")).toBe(true);
+  });
+
   test("flushes remaining tool calls at end of stream", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(
