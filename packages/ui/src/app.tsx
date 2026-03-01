@@ -6,12 +6,13 @@ import { Button } from "./ui/button";
 import { ChatView } from "./components/chat-view";
 import { OnboardingView } from "./components/onboarding-view";
 import { SettingsView } from "./components/settings-view";
+import { TasksView } from "./components/tasks-view";
 import { DictationOverlay } from "./components/dictation-overlay";
 import { TooltipProvider } from "./ui/tooltip";
 import { Toaster } from "sonner";
 import type { ChatInputRecorderHandle } from "./components/chat-input";
 
-export type AppView = "onboarding" | "chat" | "settings";
+export type AppView = "onboarding" | "chat" | "settings" | "tasks";
 
 function resolveInitialView(): { view: AppView; setupNeeded: boolean } {
   const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
@@ -49,7 +50,7 @@ function AppInner() {
   const [viewState] = useState(resolveInitialView);
   const [view, setView] = useState<AppView>(viewState.view);
   const [setupBanner, setSetupBanner] = useState(false);
-  const shouldConnect = view === "chat" || view === "settings";
+  const shouldConnect = view === "chat" || view === "settings" || view === "tasks";
   const ws = useSpaceduckWs(shouldConnect);
   const chatRecorderRef = useRef<ChatInputRecorderHandle | null>(null);
 
@@ -160,12 +161,25 @@ function AppInner() {
     );
   }
 
+  if (view === "tasks") {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <TasksView onBack={() => setView("chat")} />
+      </TooltipProvider>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={300}>
       {setupBanner && (
         <SetupBanner onFinish={handleFinishSetup} onDismiss={handleDismissBanner} />
       )}
-      <ChatView ws={ws} onOpenSettings={() => setView("settings")} recorderRef={chatRecorderRef} />
+      <ChatView
+        ws={ws}
+        onOpenSettings={() => setView("settings")}
+        onOpenTasks={() => setView("tasks")}
+        recorderRef={chatRecorderRef}
+      />
       {dictation.supported && (
         <DictationOverlay state={dictation.state} durationMs={dictation.durationMs} />
       )}

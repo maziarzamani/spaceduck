@@ -43,6 +43,8 @@ interface TaskRow {
   updated_at: number;
   error: string | null;
   budget_consumed: string | null;
+  result_text: string | null;
+  skill_id: string | null;
 }
 
 function rowToTask(row: TaskRow): Task {
@@ -55,6 +57,7 @@ function rowToTask(row: TaskRow): Task {
     toolAllow: row.tool_allow ? JSON.parse(row.tool_allow) : undefined,
     toolDeny: row.tool_deny ? JSON.parse(row.tool_deny) : undefined,
     resultRoute: parseResultRoute(row.result_route),
+    skillId: row.skill_id ?? undefined,
   };
 
   const schedule: TaskSchedule = {
@@ -86,6 +89,7 @@ function rowToTask(row: TaskRow): Task {
     updatedAt: row.updated_at,
     error: row.error ?? undefined,
     budgetConsumed: row.budget_consumed ? JSON.parse(row.budget_consumed) : undefined,
+    resultText: row.result_text ?? undefined,
   };
 }
 
@@ -120,8 +124,9 @@ export class SqliteTaskStore implements TaskStore {
   ) {}
 
   async migrate(): Promise<void> {
+    const LATEST_VERSION = 3;
     const currentVersion = this.getCurrentVersion();
-    if (currentVersion >= 1) {
+    if (currentVersion >= LATEST_VERSION) {
       this.logger.info("Scheduler schema is up to date", { version: currentVersion });
       return;
     }
@@ -191,11 +196,11 @@ export class SqliteTaskStore implements TaskStore {
         .query(
           `INSERT INTO tasks
              (id, type, name, prompt, system_prompt, conversation_id,
-              tool_allow, tool_deny, result_route, cron, interval_ms,
+              tool_allow, tool_deny, result_route, skill_id, cron, interval_ms,
               event_trigger, run_immediately, max_tokens, max_cost_usd,
               max_wall_clock_ms, max_tool_calls, status, priority,
               next_run_at, max_retries, created_at, updated_at)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?22)`,
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?23)`,
         )
         .run(
           id, input.definition.type, input.definition.name,
@@ -204,6 +209,7 @@ export class SqliteTaskStore implements TaskStore {
           input.definition.toolAllow ? JSON.stringify(input.definition.toolAllow) : null,
           input.definition.toolDeny ? JSON.stringify(input.definition.toolDeny) : null,
           serializeResultRoute(input.definition.resultRoute),
+          input.definition.skillId ?? null,
           input.schedule.cron ?? null, input.schedule.intervalMs ?? null,
           input.schedule.eventTrigger ?? null,
           input.schedule.runImmediately ? 1 : 0,
@@ -292,10 +298,11 @@ export class SqliteTaskStore implements TaskStore {
       this.db
         .query(
           `UPDATE tasks SET status = ?1, last_run_at = ?2, next_run_at = ?3,
-             budget_consumed = ?4, error = NULL, retry_count = 0, updated_at = ?2
-           WHERE id = ?5`,
+             budget_consumed = ?4, error = NULL, retry_count = 0, updated_at = ?2,
+             result_text = ?5
+           WHERE id = ?6`,
         )
-        .run(nextStatus, now, nextAt, JSON.stringify(snapshot), id);
+        .run(nextStatus, now, nextAt, JSON.stringify(snapshot), resultText ?? null, id);
 
       await this.recordRun({
         taskId: id, startedAt: now - snapshot.wallClockMs,
@@ -444,6 +451,41 @@ export class SqliteTaskStore implements TaskStore {
       return ok({ id, ...run });
     } catch (cause) {
       return err(new SpaceduckError(`Failed to record run: ${cause}`, "TASK_ERROR", cause));
+    }
+  }
+
+  async listRuns(taskId: string, limit = 20): Promise<Result<TaskRun[]>> {
+    try {
+      const rows = this.db
+        .query(
+          `SELECT id, task_id, started_at, completed_at, status, error, budget_consumed, result_text
+           FROM task_runs WHERE task_id = ?1 ORDER BY started_at DESC LIMIT ?2`,
+        )
+        .all(taskId, limit) as Array<{
+          id: string;
+          task_id: string;
+          started_at: number;
+          completed_at: number | null;
+          status: string;
+          error: string | null;
+          budget_consumed: string | null;
+          result_text: string | null;
+        }>;
+
+      return ok(
+        rows.map((r) => ({
+          id: r.id,
+          taskId: r.task_id,
+          startedAt: r.started_at,
+          completedAt: r.completed_at,
+          status: r.status as TaskRun["status"],
+          error: r.error ?? undefined,
+          budgetConsumed: r.budget_consumed ? JSON.parse(r.budget_consumed) : undefined,
+          resultText: r.result_text ?? undefined,
+        })),
+      );
+    } catch (cause) {
+      return err(new SpaceduckError(`Failed to list runs: ${cause}`, "TASK_ERROR", cause));
     }
   }
 }

@@ -85,6 +85,16 @@ export async function handleSchedulerRoute(
     }
   }
 
+  // GET /api/tasks/:id/runs — run history
+  const runsMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/runs$/);
+  if (runsMatch && req.method === "GET") {
+    const taskId = runsMatch[1];
+    const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
+    const result = await store.listRuns(taskId, limit);
+    if (!result.ok) return Response.json({ error: result.error.message }, { status: 500 });
+    return Response.json({ runs: result.value });
+  }
+
   // POST /api/tasks/:id/retry
   const retryMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/retry$/);
   if (retryMatch && req.method === "POST") {
