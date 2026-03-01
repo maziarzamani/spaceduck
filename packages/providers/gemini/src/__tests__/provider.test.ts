@@ -236,6 +236,74 @@ describe("GeminiProvider", () => {
     expect(chunks).toEqual([]);
   });
 
+  test("yields usage chunk from usageMetadata", async () => {
+    mockGenerateContentStream.mockReturnValue(
+      Promise.resolve(
+        (async function* () {
+          yield { text: "Hi" };
+          yield {
+            text: " there",
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 4, totalTokenCount: 14 },
+          };
+        })(),
+      ),
+    );
+
+    const p = makeProvider();
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+
+    const usage = chunks.find((c) => c.type === "usage");
+    expect(usage).toBeDefined();
+    if (usage && usage.type === "usage") {
+      expect(usage.usage.inputTokens).toBe(10);
+      expect(usage.usage.outputTokens).toBe(4);
+      expect(usage.usage.totalTokens).toBe(14);
+    }
+  });
+
+  test("includes cacheReadTokens from cachedContentTokenCount", async () => {
+    mockGenerateContentStream.mockReturnValue(
+      Promise.resolve(
+        (async function* () {
+          yield {
+            text: "ok",
+            usageMetadata: {
+              promptTokenCount: 100,
+              candidatesTokenCount: 20,
+              totalTokenCount: 120,
+              cachedContentTokenCount: 50,
+            },
+          };
+        })(),
+      ),
+    );
+
+    const p = makeProvider();
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+
+    const usage = chunks.find((c) => c.type === "usage");
+    expect(usage).toBeDefined();
+    if (usage && usage.type === "usage") {
+      expect(usage.usage.cacheReadTokens).toBe(50);
+      expect(usage.usage.cacheWriteTokens).toBeUndefined();
+    }
+  });
+
+  test("omits usage chunk when usageMetadata not present", async () => {
+    mockGenerateContentStream.mockReturnValue(
+      Promise.resolve(
+        (async function* () {
+          yield { text: "Hello" };
+        })(),
+      ),
+    );
+
+    const p = makeProvider();
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+
+    expect(chunks.every((c) => c.type !== "usage")).toBe(true);
+  });
+
   test("sends tool definitions in Gemini format", async () => {
     let capturedArgs: Record<string, unknown> = {};
     mockGenerateContentStream.mockImplementation((args: Record<string, unknown>) => {

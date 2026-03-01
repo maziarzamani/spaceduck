@@ -78,7 +78,10 @@
       {
         "group": "Concepts",
         "pages": [
-          "concepts/memory"
+          "concepts/memory",
+          "concepts/scheduler",
+          "concepts/skills",
+          "concepts/security"
         ]
       },
       {

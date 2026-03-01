@@ -46,6 +46,7 @@ describe("BedrockProvider", () => {
               },
             },
             stopReason: "end_turn",
+            usage: { inputTokens: 12, outputTokens: 5, totalTokens: 17 },
           }),
           { status: 200 },
         ),
@@ -55,7 +56,31 @@ describe("BedrockProvider", () => {
     const p = new BedrockProvider({ apiKey: "test-key" });
     const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
 
-    expect(chunks).toEqual([{ type: "text", text: "Hello from Bedrock" }]);
+    expect(chunks).toEqual([
+      { type: "text", text: "Hello from Bedrock" },
+      { type: "usage", usage: { inputTokens: 12, outputTokens: 5, totalTokens: 17 } },
+    ]);
+  });
+
+  test("omits usage chunk when API response has no usage field", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            output: {
+              message: { role: "assistant", content: [{ text: "ok" }] },
+            },
+            stopReason: "end_turn",
+          }),
+          { status: 200 },
+        ),
+      ),
+    ) as any;
+
+    const p = new BedrockProvider({ apiKey: "test-key" });
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+
+    expect(chunks).toEqual([{ type: "text", text: "ok" }]);
   });
 
   test("yields tool_call chunks from Converse API response", async () => {
@@ -181,6 +206,60 @@ describe("BedrockProvider", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderError);
       expect((err as ProviderError).providerCode).toBe("invalid_request");
+    }
+  });
+
+  test("includes cache token fields in usage chunk when present", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+            stopReason: "end_turn",
+            usage: {
+              inputTokens: 100,
+              outputTokens: 20,
+              totalTokens: 120,
+              cacheReadInputTokens: 60,
+              cacheWriteInputTokens: 15,
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    ) as any;
+
+    const p = new BedrockProvider({ apiKey: "test-key" });
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+    const usage = chunks.find((c) => c.type === "usage");
+    expect(usage).toBeDefined();
+    if (usage && usage.type === "usage") {
+      expect(usage.usage.cacheReadTokens).toBe(60);
+      expect(usage.usage.cacheWriteTokens).toBe(15);
+    }
+  });
+
+  test("omits cache fields when not present in API response", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+            stopReason: "end_turn",
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          }),
+          { status: 200 },
+        ),
+      ),
+    ) as any;
+
+    const p = new BedrockProvider({ apiKey: "test-key" });
+    const chunks = await collectChunks(p.chat([msg({ role: "user", content: "hi" })]));
+    const usage = chunks.find((c) => c.type === "usage");
+    expect(usage).toBeDefined();
+    if (usage && usage.type === "usage") {
+      expect(usage.usage.cacheReadTokens).toBeUndefined();
+      expect(usage.usage.cacheWriteTokens).toBeUndefined();
     }
   });
 

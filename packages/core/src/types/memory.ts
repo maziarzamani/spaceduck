@@ -132,6 +132,10 @@ export interface MemorySource {
   readonly conversationId?: string;
   readonly runId?: string;
   readonly toolName?: string;
+  /** Which scheduled task wrote this memory (null for interactive conversations). */
+  readonly taskId?: string;
+  /** Which skill wrote this memory (Phase 2, null until skill system ships). */
+  readonly skillId?: string;
 }
 
 export interface MemoryRecord {
@@ -265,6 +269,14 @@ export interface MemoryRecallOptions {
   readonly minConfidence?: number;
   readonly strategy?: "vector" | "fts" | "hybrid";
   readonly halfLifeDays?: number;
+  /** Max tokens from memory to include in context (uses pre-computed estimated_tokens). */
+  readonly maxMemoryTokens?: number;
+  /** Max discrete memory entries to retrieve. */
+  readonly maxEntries?: number;
+  /** Exclude memories created by tasks (source_task_id IS NOT NULL). Useful for interactive sessions. */
+  readonly excludeTaskMemories?: boolean;
+  /** Only include memories from this specific task. Useful for task continuations. */
+  readonly sourceTaskId?: string;
 }
 
 export interface ScoredMemory {

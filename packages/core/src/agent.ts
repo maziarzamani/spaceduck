@@ -54,7 +54,8 @@ export interface AgentRunResult {
 export type AgentChunk =
   | { type: "text"; text: string }
   | { type: "tool_call"; toolCall: ToolCall }
-  | { type: "tool_result"; toolResult: ToolResult };
+  | { type: "tool_result"; toolResult: ToolResult }
+  | { type: "usage"; usage: import("./types/provider").ProviderUsage };
 
 const DEFAULT_MAX_TOOL_ROUNDS = 30;
 const MAX_CONSECUTIVE_SAME_TOOL = 3;
@@ -94,7 +95,11 @@ export class AgentLoop {
   async *run(
     conversationId: string,
     userMessage: Message,
-    options?: { signal?: AbortSignal },
+    options?: {
+      signal?: AbortSignal;
+      memoryRecallOptions?: Partial<import("./types").MemoryRecallOptions>;
+      toolFilter?: { allow?: string[]; deny?: string[] };
+    },
   ): AsyncGenerator<AgentChunk> {
     const startTime = Date.now();
     const responseId = generateId();
@@ -117,8 +122,8 @@ export class AgentLoop {
       message: userMessage,
     });
 
-    // Get tool definitions if a registry is available
-    const toolDefs = this._toolRegistry?.getDefinitions() ?? [];
+    // Get tool definitions if a registry is available (filtered by allow/deny if provided)
+    const toolDefs = this._toolRegistry?.getDefinitions(options?.toolFilter) ?? [];
     let totalToolCalls = 0;
     let consecutiveSameTool = 0;
     let lastToolName = "";
@@ -128,7 +133,10 @@ export class AgentLoop {
       if (options?.signal?.aborted) return;
 
       // Build context (re-read each round since tool messages get appended)
-      const contextResult = await this.deps.contextBuilder.buildContext(conversationId);
+      const contextResult = await this.deps.contextBuilder.buildContext(
+        conversationId,
+        options?.memoryRecallOptions ? { memoryRecallOptions: options.memoryRecallOptions } : undefined,
+      );
       if (!contextResult.ok) {
         this.logger.error("Failed to build context", {
           conversationId,
@@ -158,6 +166,8 @@ export class AgentLoop {
             yield { type: "text", text: chunk.text };
           } else if (chunk.type === "tool_call") {
             pendingToolCalls.push(chunk.toolCall);
+          } else if (chunk.type === "usage") {
+            yield { type: "usage", usage: chunk.usage };
           }
         }
         status = pendingToolCalls.length > 0 || textContent.length > 0 ? "completed" : status;

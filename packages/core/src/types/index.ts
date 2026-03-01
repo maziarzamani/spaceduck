@@ -15,6 +15,7 @@ export type {
   ProviderOptions,
   ProviderErrorCode,
   ProviderChunk,
+  ProviderUsage,
 } from "./provider";
 
 export type {
@@ -86,6 +87,23 @@ export type {
   WsServerEnvelope,
   ConversationSummary,
 } from "./protocol";
+
+export type {
+  TaskType,
+  TaskDefinition,
+  TaskSchedule,
+  TaskBudget,
+  TaskResultRoute,
+  TaskStatus,
+  BudgetSnapshot,
+  Task,
+  TaskInput,
+  TaskPatch,
+  TaskRunStatus,
+  TaskRun,
+  SpendPeriod,
+  TaskStore,
+} from "./task";
 
 export {
   SpaceduckError,

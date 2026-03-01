@@ -273,7 +273,7 @@ describe.skipIf(!LIVE)("DefaultContextBuilder — Memory v2 live integration", (
     const builder = new DefaultContextBuilder(
       convStore, logger, undefined, memoryStore,
     );
-    const result = await builder.buildContext("c1", { maxProcedures: 3 });
+    const result = await builder.buildContext("c1", { budgetOverrides: { maxProcedures: 3 } });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 

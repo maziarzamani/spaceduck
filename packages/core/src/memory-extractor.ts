@@ -29,6 +29,7 @@ import type {
 import { IMPORTANCE_MAP, CONFIDENCE_MAP } from "./types";
 import type { EventBus, SpaceduckEvents } from "./events";
 import { FactExtractor, guardFact, type FactCandidate } from "./fact-extractor";
+import { detectInjection } from "./injection-detect";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -136,6 +137,10 @@ export interface ClassifiedMemory {
 // ---------------------------------------------------------------------------
 
 export function guardMemory(content: string, kind: MemoryKind): { pass: boolean; reason?: string } {
+  if (detectInjection(content, false)) {
+    return { pass: false, reason: "injection_detected" };
+  }
+
   const base = guardFact(content);
   if (!base.pass) return { pass: false, reason: "base_guard_rejected" };
 

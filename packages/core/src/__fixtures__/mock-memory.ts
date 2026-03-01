@@ -160,6 +160,12 @@ export class MockMemoryStore implements MemoryStore {
     const allowedStatus = options?.status ?? ["active"];
     all = all.filter((m) => allowedStatus.includes(m.status));
     if (options?.kinds?.length) all = all.filter((m) => options.kinds!.includes(m.kind));
+    if (options?.excludeTaskMemories) {
+      all = all.filter((m) => !(m.source as any)?.taskId);
+    }
+    if (options?.sourceTaskId) {
+      all = all.filter((m) => (m.source as any)?.taskId === options.sourceTaskId);
+    }
 
     const queryWords = query.toLowerCase().split(/\s+/);
     const scored: ScoredMemory[] = all

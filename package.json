@@ -12,6 +12,8 @@
     "packages/channels/*",
     "packages/providers/*",
     "packages/memory/*",
+    "packages/scheduler",
+    "packages/skills",
     "packages/tools/*",
     "packages/stt/*",
     "apps/*"

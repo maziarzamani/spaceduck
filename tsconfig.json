@@ -25,7 +25,8 @@
       "@spaceduck/provider-bedrock": ["packages/providers/bedrock/src"],
       "@spaceduck/provider-gemini": ["packages/providers/gemini/src"],
       "@spaceduck/memory-sqlite": ["packages/memory/sqlite/src"],
-      "@spaceduck/tool-web-search": ["packages/tools/web-search/src"]
+      "@spaceduck/tool-web-search": ["packages/tools/web-search/src"],
+      "@spaceduck/scheduler": ["packages/scheduler/src"]
     },
     "types": ["bun-types"],
     "jsx": "react-jsx"

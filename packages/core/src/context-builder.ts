@@ -1,6 +1,6 @@
 // Context builder: assembles messages for LLM, manages token budget, handles compaction
 
-import type { Message, ConversationStore, MemoryStore, ScoredMemory, Provider, Logger } from "./types";
+import type { Message, ConversationStore, MemoryStore, ScoredMemory, Provider, Logger, MemoryRecallOptions } from "./types";
 import type { Result } from "./types";
 import { ok } from "./types";
 
@@ -24,8 +24,13 @@ export const DEFAULT_TOKEN_BUDGET: TokenBudget = {
   compactionThreshold: 0.85,
 };
 
+export interface ContextBuildOptions {
+  readonly budgetOverrides?: Partial<TokenBudget>;
+  readonly memoryRecallOptions?: Partial<MemoryRecallOptions>;
+}
+
 export interface ContextWindowManager {
-  buildContext(conversationId: string, budget?: Partial<TokenBudget>): Promise<Result<Message[]>>;
+  buildContext(conversationId: string, options?: ContextBuildOptions): Promise<Result<Message[]>>;
   compact(conversationId: string, provider: Provider): Promise<Result<void>>;
   estimateTokens(messages: Message[]): number;
   needsCompaction(messages: Message[], budget: TokenBudget): boolean;
@@ -76,9 +81,9 @@ export class DefaultContextBuilder implements ContextWindowManager {
 
   async buildContext(
     conversationId: string,
-    budgetOverrides?: Partial<TokenBudget>,
+    options?: ContextBuildOptions,
   ): Promise<Result<Message[]>> {
-    const budget = { ...DEFAULT_TOKEN_BUDGET, ...budgetOverrides };
+    const budget = { ...DEFAULT_TOKEN_BUDGET, ...options?.budgetOverrides };
 
     // Load recent messages
     const messagesResult = await this.store.loadMessages(conversationId, budget.maxTurns);
@@ -101,7 +106,7 @@ export class DefaultContextBuilder implements ContextWindowManager {
     // Inject recalled memories from MemoryStore
     const lastUserMessage = messages.filter((m) => m.role === "user").at(-1);
     if (lastUserMessage && this.memoryStore) {
-      await this.injectMemoryV2(context, lastUserMessage.content, budget);
+      await this.injectMemoryV2(context, lastUserMessage.content, budget, options?.memoryRecallOptions);
     }
 
     // Add recent conversation messages
@@ -135,12 +140,14 @@ export class DefaultContextBuilder implements ContextWindowManager {
     context: Message[],
     query: string,
     budget: TokenBudget,
+    recallOverrides?: Partial<MemoryRecallOptions>,
   ): Promise<void> {
     const totalK = budget.maxFacts + budget.maxProcedures + budget.maxEpisodes;
     const result = await this.memoryStore!.recall(query, {
       kinds: ["fact", "procedure", "episode"],
       status: ["active"],
       topK: totalK,
+      ...recallOverrides,
     });
 
     if (!result.ok || result.value.length === 0) return;

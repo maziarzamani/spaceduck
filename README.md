@@ -181,11 +181,21 @@ bash scripts/smoke-docker.sh  # Docker build + smoke test
 
 ## Roadmap
 
-Tracked in [GitHub Issues](https://github.com/maziarzamani/spaceduck/issues). Top priorities:
+Tracked in [GitHub Issues](https://github.com/maziarzamani/spaceduck/issues).
 
-1. **Per-user isolation** — scope memory by user identity across channels
-2. **Provider fallback chain** — auto-retry with a secondary provider
-3. **Memory inspector** — Web UI to browse, edit, and delete stored facts
+**Shipped**
+- Budget-aware task scheduler with persistent queue and session lanes
+- Per-task and global budget enforcement (tokens, cost, tool calls, memory writes)
+- Cache-aware pricing, universal injection detection, memory isolation hardening
+
+**In progress**
+- Skill runtime (SKILL.md parser, sandboxed execution, security scanner)
+
+**Up next**
+- Skill marketplace (registry, trust scoring, install/uninstall)
+- Per-user isolation across channels
+- Provider fallback chain
+- Memory inspector UI
 
 ---
 

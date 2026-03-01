@@ -27,6 +27,9 @@ packages/<category>/<name>/
 | Path pattern            | Purpose                      | Naming                     |
 |-------------------------|------------------------------|----------------------------|
 | `packages/core`         | Zero-dep contracts + logic   | `@spaceduck/core`          |
+| `packages/config`       | Zod config schema, hot-apply | `@spaceduck/config`        |
+| `packages/scheduler`    | Task scheduler + budget      | `@spaceduck/scheduler`     |
+| `packages/skills`       | Skill runtime + scanner      | `@spaceduck/skills`        |
 | `packages/providers/*`  | LLM provider adapters        | `@spaceduck/provider-*`    |
 | `packages/memory/*`     | Storage backends             | `@spaceduck/memory-*`      |
 | `packages/channels/*`   | Messaging channels           | `@spaceduck/channel-*`     |

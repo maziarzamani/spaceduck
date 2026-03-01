@@ -21,7 +21,6 @@
 
 import type {
   Message,
-  Provider,
   ProviderOptions,
   ProviderChunk,
   ProviderErrorCode,
@@ -29,7 +28,7 @@ import type {
   EmbeddingProvider,
   EmbedOptions,
 } from "@spaceduck/core";
-import { ProviderError } from "@spaceduck/core";
+import { ProviderError, AbstractProvider } from "@spaceduck/core";
 
 // ── Converse API wire types ───────────────────────────────────────────────────
 
@@ -66,6 +65,13 @@ interface ConverseResponse {
     };
   };
   stopReason: "end_turn" | "tool_use" | "max_tokens" | string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cacheReadInputTokens?: number;
+    cacheWriteInputTokens?: number;
+  };
 }
 
 // ── Message conversion ────────────────────────────────────────────────────────
@@ -228,13 +234,14 @@ export interface BedrockProviderConfig {
   readonly region?: string;
 }
 
-export class BedrockProvider implements Provider {
+export class BedrockProvider extends AbstractProvider {
   readonly name = "bedrock";
   private readonly model: string;
   private readonly baseUrl: string;
   private readonly apiKey: string;
 
   constructor(config: BedrockProviderConfig = {}) {
+    super();
     this.model = config.model ?? "global.amazon.nova-2-lite-v1:0";
 
     const region = config.region ?? process.env.AWS_REGION ?? "us-east-1";
@@ -247,7 +254,7 @@ export class BedrockProvider implements Provider {
       "";
   }
 
-  async *chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {
+  protected async *_chat(messages: Message[], options?: ProviderOptions): AsyncIterable<ProviderChunk> {
     const tools = options?.tools ?? [];
     const body = toConverseRequest(messages, tools);
 
@@ -313,6 +320,19 @@ export class BedrockProvider implements Provider {
           },
         };
       }
+    }
+
+    if (data.usage) {
+      yield {
+        type: "usage",
+        usage: {
+          inputTokens: data.usage.inputTokens,
+          outputTokens: data.usage.outputTokens,
+          totalTokens: data.usage.totalTokens,
+          ...(data.usage.cacheReadInputTokens != null && { cacheReadTokens: data.usage.cacheReadInputTokens }),
+          ...(data.usage.cacheWriteInputTokens != null && { cacheWriteTokens: data.usage.cacheWriteInputTokens }),
+        },
+      };
     }
   }
 }

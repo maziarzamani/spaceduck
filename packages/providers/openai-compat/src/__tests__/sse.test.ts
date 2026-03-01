@@ -33,14 +33,64 @@ describe("processSSEBuffer", () => {
     expect(events).toEqual([{ type: "done" }]);
   });
 
-  test("ignores extra top-level fields (timings, usage)", () => {
+  test("emits usage event from top-level usage field", () => {
     const chunk = JSON.stringify({
       choices: [{ delta: { content: "Hi" }, finish_reason: null }],
-      timings: { prompt_ms: 100 },
-      usage: { prompt_tokens: 5 },
+      usage: { prompt_tokens: 25, completion_tokens: 8, total_tokens: 33 },
     });
     const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
     expect(events).toContainEqual({ type: "text", text: "Hi" });
+    expect(events).toContainEqual({
+      type: "usage",
+      promptTokens: 25,
+      completionTokens: 8,
+      totalTokens: 33,
+    });
+  });
+
+  test("emits cache token fields when present in usage", () => {
+    const chunk = JSON.stringify({
+      choices: [{ delta: { content: "ok" }, finish_reason: null }],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 20,
+        total_tokens: 120,
+        prompt_tokens_details: { cached_tokens: 60, cache_write_tokens: 10 },
+      },
+    });
+    const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
+    expect(events).toContainEqual({
+      type: "usage",
+      promptTokens: 100,
+      completionTokens: 20,
+      totalTokens: 120,
+      cacheReadTokens: 60,
+      cacheWriteTokens: 10,
+    });
+  });
+
+  test("omits cache fields when prompt_tokens_details is absent", () => {
+    const chunk = JSON.stringify({
+      choices: [{ delta: { content: "ok" }, finish_reason: null }],
+      usage: { prompt_tokens: 50, completion_tokens: 10, total_tokens: 60 },
+    });
+    const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
+    const usageEvent = events.find((e) => e.type === "usage");
+    expect(usageEvent).toBeDefined();
+    if (usageEvent && usageEvent.type === "usage") {
+      expect(usageEvent.cacheReadTokens).toBeUndefined();
+      expect(usageEvent.cacheWriteTokens).toBeUndefined();
+    }
+  });
+
+  test("ignores extra top-level fields like timings", () => {
+    const chunk = JSON.stringify({
+      choices: [{ delta: { content: "Hi" }, finish_reason: null }],
+      timings: { prompt_ms: 100 },
+    });
+    const { events } = processSSEBuffer("", `data: ${chunk}\n\n`);
+    expect(events).toContainEqual({ type: "text", text: "Hi" });
+    expect(events.filter((e) => e.type === "usage")).toHaveLength(0);
   });
 
   test("emits finish event with reason", () => {

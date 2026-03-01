@@ -16,6 +16,9 @@ Never add "Made with Cursor" anywhere.
 
 - `@spaceduck/core` — zero-dependency contract package (types, interfaces, agent loop, context builder, events, middleware)
 - `@spaceduck/gateway` — composition root that wires everything together, lifecycle orchestration
+- `@spaceduck/config` — Zod-based config schema, hot-apply, model pricing
+- `@spaceduck/scheduler` — task scheduler, persistent queue, budget guards (per-task + global), task runner
+- `@spaceduck/skills` — skill runtime: SKILL.md parser, security scanner, registry with cascading memory purge
 - `@spaceduck/ui` — shared React components, hooks, and styles (used by web + desktop)
 - `@spaceduck/web` — web deployment entry point (served by gateway via Bun HTML import)
 - `@spaceduck/desktop` — Tauri v2 desktop app (embeds UI + Bun gateway sidecar)

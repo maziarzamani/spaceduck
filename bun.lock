@@ -125,7 +125,7 @@
     },
     "packages/gateway": {
       "name": "@spaceduck/gateway",
-      "version": "0.18.0",
+      "version": "0.21.0",
       "dependencies": {
         "@spaceduck/channel-whatsapp": "workspace:*",
         "@spaceduck/config": "workspace:*",
@@ -136,6 +136,7 @@
         "@spaceduck/provider-llamacpp": "workspace:*",
         "@spaceduck/provider-lmstudio": "workspace:*",
         "@spaceduck/provider-openrouter": "workspace:*",
+        "@spaceduck/skills": "workspace:*",
         "@spaceduck/stt-aws-transcribe": "workspace:*",
         "@spaceduck/stt-whisper": "workspace:*",
         "@spaceduck/tool-browser": "workspace:*",
@@ -222,6 +223,30 @@
         "@spaceduck/core": "workspace:*",
       },
       "devDependencies": {
+        "bun-types": "^1.3.9",
+      },
+    },
+    "packages/scheduler": {
+      "name": "@spaceduck/scheduler",
+      "version": "0.1.0",
+      "dependencies": {
+        "@spaceduck/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@spaceduck/memory-sqlite": "workspace:*",
+        "@spaceduck/provider-bedrock": "workspace:*",
+        "bun-types": "^1.3.9",
+      },
+    },
+    "packages/skills": {
+      "name": "@spaceduck/skills",
+      "version": "0.1.0",
+      "dependencies": {
+        "@spaceduck/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@spaceduck/memory-sqlite": "workspace:*",
+        "@spaceduck/provider-bedrock": "workspace:*",
         "bun-types": "^1.3.9",
       },
     },
@@ -1013,6 +1038,10 @@
     "@spaceduck/provider-openai-compat": ["@spaceduck/provider-openai-compat@workspace:packages/providers/openai-compat"],
 
     "@spaceduck/provider-openrouter": ["@spaceduck/provider-openrouter@workspace:packages/providers/openrouter"],
+
+    "@spaceduck/scheduler": ["@spaceduck/scheduler@workspace:packages/scheduler"],
+
+    "@spaceduck/skills": ["@spaceduck/skills@workspace:packages/skills"],
 
     "@spaceduck/stt-aws-transcribe": ["@spaceduck/stt-aws-transcribe@workspace:packages/stt/aws-transcribe"],
 

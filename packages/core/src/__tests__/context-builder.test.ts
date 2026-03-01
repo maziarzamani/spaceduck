@@ -325,7 +325,7 @@ describe("DefaultContextBuilder — Memory v2 context injection", () => {
       content: "How should I handle validation in tone and formatting for security in deployment?",
     }));
     const builder = new DefaultContextBuilder(convStore, logger, undefined, memStore);
-    const result = await builder.buildContext("c1", { maxProcedures: 2 });
+    const result = await builder.buildContext("c1", { budgetOverrides: { maxProcedures: 2 } });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -359,5 +359,92 @@ describe("DefaultContextBuilder — Memory v2 context injection", () => {
     expect(result.value[0].id).toBe("system-prompt");
     expect(result.value[1].id).toMatch(/^memories-/);
     expect(result.value[2].content).toBe("How do I use Bun?");
+  });
+
+  it("threads memoryRecallOptions to exclude task memories", async () => {
+    await memStore.store({
+      kind: "fact",
+      title: "User fact",
+      content: "User prefers TypeScript for projects",
+      scope: { type: "global" },
+      source: defaultSource,
+    });
+    await memStore.store({
+      kind: "fact",
+      title: "Task fact",
+      content: "API pricing changed for TypeScript SDK",
+      scope: { type: "global" },
+      source: { type: "system", taskId: "task-123" },
+    });
+
+    await convStore.appendMessage("c1", createMessage({ content: "Tell me about TypeScript" }));
+    const builder = new DefaultContextBuilder(convStore, logger, undefined, memStore);
+
+    const withAll = await builder.buildContext("c1");
+    expect(withAll.ok).toBe(true);
+    if (!withAll.ok) return;
+    const memMsg = withAll.value.find((m) => m.id.startsWith("memories-"));
+    expect(memMsg?.content).toContain("TypeScript");
+    expect(memMsg?.content).toContain("API pricing");
+
+    const filtered = await builder.buildContext("c1", {
+      memoryRecallOptions: { excludeTaskMemories: true },
+    });
+    expect(filtered.ok).toBe(true);
+    if (!filtered.ok) return;
+    const filteredMem = filtered.value.find((m) => m.id.startsWith("memories-"));
+    expect(filteredMem?.content).toContain("TypeScript");
+    expect(filteredMem?.content).not.toContain("API pricing");
+  });
+
+  it("threads memoryRecallOptions sourceTaskId filter", async () => {
+    await memStore.store({
+      kind: "fact",
+      title: "Task A fact",
+      content: "Deploy result from TypeScript build",
+      scope: { type: "global" },
+      source: { type: "system", taskId: "task-A" },
+    });
+    await memStore.store({
+      kind: "fact",
+      title: "Task B fact",
+      content: "Monitoring TypeScript service status",
+      scope: { type: "global" },
+      source: { type: "system", taskId: "task-B" },
+    });
+
+    await convStore.appendMessage("c1", createMessage({ content: "TypeScript" }));
+    const builder = new DefaultContextBuilder(convStore, logger, undefined, memStore);
+
+    const result = await builder.buildContext("c1", {
+      memoryRecallOptions: { sourceTaskId: "task-A" },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const memMsg = result.value.find((m) => m.id.startsWith("memories-"));
+    expect(memMsg?.content).toContain("Deploy result");
+    expect(memMsg?.content).not.toContain("Monitoring");
+  });
+
+  it("accepts budgetOverrides in the new options object", async () => {
+    for (let i = 0; i < 5; i++) {
+      await memStore.store({
+        kind: "procedure",
+        title: `Proc ${i}`,
+        content: `Always validate user input rule ${i}`,
+        scope: { type: "global" },
+        source: defaultSource,
+        procedureSubtype: "behavioral",
+      });
+    }
+
+    await convStore.appendMessage("c1", createMessage({ content: "How should I validate user input?" }));
+    const builder = new DefaultContextBuilder(convStore, logger, undefined, memStore);
+    const result = await builder.buildContext("c1", { budgetOverrides: { maxProcedures: 2 } });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const memMsg = result.value.find((m) => m.id.startsWith("memories-"));
+    const lines = memMsg?.content?.split("\n").filter((l) => l.startsWith("- [behavioral]")) ?? [];
+    expect(lines.length).toBe(2);
   });
 });
