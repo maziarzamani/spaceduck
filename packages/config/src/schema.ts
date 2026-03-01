@@ -162,6 +162,13 @@ const SchedulerRetrySchema = z.object({
   backoffMaxMs: z.number().int().positive().default(300_000),
 });
 
+const ModelPricingSchema = z.object({
+  inputPer1MTokens: z.number().nonnegative(),
+  outputPer1MTokens: z.number().nonnegative(),
+  cacheReadDiscount: z.number().min(0).max(1).optional(),
+  cacheWriteMultiplier: z.number().nonnegative().optional(),
+});
+
 const SchedulerSchema = z.object({
   enabled: z.boolean().default(false),
   heartbeatIntervalMs: z.number().int().positive().default(60_000),
@@ -169,6 +176,7 @@ const SchedulerSchema = z.object({
   defaultBudget: SchedulerBudgetSchema.default({}),
   globalBudget: GlobalBudgetSchema.default({}),
   retry: SchedulerRetrySchema.default({}),
+  pricing: z.record(z.string(), ModelPricingSchema).default({}),
 });
 
 export const SpaceduckConfigSchema = z.object({

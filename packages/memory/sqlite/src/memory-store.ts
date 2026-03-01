@@ -5,7 +5,7 @@ import type {
   MemorySource, MemoryKind, MemoryStatus,
   Result, Logger, EmbeddingProvider, Provider, Message,
 } from "@spaceduck/core";
-import { ok, err, MemoryError } from "@spaceduck/core";
+import { ok, err, MemoryError, detectInjection } from "@spaceduck/core";
 
 const LN2 = Math.LN2;
 const DEFAULT_HALF_LIFE_DAYS = 90;
@@ -202,6 +202,17 @@ export class SqliteMemoryStore implements MemoryStore {
 
   async store(input: MemoryInput): Promise<Result<MemoryRecord>> {
     try {
+      const isTaskSourced = !!input.source.taskId;
+      if (detectInjection(input.content, isTaskSourced)) {
+        this.logger.warn("Memory rejected by injection detection", {
+          kind: input.kind,
+          sourceType: input.source.type,
+          taskId: input.source.taskId,
+          strict: isTaskSourced,
+        });
+        return err(new MemoryError("Content rejected: injection pattern detected"));
+      }
+
       const id = generateId();
       const now = Date.now();
       const hash = await contentHash(input.content);
@@ -819,7 +830,25 @@ Respond with EXACTLY one word: "contradiction" or "consistent"`;
       }
     }
 
-    const results = [...seen.values()]
+    // 6. Down-rank superseded memories:
+    //    - Multiply score by 0.1 if status is "superseded"
+    //    - Drop entirely if the superseding memory is also in the result set
+    const supersededByIds = new Set<string>();
+    for (const s of seen.values()) {
+      if (s.memory.supersededBy) supersededByIds.add(s.memory.supersededBy);
+    }
+
+    const ranked = [...seen.values()].map((s) => {
+      if (s.memory.status === "superseded") {
+        if (supersededByIds.has(s.memory.id) || seen.has(s.memory.supersededBy ?? "")) {
+          return null; // superseding memory is present — drop the old one
+        }
+        return { ...s, score: s.score * 0.1 };
+      }
+      return s;
+    }).filter((s): s is ScoredMemory => s !== null);
+
+    const results = ranked
       .sort((a, b) => b.score - a.score)
       .slice(0, topK);
 

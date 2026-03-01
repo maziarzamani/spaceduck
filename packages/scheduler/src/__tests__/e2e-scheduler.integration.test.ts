@@ -30,6 +30,7 @@ import { SqliteTaskStore } from "../task-store";
 import { TaskQueue } from "../queue";
 import { TaskScheduler } from "../scheduler";
 import { GlobalBudgetGuard } from "../global-budget-guard";
+import { PricingLookup } from "../pricing";
 import { createTaskRunner } from "../runner";
 import type { TaskRunnerFn } from "../runner";
 import type { RunLock } from "../run-lock";
@@ -114,6 +115,8 @@ function createHarness(overrides?: {
     maxToolCalls: 5,
   };
 
+  const pricingLookup = new PricingLookup(logger);
+
   const runner = createTaskRunner({
     agent,
     conversationStore: convStore,
@@ -121,6 +124,8 @@ function createHarness(overrides?: {
     eventBus,
     logger,
     defaultBudget,
+    pricingLookup,
+    modelName: "global.amazon.nova-2-lite-v1:0",
   });
 
   const schedulerPaused = { value: false };
@@ -433,7 +438,43 @@ describe.skipIf(!LIVE)("Scheduler live: chain_next with context", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. Global budget pause — scheduler stops after limit breach
+// 6. Cost estimation — estimatedCostUsd > 0 with pricing lookup
+// ---------------------------------------------------------------------------
+
+describe.skipIf(!LIVE)("Scheduler live: cost estimation", () => {
+  it("snapshot has non-zero estimatedCostUsd from pricing lookup", async () => {
+    const h = createHarness();
+    await h.store.migrate();
+
+    const created = await h.store.create({
+      definition: {
+        type: "scheduled",
+        name: "Cost check",
+        prompt: "What is 1 + 1? Reply with only the number.",
+        resultRoute: "silent",
+      },
+      schedule: { runImmediately: true },
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await h.runner(created.value);
+
+    log("Response:", result.response.trim());
+    log("tokensUsed:", result.snapshot.tokensUsed);
+    log("estimatedCostUsd:", result.snapshot.estimatedCostUsd);
+
+    expect(result.snapshot.tokensUsed).toBeGreaterThan(0);
+    expect(result.snapshot.estimatedCostUsd).toBeGreaterThan(0);
+
+    // Nova Lite is very cheap: $0.06/M input, $0.24/M output.
+    // For ~50-100 tokens, cost should be in the sub-cent range.
+    expect(result.snapshot.estimatedCostUsd).toBeLessThan(0.01);
+  }, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// 7. Global budget pause — scheduler stops after limit breach
 // ---------------------------------------------------------------------------
 
 describe.skipIf(!LIVE)("Scheduler live: global budget pause", () => {

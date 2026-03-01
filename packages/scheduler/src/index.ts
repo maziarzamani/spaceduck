@@ -11,5 +11,7 @@ export type { GlobalBudgetConfig, SchedulerControl } from "./global-budget-guard
 export { createTaskRunner } from "./runner";
 export type { TaskRunnerDeps, TaskRunnerFn } from "./runner";
 export type { RunLock } from "./run-lock";
+export { PricingLookup } from "./pricing";
+export type { ModelPricing } from "./pricing";
 export { parseCron, nextRun } from "./cron";
 export type { CronFields } from "./cron";

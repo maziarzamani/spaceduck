@@ -33,6 +33,12 @@ export {
   type ClassifiedMemory,
 } from "./memory-extractor";
 
+// Injection detection
+export { detectInjection, loadExtraPatterns } from "./injection-detect";
+
+// Base provider
+export { AbstractProvider } from "./base-provider";
+
 // Agent
 export { type AgentDeps, type AgentRunResult, type AgentChunk, AgentLoop } from "./agent";
 
