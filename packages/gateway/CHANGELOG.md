@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.22.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.21.0...gateway-v0.22.0) (2026-03-01)
+
+
+### Features
+
+* autonomous task scheduler with budget enforcement ([88c20b2](https://github.com/maziarzamani/spaceduck/commit/88c20b2cb522e4517157ed19931263964f34e528))
+* memory isolation hardening + vec0 test reliability ([b216752](https://github.com/maziarzamani/spaceduck/commit/b216752f800ff8b69515496c97272ce5fccd1427))
+* Phase 2a skill runtime + autonomous agent docs ([6919946](https://github.com/maziarzamani/spaceduck/commit/69199466d27457b7cb8251c3b12e3e735b1f1059))
+
 ## [0.21.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.20.0...gateway-v0.21.0) (2026-02-27)
 
 
