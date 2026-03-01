@@ -774,6 +774,13 @@ Respond with EXACTLY one word: "contradiction" or "consistent"`;
       extraParams.push(sc.type);
       if (sc.id) { extraWhere += ` AND m.scope_id = ?${pIdx++}`; extraParams.push(sc.id); }
     }
+    if (options?.excludeTaskMemories) {
+      extraWhere += ` AND m.source_task_id IS NULL`;
+    }
+    if (options?.sourceTaskId) {
+      extraWhere += ` AND m.source_task_id = ?${pIdx++}`;
+      extraParams.push(options.sourceTaskId);
+    }
 
     const rows = this.db
       .query(
@@ -928,6 +935,13 @@ Respond with EXACTLY one word: "contradiction" or "consistent"`;
       const ph = options.status.map(() => `?${pIdx++}`);
       extraWhere += ` AND m.status IN (${ph.join(",")})`;
       extraParams.push(...options.status);
+    }
+    if (options?.excludeTaskMemories) {
+      extraWhere += ` AND m.source_task_id IS NULL`;
+    }
+    if (options?.sourceTaskId) {
+      extraWhere += ` AND m.source_task_id = ?${pIdx++}`;
+      extraParams.push(options.sourceTaskId);
     }
 
     try {

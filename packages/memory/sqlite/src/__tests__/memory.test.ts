@@ -1706,6 +1706,49 @@ describe("SqliteMemoryStore", () => {
     }));
     expect(result.ok).toBe(false);
   });
+
+  it("recall() with excludeTaskMemories filters out task-sourced memories", async () => {
+    await store.store(testInput({
+      content: "User prefers TypeScript for coding",
+      source: { type: "user_message", conversationId: "c1" },
+    }));
+    await store.store(testInput({
+      content: "Task discovered TypeScript API update",
+      source: { type: "system", taskId: "task-abc" },
+    }));
+
+    const all = await store.recall("TypeScript");
+    expect(all.ok).toBe(true);
+    if (!all.ok) return;
+    expect(all.value.length).toBe(2);
+
+    const filtered = await store.recall("TypeScript", { excludeTaskMemories: true });
+    expect(filtered.ok).toBe(true);
+    if (!filtered.ok) return;
+    expect(filtered.value.length).toBe(1);
+    expect(filtered.value[0].memory.content).toContain("prefers");
+  });
+
+  it("recall() with sourceTaskId only returns memories from that task", async () => {
+    await store.store(testInput({
+      content: "Result from task alpha about TypeScript",
+      source: { type: "system", taskId: "task-alpha" },
+    }));
+    await store.store(testInput({
+      content: "Result from task beta about TypeScript",
+      source: { type: "system", taskId: "task-beta" },
+    }));
+    await store.store(testInput({
+      content: "User typed TypeScript preference",
+      source: { type: "user_message", conversationId: "c1" },
+    }));
+
+    const alphaOnly = await store.recall("TypeScript", { sourceTaskId: "task-alpha" });
+    expect(alphaOnly.ok).toBe(true);
+    if (!alphaOnly.ok) return;
+    expect(alphaOnly.value.length).toBe(1);
+    expect(alphaOnly.value[0].memory.content).toContain("task alpha");
+  });
 });
 
 // --- Semantic Dedup Tests ---

@@ -273,6 +273,10 @@ export interface MemoryRecallOptions {
   readonly maxMemoryTokens?: number;
   /** Max discrete memory entries to retrieve. */
   readonly maxEntries?: number;
+  /** Exclude memories created by tasks (source_task_id IS NOT NULL). Useful for interactive sessions. */
+  readonly excludeTaskMemories?: boolean;
+  /** Only include memories from this specific task. Useful for task continuations. */
+  readonly sourceTaskId?: string;
 }
 
 export interface ScoredMemory {

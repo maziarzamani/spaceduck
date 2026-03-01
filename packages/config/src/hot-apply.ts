@@ -42,6 +42,7 @@ export const HOT_APPLY_PATHS: ReadonlySet<string> = new Set([
   "/scheduler/defaultBudget/maxCostUsd",
   "/scheduler/defaultBudget/maxWallClockMs",
   "/scheduler/defaultBudget/maxToolCalls",
+  "/scheduler/defaultBudget/maxMemoryWrites",
   "/scheduler/globalBudget/dailyLimitUsd",
   "/scheduler/globalBudget/monthlyLimitUsd",
   "/scheduler/globalBudget/alertThresholds",

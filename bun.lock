@@ -232,6 +232,7 @@
         "@spaceduck/core": "workspace:*",
       },
       "devDependencies": {
+        "@spaceduck/memory-sqlite": "workspace:*",
         "@spaceduck/provider-bedrock": "workspace:*",
         "bun-types": "^1.3.9",
       },

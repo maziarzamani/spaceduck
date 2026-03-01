@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
+import { ensureCustomSQLite } from "@spaceduck/memory-sqlite";
 import { GlobalBudgetGuard } from "../global-budget-guard";
+
+ensureCustomSQLite();
 import { SqliteTaskStore } from "../task-store";
 import type { Task, BudgetSnapshot, EventBus, Logger } from "@spaceduck/core";
 
@@ -52,6 +55,7 @@ const snapshot: BudgetSnapshot = {
   estimatedCostUsd: 0.05,
   wallClockMs: 1000,
   toolCallsMade: 1,
+  memoryWritesMade: 0,
 };
 
 describe("GlobalBudgetGuard", () => {

@@ -59,6 +59,8 @@ export interface TaskBudget {
   readonly maxWallClockMs?: number;
   /** Max individual tool invocations (not agent loop rounds). */
   readonly maxToolCalls?: number;
+  /** Max memory writes per run (prevents flooding the memory store). */
+  readonly maxMemoryWrites?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +100,7 @@ export interface BudgetSnapshot {
   readonly estimatedCostUsd: number;
   readonly wallClockMs: number;
   readonly toolCallsMade: number;
+  readonly memoryWritesMade: number;
 }
 
 // ---------------------------------------------------------------------------

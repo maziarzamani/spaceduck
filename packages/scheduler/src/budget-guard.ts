@@ -10,6 +10,7 @@ export class BudgetGuard {
     estimatedCostUsd: 0,
     wallClockMs: 0,
     toolCallsMade: 0,
+    memoryWritesMade: 0,
   };
 
   private readonly abortController: AbortController;
@@ -92,6 +93,21 @@ export class BudgetGuard {
     if (this._snapshot.toolCallsMade >= this.budget.maxToolCalls) {
       this.abort("tool_calls");
     }
+  }
+
+  trackMemoryWrite(): void {
+    this._snapshot = {
+      ...this._snapshot,
+      memoryWritesMade: this._snapshot.memoryWritesMade + 1,
+    };
+
+    if (this.budget.maxMemoryWrites > 0 && this._snapshot.memoryWritesMade >= this.budget.maxMemoryWrites) {
+      this.abort("memory_writes");
+    }
+  }
+
+  get memoryWritesBudgetExhausted(): boolean {
+    return this.budget.maxMemoryWrites > 0 && this._snapshot.memoryWritesMade >= this.budget.maxMemoryWrites;
   }
 
   trackCost(costUsd: number): void {

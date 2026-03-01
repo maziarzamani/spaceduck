@@ -324,6 +324,7 @@ export class Gateway implements Lifecycle {
         maxCostUsd: schedCfg.defaultBudget.maxCostUsd,
         maxWallClockMs: schedCfg.defaultBudget.maxWallClockMs,
         maxToolCalls: schedCfg.defaultBudget.maxToolCalls,
+        maxMemoryWrites: schedCfg.defaultBudget.maxMemoryWrites,
       };
 
       const runner = createTaskRunner({

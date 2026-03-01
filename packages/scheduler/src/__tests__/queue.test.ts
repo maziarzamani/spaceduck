@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
+import { ensureCustomSQLite } from "@spaceduck/memory-sqlite";
 import { TaskQueue } from "../queue";
+
+ensureCustomSQLite();
 import { SqliteTaskStore } from "../task-store";
 import { GlobalBudgetGuard } from "../global-budget-guard";
 import type {
@@ -48,6 +51,7 @@ const snapshot: BudgetSnapshot = {
   estimatedCostUsd: 0.01,
   wallClockMs: 500,
   toolCallsMade: 1,
+  memoryWritesMade: 0,
 };
 
 function createInput(name?: string): TaskInput {

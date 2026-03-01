@@ -46,6 +46,7 @@ describe("BudgetGuard", () => {
     maxCostUsd: 0.50,
     maxWallClockMs: 60_000,
     maxToolCalls: 5,
+    maxMemoryWrites: 10,
   };
 
   beforeEach(() => {
@@ -63,6 +64,7 @@ describe("BudgetGuard", () => {
     expect(snap.tokensUsed).toBe(0);
     expect(snap.estimatedCostUsd).toBe(0);
     expect(snap.toolCallsMade).toBe(0);
+    expect(snap.memoryWritesMade).toBe(0);
     expect(snap.wallClockMs).toBeGreaterThanOrEqual(0);
   });
 
@@ -202,5 +204,33 @@ describe("BudgetGuard", () => {
     }, 0.01);
     expect(guard.snapshot.tokensUsed).toBe(600);
     expect(guard.snapshot.estimatedCostUsd).toBe(0.01);
+  });
+
+  it("tracks memory writes", () => {
+    guard.trackMemoryWrite();
+    guard.trackMemoryWrite();
+    expect(guard.snapshot.memoryWritesMade).toBe(2);
+    expect(guard.memoryWritesBudgetExhausted).toBe(false);
+  });
+
+  it("aborts when memory writes exceed limit", () => {
+    for (let i = 0; i < 10; i++) guard.trackMemoryWrite();
+    expect(guard.isExceeded).toBe(true);
+    expect(guard.memoryWritesBudgetExhausted).toBe(true);
+    const exceeded = eventBus.emitted.filter((e) => e.event === "task:budget_exceeded");
+    expect(exceeded.length).toBe(1);
+    expect(exceeded[0].data.limitExceeded).toBe("memory_writes");
+  });
+
+  it("memoryWritesBudgetExhausted is false when maxMemoryWrites is 0 (disabled)", () => {
+    const unlimitedGuard = new BudgetGuard(
+      { ...defaultBudget, maxMemoryWrites: 0 },
+      eventBus,
+      task,
+    );
+    for (let i = 0; i < 100; i++) unlimitedGuard.trackMemoryWrite();
+    expect(unlimitedGuard.memoryWritesBudgetExhausted).toBe(false);
+    expect(unlimitedGuard.isExceeded).toBe(false);
+    unlimitedGuard.dispose();
   });
 });

@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
+import { ensureCustomSQLite } from "@spaceduck/memory-sqlite";
 import { SqliteTaskStore } from "../task-store";
+
+ensureCustomSQLite();
 import type { TaskInput, TaskStatus, BudgetSnapshot, Logger } from "@spaceduck/core";
 
 function createLogger(): Logger {
@@ -33,6 +36,7 @@ const snapshot: BudgetSnapshot = {
   estimatedCostUsd: 0.05,
   wallClockMs: 1500,
   toolCallsMade: 2,
+  memoryWritesMade: 0,
 };
 
 describe("SqliteTaskStore", () => {

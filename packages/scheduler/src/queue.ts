@@ -92,7 +92,7 @@ export class TaskQueue {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       const emptySnapshot: BudgetSnapshot = {
-        tokensUsed: 0, estimatedCostUsd: 0, wallClockMs: 0, toolCallsMade: 0,
+        tokensUsed: 0, estimatedCostUsd: 0, wallClockMs: 0, toolCallsMade: 0, memoryWritesMade: 0,
       };
 
       const isBudgetExceeded = errorMsg.includes("Budget exceeded");

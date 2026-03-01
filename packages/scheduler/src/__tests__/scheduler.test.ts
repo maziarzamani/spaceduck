@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
+import { ensureCustomSQLite } from "@spaceduck/memory-sqlite";
 import { TaskScheduler } from "../scheduler";
+
+ensureCustomSQLite();
 import { TaskQueue } from "../queue";
 import { SqliteTaskStore } from "../task-store";
 import { GlobalBudgetGuard } from "../global-budget-guard";
@@ -58,6 +61,7 @@ const snapshot: BudgetSnapshot = {
   estimatedCostUsd: 0.01,
   wallClockMs: 200,
   toolCallsMade: 1,
+  memoryWritesMade: 0,
 };
 
 describe("TaskScheduler", () => {

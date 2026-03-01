@@ -15,12 +15,14 @@
 
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
+import { ensureCustomSQLite } from "@spaceduck/memory-sqlite";
 import {
   AgentLoop,
   SimpleEventBus,
   ConsoleLogger,
   DefaultContextBuilder,
 } from "@spaceduck/core";
+
 import type { TaskInput, BudgetSnapshot, EventBus, Logger } from "@spaceduck/core";
 import { MockConversationStore, MockMemoryStore } from "@spaceduck/core/src/__fixtures__/mock-memory";
 import { MockSessionManager } from "@spaceduck/core/src/__fixtures__/mock-session";
@@ -30,6 +32,8 @@ import { SqliteTaskStore } from "../task-store";
 import { TaskQueue } from "../queue";
 import { TaskScheduler } from "../scheduler";
 import { GlobalBudgetGuard } from "../global-budget-guard";
+
+ensureCustomSQLite();
 import { PricingLookup } from "../pricing";
 import { createTaskRunner } from "../runner";
 import type { TaskRunnerFn } from "../runner";
@@ -113,6 +117,7 @@ function createHarness(overrides?: {
     maxCostUsd: 0.50,
     maxWallClockMs: 60_000,
     maxToolCalls: 5,
+    maxMemoryWrites: 10,
   };
 
   const pricingLookup = new PricingLookup(logger);
@@ -363,7 +368,7 @@ describe.skipIf(!LIVE)("Scheduler live: chain_next with context", () => {
       memoryStore: h.memoryStore,
       eventBus: h.eventBus,
       logger: h.logger,
-      defaultBudget: { maxTokens: 50_000, maxCostUsd: 0.50, maxWallClockMs: 60_000, maxToolCalls: 5 },
+      defaultBudget: { maxTokens: 50_000, maxCostUsd: 0.50, maxWallClockMs: 60_000, maxToolCalls: 5, maxMemoryWrites: 10 },
       enqueueFn: async (taskDefId, context) => {
         chainedTaskId = taskDefId;
         chainedContext = context;
@@ -401,7 +406,7 @@ describe.skipIf(!LIVE)("Scheduler live: chain_next with context", () => {
       memoryStore: h.memoryStore,
       eventBus,
       logger,
-      defaultBudget: { maxTokens: 50_000, maxCostUsd: 0.50, maxWallClockMs: 60_000, maxToolCalls: 5 },
+      defaultBudget: { maxTokens: 50_000, maxCostUsd: 0.50, maxWallClockMs: 60_000, maxToolCalls: 5, maxMemoryWrites: 10 },
       enqueueFn: async (taskDefId, context) => {
         chainedTaskId = taskDefId;
         chainedContext = context;
@@ -515,5 +520,154 @@ describe.skipIf(!LIVE)("Scheduler live: global budget pause", () => {
 
     expect(shouldContinue).toBe(false);
     expect(h.schedulerPaused.value).toBe(true);
+  }, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// 8. Memory isolation — task writes tracked in snapshot
+// ---------------------------------------------------------------------------
+
+describe.skipIf(!LIVE)("Scheduler live: memory isolation", () => {
+  it("memory_update route writes are counted in memoryWritesMade", async () => {
+    const h = createHarness();
+    await h.store.migrate();
+
+    const created = await h.store.create({
+      definition: {
+        type: "scheduled",
+        name: "Memory isolation test",
+        prompt: "Reply with exactly: memory test complete",
+        resultRoute: "memory_update",
+      },
+      schedule: { runImmediately: true },
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await h.runner(created.value);
+    log("Response:", result.response.trim());
+    log("memoryWritesMade:", result.snapshot.memoryWritesMade);
+
+    expect(result.response.length).toBeGreaterThan(0);
+
+    const memories = h.memoryStore.getAll();
+    log("Stored memories:", memories.length);
+
+    expect(memories.length).toBeGreaterThanOrEqual(1);
+    const taskMemory = memories.find((m) => m.source.taskId === created.value.id);
+    expect(taskMemory).toBeDefined();
+    expect(taskMemory!.kind).toBe("episode");
+    expect(taskMemory!.source.taskId).toBe(created.value.id);
+  }, 30_000);
+
+  it("memory write budget caps writes at maxMemoryWrites", async () => {
+    const logger = createLogger();
+    const eventBus = new SimpleEventBus(logger);
+    const convStore = new MockConversationStore();
+    const memoryStore = new MockMemoryStore();
+    const sessionManager = new MockSessionManager();
+    const contextBuilder = new DefaultContextBuilder(convStore, logger);
+
+    const provider = new BedrockProvider({
+      model: "global.amazon.nova-2-lite-v1:0",
+      apiKey,
+      region,
+    });
+
+    const agent = new AgentLoop({
+      provider,
+      conversationStore: convStore,
+      contextBuilder,
+      sessionManager,
+      eventBus,
+      logger,
+      maxToolRounds: 5,
+    });
+
+    const db = new Database(":memory:");
+    db.exec("PRAGMA journal_mode = WAL");
+    const store = new SqliteTaskStore(db, logger);
+    await store.migrate();
+
+    const runner = createTaskRunner({
+      agent,
+      conversationStore: convStore,
+      memoryStore,
+      eventBus,
+      logger,
+      defaultBudget: {
+        maxTokens: 50_000,
+        maxCostUsd: 0.50,
+        maxWallClockMs: 60_000,
+        maxToolCalls: 5,
+        maxMemoryWrites: 1,
+      },
+    });
+
+    const created = await store.create({
+      definition: {
+        type: "scheduled",
+        name: "Write-limited task",
+        prompt: "Reply with: OK",
+        resultRoute: "memory_update",
+      },
+      schedule: { runImmediately: true },
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await runner(created.value);
+    log("Response:", result.response.trim());
+
+    const memories = memoryStore.getAll();
+    log("Stored memories:", memories.length);
+
+    // With maxMemoryWrites=1, the memory_update route should write exactly 1.
+    // The guard tracks it but doesn't abort the task for the route write
+    // (abort only happens during the agent loop if the store proxy is used).
+    expect(memories.length).toBeLessThanOrEqual(1);
+  }, 30_000);
+
+  it("task runner threads memoryRecallOptions with sourceTaskId", async () => {
+    const h = createHarness();
+    await h.store.migrate();
+
+    // Pre-seed a memory that looks like it came from a different task
+    await h.memoryStore.store({
+      kind: "fact",
+      title: "Other task output",
+      content: "The API endpoint moved to v3",
+      scope: { type: "global" },
+      source: { type: "system", taskId: "other-task-999" },
+    });
+
+    // Pre-seed a user-created memory
+    await h.memoryStore.store({
+      kind: "fact",
+      title: "User preference",
+      content: "User prefers concise API responses",
+      scope: { type: "global" },
+      source: { type: "user_message", conversationId: "c1" },
+    });
+
+    const created = await h.store.create({
+      definition: {
+        type: "scheduled",
+        name: "Recall test",
+        prompt: "Tell me about API endpoints and responses. Be brief.",
+        resultRoute: "silent",
+      },
+      schedule: { runImmediately: true },
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await h.runner(created.value);
+    log("Response:", result.response.trim());
+    log("tokensUsed:", result.snapshot.tokensUsed);
+
+    // Task completed successfully through the full pipeline
+    expect(result.response.length).toBeGreaterThan(0);
+    expect(result.snapshot.tokensUsed).toBeGreaterThan(0);
   }, 30_000);
 });

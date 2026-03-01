@@ -95,7 +95,7 @@ export class AgentLoop {
   async *run(
     conversationId: string,
     userMessage: Message,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; memoryRecallOptions?: Partial<import("./types").MemoryRecallOptions> },
   ): AsyncGenerator<AgentChunk> {
     const startTime = Date.now();
     const responseId = generateId();
@@ -129,7 +129,10 @@ export class AgentLoop {
       if (options?.signal?.aborted) return;
 
       // Build context (re-read each round since tool messages get appended)
-      const contextResult = await this.deps.contextBuilder.buildContext(conversationId);
+      const contextResult = await this.deps.contextBuilder.buildContext(
+        conversationId,
+        options?.memoryRecallOptions ? { memoryRecallOptions: options.memoryRecallOptions } : undefined,
+      );
       if (!contextResult.ok) {
         this.logger.error("Failed to build context", {
           conversationId,

@@ -147,6 +147,7 @@ const SchedulerBudgetSchema = z.object({
   maxCostUsd: z.number().positive().default(0.50),
   maxWallClockMs: z.number().int().positive().default(300_000),
   maxToolCalls: z.number().int().positive().default(10),
+  maxMemoryWrites: z.number().int().nonnegative().default(10),
 });
 
 const GlobalBudgetSchema = z.object({

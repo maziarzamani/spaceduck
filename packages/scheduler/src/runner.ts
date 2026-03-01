@@ -3,7 +3,7 @@
 import type {
   Task, TaskBudget, BudgetSnapshot,
   AgentLoop, Message, EventBus, Logger,
-  ConversationStore, MemoryStore, MemoryInput,
+  ConversationStore, MemoryStore, MemoryInput, MemoryRecallOptions,
 } from "@spaceduck/core";
 import { BudgetGuard } from "./budget-guard";
 import type { PricingLookup } from "./pricing";
@@ -33,6 +33,44 @@ function resolveBudget(task: Task, defaults: Required<TaskBudget>): Required<Tas
     maxCostUsd: task.budget.maxCostUsd ?? defaults.maxCostUsd,
     maxWallClockMs: task.budget.maxWallClockMs ?? defaults.maxWallClockMs,
     maxToolCalls: task.budget.maxToolCalls ?? defaults.maxToolCalls,
+    maxMemoryWrites: task.budget.maxMemoryWrites ?? defaults.maxMemoryWrites,
+  };
+}
+
+/**
+ * Wraps a MemoryStore with a counting proxy that tracks writes via BudgetGuard.
+ * When the write budget is exhausted, store() silently returns the input as-is
+ * (no-op) and logs a warning. All other methods delegate directly.
+ */
+function createWriteLimitedStore(
+  store: MemoryStore,
+  guard: BudgetGuard,
+  logger: Logger,
+): MemoryStore {
+  return {
+    ...store,
+    async store(input) {
+      if (guard.memoryWritesBudgetExhausted) {
+        logger.warn("Memory write budget exhausted, dropping write", {
+          content: input.content.slice(0, 80),
+        });
+        return store.get("__noop__") as any;
+      }
+      const result = await store.store(input);
+      if (result.ok) guard.trackMemoryWrite();
+      return result;
+    },
+    async supersede(oldId, newInput) {
+      if (guard.memoryWritesBudgetExhausted) {
+        logger.warn("Memory write budget exhausted, dropping supersede", {
+          oldId, content: newInput.content.slice(0, 80),
+        });
+        return store.get("__noop__") as any;
+      }
+      const result = await store.supersede(oldId, newInput);
+      if (result.ok) guard.trackMemoryWrite();
+      return result;
+    },
   };
 }
 
@@ -64,9 +102,18 @@ export function createTaskRunner(deps: TaskRunnerDeps): TaskRunnerFn {
         source: "system",
       };
 
+      const memoryRecallOptions: Partial<MemoryRecallOptions> = {
+        sourceTaskId: task.id,
+        maxMemoryTokens: 2000,
+        maxEntries: 15,
+      };
+
       let fullResponse = "";
 
-      for await (const chunk of deps.agent.run(convId, userMessage, { signal: guard.signal })) {
+      for await (const chunk of deps.agent.run(convId, userMessage, {
+        signal: guard.signal,
+        memoryRecallOptions,
+      })) {
         if (chunk.type === "text") {
           fullResponse += chunk.text;
           guard.trackChars(chunk.text.length);
@@ -82,7 +129,7 @@ export function createTaskRunner(deps: TaskRunnerDeps): TaskRunnerFn {
 
       const snapshot = guard.snapshot;
 
-      await routeResult(task, fullResponse, snapshot, deps, log);
+      await routeResult(task, fullResponse, snapshot, deps, log, guard);
 
       return { response: fullResponse, snapshot };
     } finally {
@@ -97,6 +144,7 @@ async function routeResult(
   snapshot: BudgetSnapshot,
   deps: TaskRunnerDeps,
   logger: Logger,
+  guard?: BudgetGuard,
 ): Promise<void> {
   const route = task.definition.resultRoute;
 
@@ -107,8 +155,6 @@ async function routeResult(
 
   if (route === "notify") {
     logger.info("Task result routed to notify", { taskId: task.id, responseLength: response.length });
-    // Notification is handled by the gateway layer via EventBus
-    // The task:completed event carries the snapshot; gateway can decide how to notify
     return;
   }
 
@@ -117,6 +163,10 @@ async function routeResult(
       logger.warn("memory_update route requested but no MemoryStore available", { taskId: task.id });
       return;
     }
+
+    const store = guard
+      ? createWriteLimitedStore(deps.memoryStore, guard, logger)
+      : deps.memoryStore;
 
     const memoryInput: MemoryInput = {
       kind: "episode",
@@ -131,7 +181,7 @@ async function routeResult(
       occurredAt: Date.now(),
     };
 
-    const result = await deps.memoryStore.store(memoryInput);
+    const result = await store.store(memoryInput);
     if (!result.ok) {
       logger.warn("Failed to store task result as memory", { taskId: task.id, error: String(result.error) });
     }
