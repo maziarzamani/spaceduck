@@ -1,4 +1,4 @@
 {
-  "packages/gateway": "0.21.0",
+  "packages/gateway": "0.22.0",
   "apps/cli": "0.17.0"
 }
