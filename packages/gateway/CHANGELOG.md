@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.22.0...gateway-v0.23.0) (2026-03-02)
+
+
+### Features
+
+* agent dashboard UI, task creation, skill execution fixes ([1e49c11](https://github.com/maziarzamani/spaceduck/commit/1e49c11df87472d110b4bac5faecf0a40292f5c9))
+
 ## [0.22.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.21.0...gateway-v0.22.0) (2026-03-01)
 
 
