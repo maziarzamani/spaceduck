@@ -15,7 +15,12 @@
 
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { ensureCustomSQLite } from "@spaceduck/memory-sqlite";
+import {
+  ensureCustomSQLite,
+  SchemaManager,
+  reconcileVecMemories,
+  SqliteMemoryStore,
+} from "@spaceduck/memory-sqlite";
 import {
   AgentLoop,
   SimpleEventBus,
@@ -23,10 +28,10 @@ import {
   DefaultContextBuilder,
 } from "@spaceduck/core";
 
-import type { TaskInput, BudgetSnapshot, EventBus, Logger } from "@spaceduck/core";
+import type { TaskInput, BudgetSnapshot, EventBus, Logger, MemoryInput } from "@spaceduck/core";
 import { MockConversationStore, MockMemoryStore } from "@spaceduck/core/src/__fixtures__/mock-memory";
 import { MockSessionManager } from "@spaceduck/core/src/__fixtures__/mock-session";
-import { BedrockProvider } from "@spaceduck/provider-bedrock";
+import { BedrockProvider, BedrockEmbeddingProvider } from "@spaceduck/provider-bedrock";
 
 import { SqliteTaskStore } from "../task-store";
 import { TaskQueue } from "../queue";
@@ -670,4 +675,292 @@ describe.skipIf(!LIVE)("Scheduler live: memory isolation", () => {
     expect(result.response.length).toBeGreaterThan(0);
     expect(result.snapshot.tokensUsed).toBeGreaterThan(0);
   }, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// 9. excludeTaskMemories filtering with real SqliteMemoryStore
+// ---------------------------------------------------------------------------
+
+describe.skipIf(!LIVE)("Scheduler live: excludeTaskMemories with real SQLite", () => {
+  let embedding: BedrockEmbeddingProvider;
+
+  function getEmbedding(): BedrockEmbeddingProvider {
+    if (!embedding) {
+      embedding = new BedrockEmbeddingProvider({
+        model: "amazon.nova-2-multimodal-embeddings-v1:0",
+        dimensions: 1024,
+        apiKey,
+        region,
+      });
+    }
+    return embedding;
+  }
+
+  async function createRealMemoryStore(): Promise<{ db: Database; memStore: SqliteMemoryStore }> {
+    const emb = getEmbedding();
+    const db = new Database(":memory:");
+    db.exec("PRAGMA journal_mode = WAL");
+    const schema = new SchemaManager(db, createLogger());
+    schema.loadExtensions();
+    await schema.migrate();
+    reconcileVecMemories(db, emb, createLogger());
+    const memStore = new SqliteMemoryStore(db, createLogger(), emb);
+    return { db, memStore };
+  }
+
+  it("excludeTaskMemories filters out task-originated memories from recall", async () => {
+    const { db, memStore } = await createRealMemoryStore();
+
+    // Store a user-originated memory (no taskId)
+    await memStore.store({
+      kind: "fact",
+      title: "User likes TypeScript",
+      content: "The user prefers TypeScript for all backend services",
+      scope: { type: "global" },
+      source: { type: "user_message", conversationId: "conv-1" },
+      importance: 0.8,
+      confidence: 0.9,
+    });
+
+    // Store a task-originated memory (has taskId)
+    await memStore.store({
+      kind: "episode",
+      title: "Task result: daily summary",
+      content: "The user deployed TypeScript services and reviewed backend PRs",
+      scope: { type: "global" },
+      source: { type: "system", taskId: "task-abc-123", skillId: "daily-summary" },
+      tags: ["task-result"],
+      occurredAt: Date.now(),
+      importance: 0.7,
+      confidence: 0.8,
+    });
+
+    // Recall WITHOUT filtering — both should come back
+    const allResults = await memStore.recall("TypeScript backend", {
+      strategy: "hybrid",
+      topK: 10,
+    });
+    expect(allResults.ok).toBe(true);
+    if (!allResults.ok) return;
+    log("All recall results:", allResults.value.length);
+    expect(allResults.value.length).toBe(2);
+
+    // Recall WITH excludeTaskMemories — only user memory should come back
+    const filtered = await memStore.recall("TypeScript backend", {
+      strategy: "hybrid",
+      topK: 10,
+      excludeTaskMemories: true,
+    });
+    expect(filtered.ok).toBe(true);
+    if (!filtered.ok) return;
+    log("Filtered recall results:", filtered.value.length);
+    expect(filtered.value.length).toBe(1);
+    expect(filtered.value[0].memory.title).toBe("User likes TypeScript");
+    expect((filtered.value[0].memory.source as any).taskId).toBeUndefined();
+
+    db.close();
+  }, 30_000);
+
+  it("sourceTaskId filter returns only memories from that specific task", async () => {
+    const { db, memStore } = await createRealMemoryStore();
+
+    // Memory from task A
+    await memStore.store({
+      kind: "episode",
+      title: "Task A output",
+      content: "Researched GraphQL federation patterns for microservices",
+      scope: { type: "global" },
+      source: { type: "system", taskId: "task-A" },
+      occurredAt: Date.now(),
+    });
+
+    // Memory from task B
+    await memStore.store({
+      kind: "episode",
+      title: "Task B output",
+      content: "Researched REST API versioning patterns for microservices",
+      scope: { type: "global" },
+      source: { type: "system", taskId: "task-B" },
+      occurredAt: Date.now(),
+    });
+
+    // User memory (no taskId)
+    await memStore.store({
+      kind: "fact",
+      title: "Microservices preference",
+      content: "User builds microservices with gRPC and protobuf",
+      scope: { type: "global" },
+      source: { type: "user_message", conversationId: "c1" },
+    });
+
+    // Filter to task-A only
+    const taskAResults = await memStore.recall("microservices patterns", {
+      strategy: "hybrid",
+      topK: 10,
+      sourceTaskId: "task-A",
+    });
+    expect(taskAResults.ok).toBe(true);
+    if (!taskAResults.ok) return;
+    log("Task A results:", taskAResults.value.map((s) => s.memory.title));
+    expect(taskAResults.value.length).toBe(1);
+    expect(taskAResults.value[0].memory.title).toBe("Task A output");
+    expect((taskAResults.value[0].memory.source as any).taskId).toBe("task-A");
+
+    db.close();
+  }, 30_000);
+
+  it("FTS recall also respects excludeTaskMemories", async () => {
+    const { db, memStore } = await createRealMemoryStore();
+
+    await memStore.store({
+      kind: "fact",
+      title: "User deployment note",
+      content: "Deployed the payment gateway to production on Friday",
+      scope: { type: "global" },
+      source: { type: "user_message", conversationId: "c1" },
+    });
+
+    await memStore.store({
+      kind: "episode",
+      title: "Task deploy check",
+      content: "Verified the payment gateway deployment was successful",
+      scope: { type: "global" },
+      source: { type: "system", taskId: "task-deploy-1" },
+      occurredAt: Date.now(),
+    });
+
+    const ftsFiltered = await memStore.recall("payment gateway deployment", {
+      strategy: "fts",
+      topK: 10,
+      excludeTaskMemories: true,
+    });
+    expect(ftsFiltered.ok).toBe(true);
+    if (!ftsFiltered.ok) return;
+    log("FTS filtered:", ftsFiltered.value.map((s) => s.memory.title));
+
+    for (const s of ftsFiltered.value) {
+      expect((s.memory.source as any).taskId).toBeUndefined();
+    }
+
+    db.close();
+  }, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// 10. Full task runner pipeline with real SqliteMemoryStore
+// ---------------------------------------------------------------------------
+
+describe.skipIf(!LIVE)("Scheduler live: task runner with real SQLite memory", () => {
+  it("task writes memory with provenance into real SQLite and it persists correctly", async () => {
+    const logger = createLogger();
+    const eventBus = new SimpleEventBus(logger);
+    const convStore = new MockConversationStore();
+    const sessionManager = new MockSessionManager();
+    const contextBuilder = new DefaultContextBuilder(convStore, logger);
+
+    const emb = new BedrockEmbeddingProvider({
+      model: "amazon.nova-2-multimodal-embeddings-v1:0",
+      dimensions: 1024,
+      apiKey,
+      region,
+    });
+
+    const memDb = new Database(":memory:");
+    memDb.exec("PRAGMA journal_mode = WAL");
+    const schema = new SchemaManager(memDb, logger);
+    schema.loadExtensions();
+    await schema.migrate();
+    reconcileVecMemories(memDb, emb, logger);
+    const memoryStore = new SqliteMemoryStore(memDb, logger, emb);
+
+    const provider = new BedrockProvider({
+      model: "global.amazon.nova-2-lite-v1:0",
+      apiKey,
+      region,
+    });
+
+    const agent = new AgentLoop({
+      provider,
+      conversationStore: convStore,
+      contextBuilder,
+      sessionManager,
+      eventBus,
+      logger,
+      maxToolRounds: 3,
+    });
+
+    const taskDb = new Database(":memory:");
+    taskDb.exec("PRAGMA journal_mode = WAL");
+    const store = new SqliteTaskStore(taskDb, logger);
+    await store.migrate();
+
+    const pricingLookup = new PricingLookup(logger);
+
+    const runner = createTaskRunner({
+      agent,
+      conversationStore: convStore,
+      memoryStore,
+      eventBus,
+      logger,
+      defaultBudget: {
+        maxTokens: 50_000,
+        maxCostUsd: 0.50,
+        maxWallClockMs: 30_000,
+        maxToolCalls: 0,
+        maxMemoryWrites: 10,
+      },
+      pricingLookup,
+      modelName: "global.amazon.nova-2-lite-v1:0",
+    });
+
+    const created = await store.create({
+      definition: {
+        type: "scheduled",
+        name: "Real SQLite memory test",
+        prompt: "Reply with exactly: integration test passed",
+        resultRoute: "memory_update",
+      },
+      schedule: { runImmediately: true },
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await runner(created.value);
+    log("Response:", result.response.trim());
+
+    expect(result.response.length).toBeGreaterThan(0);
+
+    // Verify memory was written to real SQLite with correct provenance
+    const recalled = await memoryStore.recall("integration test", {
+      strategy: "hybrid",
+      topK: 10,
+      sourceTaskId: created.value.id,
+    });
+    expect(recalled.ok).toBe(true);
+    if (!recalled.ok) return;
+
+    log("Recalled task memories:", recalled.value.length);
+    expect(recalled.value.length).toBeGreaterThanOrEqual(1);
+
+    const taskMem = recalled.value[0];
+    expect(taskMem.memory.source.taskId).toBe(created.value.id);
+    expect(taskMem.memory.kind).toBe("episode");
+
+    // Also verify excludeTaskMemories hides it
+    const excluded = await memoryStore.recall("integration test", {
+      strategy: "hybrid",
+      topK: 10,
+      excludeTaskMemories: true,
+    });
+    expect(excluded.ok).toBe(true);
+    if (!excluded.ok) return;
+
+    const leakedTask = excluded.value.find(
+      (s) => (s.memory.source as any).taskId === created.value.id,
+    );
+    expect(leakedTask).toBeUndefined();
+
+    memDb.close();
+    taskDb.close();
+  }, 45_000);
 });
