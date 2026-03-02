@@ -29,11 +29,11 @@ import { InstallTerminal } from "../components/InstallTerminal";
         </h1>
 
         <p class="mx-auto mt-4 max-w-md text-lg text-slate-300">
-          Your personal AI assistant, local or cloud.
+          Your personal AI that works while you don't.
         </p>
 
         <p class="mx-auto mt-2 max-w-sm text-sm text-slate-500">
-          A personal assistant that compounds over time and remains user-owned.
+          Autonomous tasks, persistent memory, budget enforcement. Local or cloud, user-owned.
         </p>
 
         <HeroButtons client:load />
@@ -136,6 +136,34 @@ import { InstallTerminal } from "../components/InstallTerminal";
               tools, any surface.
             </p>
           </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-white">Autonomous tasks</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">
+              Schedule tasks on cron or interval. The agent runs in the
+              background, routes results to memory or notifications, retries on
+              failure.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-white">Budget enforcement</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">
+              Per-task token limits, cost caps, and wall-clock timeouts. Global
+              daily and monthly budgets pause the scheduler before you overspend.
+              Not a plugin.
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -223,6 +251,33 @@ import { InstallTerminal } from "../components/InstallTerminal";
             <p class="mt-2 text-sm text-slate-400">
               Whisper-powered speech-to-text. Hold the mic button to record,
               release to transcribe. Runs locally.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+            </div>
+            <h3 class="font-semibold text-white">Task Scheduler</h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Cron jobs, intervals, or one-off runs. Priority queue with
+              dead-letter handling. View status, cost, and results in the
+              built-in dashboard.
+            </p>
+          </div>
+
+          <div class="rounded-xl border border-white/5 bg-surface-light p-6">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h3 class="font-semibold text-white">Skills</h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Drop a SKILL.md file and it just works. Security scanner blocks
+              injection attempts. Tool scoping limits what each skill can access.
             </p>
           </div>
         </div>
