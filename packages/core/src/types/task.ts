@@ -126,6 +126,8 @@ export interface Task {
   readonly updatedAt: number;
   readonly error?: string;
   readonly budgetConsumed?: BudgetSnapshot;
+  /** Output text from the most recent completed run. */
+  readonly resultText?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,4 +203,7 @@ export interface TaskStore {
 
   /** Record a task run in the history table. */
   recordRun(run: Omit<TaskRun, "id">): Promise<Result<TaskRun>>;
+
+  /** List runs for a given task, most recent first. */
+  listRuns(taskId: string, limit?: number): Promise<Result<TaskRun[]>>;
 }

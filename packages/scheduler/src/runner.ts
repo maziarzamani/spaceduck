@@ -12,7 +12,7 @@ import type { TaskRunResult } from "./queue";
 export type TaskRunnerFn = (task: Task, chainedContext?: string) => Promise<TaskRunResult>;
 
 export interface SkillResolver {
-  readonly get: (skillId: string) => { toolAllow?: string[]; toolDeny?: string[] } | undefined;
+  readonly get: (skillId: string) => { toolAllow?: string[]; toolDeny?: string[]; instructions?: string } | undefined;
 }
 
 export interface TaskRunnerDeps {
@@ -96,6 +96,15 @@ export function createTaskRunner(deps: TaskRunnerDeps): TaskRunnerFn {
       }
 
       let prompt = task.definition.prompt;
+
+      // Inject skill instructions when running a skill-based task
+      if (task.definition.skillId && deps.skillResolver) {
+        const skill = deps.skillResolver.get(task.definition.skillId);
+        if (skill?.instructions) {
+          prompt = skill.instructions + "\n\n" + prompt;
+        }
+      }
+
       if (chainedContext) {
         prompt += `\n\n<previous_task_output>\n${chainedContext}\n</previous_task_output>`;
       }
