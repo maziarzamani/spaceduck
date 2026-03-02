@@ -27,7 +27,7 @@
 
 ## What is Spaceduck?
 
-Spaceduck is a personal AI assistant you run on your own machine. It remembers what you tell it across conversations, browses the web and reads documents on your behalf, and lets you swap between local and cloud models without restarting.
+Spaceduck is a personal AI that works while you don't. It remembers what you tell it, runs tasks autonomously on a schedule, browses the web, reads documents, and lets you swap between local and cloud models without restarting.
 
 No agent frameworks, no orchestration wrappers — every layer is handwritten TypeScript.
 
@@ -94,7 +94,11 @@ Spaceduck supports both local and cloud providers. Chat and embeddings are indep
 - **Persistent memory** — facts extracted from every conversation, recalled via hybrid vector + keyword search
 - **Corrections win** — say "my name is now Peter" and the old name is automatically deactivated
 - **Contamination guard** — the assistant can never overwrite your identity
+- **Autonomous tasks** — schedule tasks on cron or interval; the agent runs in the background, retries on failure, routes results to memory or notifications
+- **Skills** — drop a `SKILL.md` and it just works; security scanner blocks injection attempts; tool scoping limits what each skill can access
+- **Budget enforcement** — per-task token limits, cost caps, and wall-clock timeouts; global daily/monthly budgets pause the scheduler before you overspend
 - **Tool use** — web search, browser automation, document scanning, HTTP fetch
+- **Task dashboard** — view task status, spend, and results; create tasks from installed skills or custom prompts
 - **Multiple clients** — Web UI, Desktop (Tauri), CLI, WhatsApp
 - **Hot-swap providers** — change models at runtime from the Settings UI or CLI
 - **Two-server pattern** — run chat and embeddings on separate endpoints (local, cloud, or mixed)
@@ -107,7 +111,7 @@ Spaceduck supports both local and cloud providers. Chat and embeddings are indep
 | Platform | What it does |
 |----------|-------------|
 | **Gateway** | Local HTTP/WebSocket server — the engine that runs everything |
-| **Web UI** | React chat with streaming, settings, file upload, voice dictation |
+| **Web UI** | React chat with streaming, settings, task dashboard, file upload, voice dictation |
 | **Desktop** | Tauri v2 native app with gateway sidecar (macOS, Linux, Windows) |
 | **CLI** | `spaceduck status`, `config get/set`, `secret set/unset` |
 | **WhatsApp** | Messaging via QR-code pairing (Baileys) |
@@ -159,7 +163,7 @@ All browser settings are hot-appliable — no gateway restart required.
 
 ## Development
 
-Spaceduck is a Bun monorepo. Core logic lives in `packages/` (core, gateway, config, providers, memory, tools, channels) and applications live in `apps/` (web, desktop, CLI, website).
+Spaceduck is a Bun monorepo. Core logic lives in `packages/` (core, gateway, config, providers, memory, scheduler, skills, tools, ui, channels) and applications live in `apps/` (web, desktop, CLI, website).
 
 ```bash
 bun install                # Install all workspace dependencies
@@ -175,6 +179,11 @@ bun run test:unit          # Core unit tests
 bun run test:e2e           # End-to-end gateway tests
 bun run test:coverage      # Coverage report
 bash scripts/smoke-docker.sh  # Docker build + smoke test
+
+# Live integration tests (requires Bedrock credentials)
+RUN_LIVE_TESTS=1 bun test packages/scheduler/src/__tests__/e2e-scheduler.integration.test.ts
+RUN_LIVE_TESTS=1 bun test packages/skills/src/__tests__/e2e-skills.integration.test.ts
+RUN_LIVE_TESTS=1 bun test packages/memory/sqlite/src/__tests__/e2e-memory-v2.integration.test.ts
 ```
 
 > Test suites, project structure, and contributing guidelines: [Docs → Reference](https://docs.spaceduck.ai/reference/common-errors)
@@ -187,9 +196,9 @@ Tracked in [GitHub Issues](https://github.com/maziarzamani/spaceduck/issues).
 - Budget-aware task scheduler with persistent queue and session lanes
 - Per-task and global budget enforcement (tokens, cost, tool calls, memory writes)
 - Cache-aware pricing, universal injection detection, memory isolation hardening
-
-**In progress**
-- Skill runtime (SKILL.md parser, sandboxed execution, security scanner)
+- Skill runtime — SKILL.md parser, security scanner, tool scoping, skill-aware memory writes
+- Task dashboard UI — spend cards, task list with status/results, create tasks from skills or custom prompts
+- Built-in skills: daily-summary, inbox-triage, memory-hygiene, web-research
 
 **Up next**
 - Skill marketplace (registry, trust scoring, install/uninstall)
