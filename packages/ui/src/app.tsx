@@ -7,12 +7,13 @@ import { ChatView } from "./components/chat-view";
 import { OnboardingView } from "./components/onboarding-view";
 import { SettingsView } from "./components/settings-view";
 import { TasksView } from "./components/tasks-view";
+import { MemoryView } from "./components/memory-view";
 import { DictationOverlay } from "./components/dictation-overlay";
 import { TooltipProvider } from "./ui/tooltip";
 import { Toaster } from "sonner";
 import type { ChatInputRecorderHandle } from "./components/chat-input";
 
-export type AppView = "onboarding" | "chat" | "settings" | "tasks";
+export type AppView = "onboarding" | "chat" | "settings" | "tasks" | "memory";
 
 function resolveInitialView(): { view: AppView; setupNeeded: boolean } {
   const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
@@ -50,7 +51,7 @@ function AppInner() {
   const [viewState] = useState(resolveInitialView);
   const [view, setView] = useState<AppView>(viewState.view);
   const [setupBanner, setSetupBanner] = useState(false);
-  const shouldConnect = view === "chat" || view === "settings" || view === "tasks";
+  const shouldConnect = view === "chat" || view === "settings" || view === "tasks" || view === "memory";
   const ws = useSpaceduckWs(shouldConnect);
   const chatRecorderRef = useRef<ChatInputRecorderHandle | null>(null);
 
@@ -169,6 +170,14 @@ function AppInner() {
     );
   }
 
+  if (view === "memory") {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <MemoryView onBack={() => setView("chat")} />
+      </TooltipProvider>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={300}>
       {setupBanner && (
@@ -178,6 +187,7 @@ function AppInner() {
         ws={ws}
         onOpenSettings={() => setView("settings")}
         onOpenTasks={() => setView("tasks")}
+        onOpenMemory={() => setView("memory")}
         recorderRef={chatRecorderRef}
       />
       {dictation.supported && (

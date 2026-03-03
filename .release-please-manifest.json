@@ -1,4 +1,7 @@
 {
   "packages/gateway": "0.23.0",
-  "apps/cli": "0.17.0"
+  "apps/cli": "0.17.0",
+  "apps/desktop": "0.2.0",
+  "apps/web": "0.2.0",
+  "packages/ui": "0.2.0"
 }

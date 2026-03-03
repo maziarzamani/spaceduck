@@ -136,6 +136,26 @@ Each memory record stores a `taskId` (which task wrote it) and optionally a `ski
 
 See [Security](/concepts/security) for the full defense-in-depth model.
 
+## Memory viewer
+
+The memory viewer lets you inspect, search, and manage everything Spaceduck remembers. Access it from the **Brain icon** in the sidebar.
+
+- **Browse** all stored memories (facts, episodes, procedures) with filters for kind, status, and scope
+- **Search** using the same hybrid retrieval pipeline (vector + FTS + RRF) the agent uses internally
+- **Delete** individual memories that are wrong, outdated, or no longer useful
+- **Provenance** each card shows where the memory came from: which skill wrote it, which task created it, and the source type (user message, assistant, tool result, etc.)
+
+### Memory API
+
+The viewer is backed by authenticated HTTP endpoints on the gateway:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/memories` | List memories with optional filters (`kinds`, `status`, `scope`, `limit`) |
+| `GET` | `/api/memories/search?q=...` | Hybrid search (same recall pipeline as the agent) |
+| `GET` | `/api/memories/:id` | Get a single memory by ID |
+| `DELETE` | `/api/memories/:id` | Permanently delete a memory |
+
 ## Configuration
 
 Memory settings live in **Settings > Memory**:

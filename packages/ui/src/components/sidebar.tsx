@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { cn } from "../lib/utils";
 import type { ConversationSummary } from "@spaceduck/core";
-import { MessageSquarePlus, Trash2, MessageCircle, Settings, Sun, Moon, MoreHorizontal, Pencil, Loader2, ListTodo } from "lucide-react";
+import { MessageSquarePlus, Trash2, MessageCircle, Settings, Sun, Moon, MoreHorizontal, Pencil, Loader2, ListTodo, Brain } from "lucide-react";
+import uiPkg from "../../package.json";
 import { SpaceduckLogo } from "./spaceduck-logo";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
@@ -32,6 +33,7 @@ interface SidebarProps {
   onRename: (id: string, title: string) => void;
   onOpenSettings?: () => void;
   onOpenTasks?: () => void;
+  onOpenMemory?: () => void;
 }
 
 function timeAgo(ts: number): string {
@@ -42,7 +44,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-export function Sidebar({ conversations, activeId, streamingIds, unreadIds, onSelect, onCreate, onDelete, onRename, onOpenSettings, onOpenTasks }: SidebarProps) {
+export function Sidebar({ conversations, activeId, streamingIds, unreadIds, onSelect, onCreate, onDelete, onRename, onOpenSettings, onOpenTasks, onOpenMemory }: SidebarProps) {
   const { resolved, setTheme } = useTheme();
   const { tasks, budget } = useTasks({ pollIntervalMs: 30_000 });
   const runningCount = tasks.filter((t) => t.status === "running").length;
@@ -226,7 +228,7 @@ export function Sidebar({ conversations, activeId, streamingIds, unreadIds, onSe
 
       <Separator />
       <div className="flex items-center justify-between px-4 py-3">
-        <p className="text-xs text-muted-foreground">spaceduck v0.1.0</p>
+        <p className="text-xs text-muted-foreground">v{uiPkg.version}</p>
         <div className="flex items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -241,6 +243,16 @@ export function Sidebar({ conversations, activeId, streamingIds, unreadIds, onSe
             </TooltipTrigger>
             <TooltipContent side="top">Toggle theme</TooltipContent>
           </Tooltip>
+          {onOpenMemory && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={onOpenMemory} className="h-7 w-7">
+                  <Brain size={16} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Memories</TooltipContent>
+            </Tooltip>
+          )}
           {onOpenTasks && (
             <Tooltip>
               <TooltipTrigger asChild>

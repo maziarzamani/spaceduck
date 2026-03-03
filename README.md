@@ -99,19 +99,20 @@ Spaceduck supports both local and cloud providers. Chat and embeddings are indep
 - **Budget enforcement** — per-task token limits, cost caps, and wall-clock timeouts; global daily/monthly budgets pause the scheduler before you overspend
 - **Tool use** — web search, browser automation, document scanning, HTTP fetch
 - **Task dashboard** — view task status, spend, and results; create tasks from installed skills or custom prompts
+- **Memory viewer** — browse, search, and delete memories; see provenance (which skill/task created each memory); same hybrid search the agent uses
 - **Multiple clients** — Web UI, Desktop (Tauri), CLI, WhatsApp
 - **Hot-swap providers** — change models at runtime from the Settings UI or CLI
 - **Two-server pattern** — run chat and embeddings on separate endpoints (local, cloud, or mixed)
 - **Zero dependencies** — no LangChain, no LlamaIndex, no hidden abstractions
 
-> Deep dive: [Docs → Memory Search](https://docs.spaceduck.ai/concepts/memory-search)
+> Deep dive: [Docs → Memory](https://docs.spaceduck.ai/concepts/memory)
 
 ## Platforms
 
 | Platform | What it does |
 |----------|-------------|
 | **Gateway** | Local HTTP/WebSocket server — the engine that runs everything |
-| **Web UI** | React chat with streaming, settings, task dashboard, file upload, voice dictation |
+| **Web UI** | React chat with streaming, settings, task dashboard, memory viewer, file upload, voice dictation |
 | **Desktop** | Tauri v2 native app with gateway sidecar (macOS, Linux, Windows) |
 | **CLI** | `spaceduck status`, `config get/set`, `secret set/unset` |
 | **WhatsApp** | Messaging via QR-code pairing (Baileys) |
@@ -198,13 +199,13 @@ Tracked in [GitHub Issues](https://github.com/maziarzamani/spaceduck/issues).
 - Cache-aware pricing, universal injection detection, memory isolation hardening
 - Skill runtime — SKILL.md parser, security scanner, tool scoping, skill-aware memory writes
 - Task dashboard UI — spend cards, task list with status/results, create tasks from skills or custom prompts
+- Memory viewer — browse, search, and delete memories with provenance tracking
 - Built-in skills: daily-summary, inbox-triage, memory-hygiene, web-research
 
 **Up next**
 - Skill marketplace (registry, trust scoring, install/uninstall)
 - Per-user isolation across channels
 - Provider fallback chain
-- Memory inspector UI
 
 ---
 
