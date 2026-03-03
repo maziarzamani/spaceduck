@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.24.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.23.0...gateway-v0.24.0) (2026-03-03)
+
+
+### Features
+
+* memory viewer UI + fix version management ([3bdbf38](https://github.com/maziarzamani/spaceduck/commit/3bdbf38d801cf3a03bad39e6ca14daaceec612a4))
+
+
+### Bug Fixes
+
+* **ci:** skip browser tests when Bun transpiler strips class methods ([0c217b3](https://github.com/maziarzamani/spaceduck/commit/0c217b397cf0bdc1cee9f6618548a1c22bcd0c6e))
+
 ## [0.23.0](https://github.com/maziarzamani/spaceduck/compare/gateway-v0.22.0...gateway-v0.23.0) (2026-03-02)
 
 
