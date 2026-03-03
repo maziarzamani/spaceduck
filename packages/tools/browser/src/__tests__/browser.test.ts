@@ -1,13 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { createServer, type Server } from "node:http";
+import { existsSync, statSync, unlinkSync } from "node:fs";
 import { BrowserTool } from "../browser-tool";
 import type { ScreencastFrame } from "../types";
-import type { Server } from "bun";
-
-// Bun's transpiler on GitHub Actions CI can silently strip class methods
-// when playwright is in the dependency graph. Detect this at runtime so
-// we skip gracefully instead of failing with "X is not a function".
-// See: https://github.com/oven-sh/bun/issues/8222
-const CLASS_METHODS_INTACT = typeof BrowserTool.isAvailable === "function";
 
 const TEST_HTML = `<!DOCTYPE html>
 <html>
@@ -33,35 +28,40 @@ const ABOUT_HTML = `<!DOCTYPE html>
 <body><h1>About Page</h1><a href="/">Back</a></body>
 </html>`;
 
-let server: Server<unknown>;
+let server: Server;
 let BASE: string;
 
-beforeAll(() => {
-  server = Bun.serve({
-    port: 0,
-    fetch(req) {
-      const url = new URL(req.url);
-      if (url.pathname === "/about") {
-        return new Response(ABOUT_HTML, { headers: { "content-type": "text/html" } });
-      }
-      return new Response(TEST_HTML, { headers: { "content-type": "text/html" } });
-    },
+beforeAll(async () => {
+  server = createServer((req, res) => {
+    res.setHeader("content-type", "text/html");
+    if (req.url === "/about") {
+      res.end(ABOUT_HTML);
+    } else {
+      res.end(TEST_HTML);
+    }
   });
-  BASE = `http://localhost:${server.port}`;
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, () => resolve());
+  });
+
+  const addr = server.address();
+  const port = typeof addr === "object" && addr ? addr.port : 0;
+  BASE = `http://localhost:${port}`;
 });
 
 afterAll(() => {
-  server?.stop(true);
+  server?.close();
 });
 
-describe.skipIf(!CLASS_METHODS_INTACT)("BrowserTool.isAvailable", () => {
+describe("BrowserTool.isAvailable", () => {
   it("returns available: true when Chromium is installed", () => {
     const result = BrowserTool.isAvailable();
     expect(result.available).toBe(true);
   });
 });
 
-describe.skipIf(!CLASS_METHODS_INTACT)("BrowserTool", () => {
+describe("BrowserTool", () => {
   let browser: BrowserTool;
 
   beforeAll(async () => {
@@ -109,7 +109,7 @@ describe.skipIf(!CLASS_METHODS_INTACT)("BrowserTool", () => {
     });
 
     it("should throw on invalid ref", async () => {
-      expect(browser.click(9999)).rejects.toThrow("Invalid ref");
+      await expect(browser.click(9999)).rejects.toThrow("Invalid ref");
     });
   });
 
@@ -150,14 +150,13 @@ describe.skipIf(!CLASS_METHODS_INTACT)("BrowserTool", () => {
   describe("screenshot", () => {
     it("should save a screenshot", async () => {
       await browser.navigate(BASE);
-      const path = `/tmp/spaceduck-browser-test-${Date.now()}.png`;
-      const result = await browser.screenshot(path);
+      const filepath = `/tmp/spaceduck-browser-test-${Date.now()}.png`;
+      const result = await browser.screenshot(filepath);
       expect(result).toContain("Screenshot saved to");
 
-      const file = Bun.file(path);
-      expect(await file.exists()).toBe(true);
-      expect(file.size).toBeGreaterThan(0);
-      await Bun.write(path, "");
+      expect(existsSync(filepath)).toBe(true);
+      expect(statSync(filepath).size).toBeGreaterThan(0);
+      unlinkSync(filepath);
     });
   });
 

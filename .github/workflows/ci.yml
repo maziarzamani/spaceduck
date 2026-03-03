@@ -44,6 +44,10 @@ jobs:
       - name: Build
         run: bun run build
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install Playwright Chromium
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
@@ -52,8 +56,18 @@ jobs:
             bunx playwright install chromium
           fi
 
-      - name: Run tests
-        run: bun test --recursive
+      - name: Run tests (Bun)
+        run: >-
+          bun test --recursive
+          packages/core packages/config packages/gateway packages/memory
+          packages/providers packages/scheduler packages/skills packages/stt
+          packages/channels packages/tools/marker packages/tools/web-fetch
+          packages/tools/web-search packages/tools/browser/src/__tests__/snapshot.test.ts
+          packages/ui apps
+
+      - name: Run browser tests (Node + Vitest)
+        working-directory: packages/tools/browser
+        run: npx vitest run
 
   docker-smoke:
     name: Docker Smoke Test
