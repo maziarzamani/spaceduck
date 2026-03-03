@@ -38,7 +38,7 @@ jobs:
         run: bun scripts/release/package-release.ts
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/release/spaceduck-gateway.js
 
