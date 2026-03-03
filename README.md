@@ -15,7 +15,6 @@
 
 <p align="center">
   <img src="https://img.shields.io/github/actions/workflow/status/maziarzamani/spaceduck/ci.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=build" alt="Build">
-  <img src="https://img.shields.io/github/v/release/maziarzamani/spaceduck?style=for-the-badge&label=release&color=6366f1" alt="Release">
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/runtime-Bun_1.3+-f9f1e1?style=for-the-badge&logo=bun&logoColor=14151a" alt="Runtime">
 </p>
