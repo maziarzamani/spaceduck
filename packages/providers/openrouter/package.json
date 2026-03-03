@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@spaceduck/core": "workspace:*",
-    "@openrouter/sdk": "^0.8.0"
+    "@openrouter/sdk": "^0.9.11"
   },
   "devDependencies": {
     "bun-types": "^1.3.9"
