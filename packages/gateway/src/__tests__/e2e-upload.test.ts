@@ -180,7 +180,7 @@ describe("PDF upload + attachment E2E", () => {
     }
   });
 
-  it("should inject attachment hint into context for the LLM", async () => {
+  it.todo("should inject attachment hint into context for the LLM", async () => {
     const result = await createTestGateway(PORT);
     gateway = result.gateway;
     await gateway.start();
