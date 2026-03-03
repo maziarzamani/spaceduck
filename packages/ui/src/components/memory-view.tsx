@@ -146,7 +146,7 @@ export function MemoryView({ onBack }: MemoryViewProps) {
 
   const [deleteTarget, setDeleteTarget] = useState<MemoryRecord | null>(null);
   const [inputValue, setInputValue] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     debounceRef.current = setTimeout(() => {
