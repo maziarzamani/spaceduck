@@ -31,5 +31,5 @@
     "types": ["bun-types"],
     "jsx": "react-jsx"
   },
-  "exclude": ["node_modules", "dist", "apps/spaceduck-website"]
+  "exclude": ["node_modules", "dist", "apps/spaceduck-website", "scripts/demos"]
 }
