@@ -40,6 +40,24 @@ These are deployment knobs only — product settings (provider, model, API keys)
 | `LOG_LEVEL` | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`) |
 | `SPACEDUCK_TOKEN` | — | Auth token for CLI and remote access |
 
+## API routes
+
+The gateway exposes HTTP and WebSocket endpoints. All routes except health and pairing require authentication.
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/health` | No | Version, uptime, provider status |
+| `GET` | `/api/config` | Yes | Read current configuration |
+| `PATCH` | `/api/config` | Yes | Update configuration (JSON Patch) |
+| `GET` | `/api/memories` | Yes | List memories (with filters) |
+| `GET` | `/api/memories/search?q=...` | Yes | Hybrid memory search |
+| `DELETE` | `/api/memories/:id` | Yes | Delete a memory |
+| `GET` | `/api/tasks` | Yes | List scheduled tasks |
+| `POST` | `/api/tasks` | Yes | Create a task |
+| `GET` | `/api/tasks/budget` | Yes | Daily/monthly spend summary |
+| `GET` | `/api/skills` | Yes | List installed skills |
+| `WS` | `/ws` | Token | Chat streaming, real-time events |
+
 ## Configuration system
 
 Spaceduck uses a single config file (`spaceduck.config.json5`) validated by a Zod schema. You can modify it through three surfaces:
