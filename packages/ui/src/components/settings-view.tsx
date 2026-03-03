@@ -55,8 +55,7 @@ const NAV_ITEMS: { id: SettingsSection; label: string; icon: typeof Brain }[] = 
 ];
 
 function resolveDefaultSection(): SettingsSection {
-  const token = localStorage.getItem("spaceduck.token");
-  return token ? "chat" : "connection";
+  return "connection";
 }
 
 export function SettingsView({ onBack, onDisconnect }: SettingsViewProps) {

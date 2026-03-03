@@ -22,6 +22,7 @@ import {
   loadConfig,
   ToolRegistry,
   GATEWAY_VERSION,
+  APP_VERSION,
   API_VERSION,
   GIT_SHA,
 } from "@spaceduck/core";
@@ -58,6 +59,7 @@ import {
 import type { TaskRunResult, SkillResolver } from "@spaceduck/scheduler";
 import { SkillRegistry } from "@spaceduck/skills";
 import { handleSchedulerRoute } from "./scheduler-routes";
+import { handleMemoryRoute } from "./memory-routes";
 import { WhisperStt, SttError } from "@spaceduck/stt-whisper";
 import { AwsTranscribeStt, SttError as AwsSttError } from "@spaceduck/stt-aws-transcribe";
 import { createWriteStream } from "node:fs";
@@ -683,6 +685,7 @@ export class Gateway implements Lifecycle {
       return Response.json({
         status: "ok",
         version: GATEWAY_VERSION,
+        appVersion: APP_VERSION,
         apiVersion: API_VERSION,
         commit: GIT_SHA,
         uptime: process.uptime(),
@@ -1337,6 +1340,25 @@ export class Gateway implements Lifecycle {
         resultRoute: s.resultRoute,
       }));
       return Response.json({ skills });
+    }
+
+    // ── Memory routes ──────────────────────────────────────────────
+    if (url.pathname.startsWith("/api/memories")) {
+      const token = this.db ? requireAuth(req, this.db, this.authRequired) : true;
+      if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      if (!this.deps.memoryStore) {
+        return Response.json(
+          { error: "MEMORY_DISABLED", message: "Memory store is not available." },
+          { status: 503 },
+        );
+      }
+
+      const memoryResp = await handleMemoryRoute(req, url, {
+        memoryStore: this.deps.memoryStore,
+        logger: this.deps.logger,
+      });
+      if (memoryResp) return memoryResp;
     }
 
     // 404
