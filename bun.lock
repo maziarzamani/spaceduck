@@ -26,7 +26,7 @@
     },
     "apps/desktop": {
       "name": "@spaceduck/desktop",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@spaceduck/ui": "workspace:*",
         "@tauri-apps/api": "^2",
@@ -70,7 +70,7 @@
     },
     "apps/web": {
       "name": "@spaceduck/web",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@spaceduck/ui": "workspace:*",
         "react": "^19",
@@ -125,7 +125,7 @@
     },
     "packages/gateway": {
       "name": "@spaceduck/gateway",
-      "version": "0.21.0",
+      "version": "0.23.0",
       "dependencies": {
         "@spaceduck/channel-whatsapp": "workspace:*",
         "@spaceduck/config": "workspace:*",
@@ -219,7 +219,7 @@
       "name": "@spaceduck/provider-openrouter",
       "version": "0.1.0",
       "dependencies": {
-        "@openrouter/sdk": "^0.8.0",
+        "@openrouter/sdk": "^0.9.11",
         "@spaceduck/core": "workspace:*",
       },
       "devDependencies": {
@@ -305,7 +305,7 @@
     },
     "packages/ui": {
       "name": "@spaceduck/ui",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@radix-ui/react-alert-dialog": "^1.1.15",
         "@radix-ui/react-avatar": "^1.1.11",
@@ -675,7 +675,7 @@
 
     "@open-draft/until": ["@open-draft/until@2.1.0", "", {}, "sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg=="],
 
-    "@openrouter/sdk": ["@openrouter/sdk@0.8.0", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-hmCY5CE/adBmwZmrwuSx7Pw5UngcyuA9FvgpouyWEX8m283omLD1BqJlYYkLdVoUdI8iGNFHKezH2CeJqsVymw=="],
+    "@openrouter/sdk": ["@openrouter/sdk@0.9.11", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-BgFu6NcIJO4a9aVjr04y3kZ8pyM71j15I+bzfVAGEvxnj+KQNIkBYQGgwrG3D+aT1QpDKLki8btcQmpaxUas6A=="],
 
     "@oslojs/encoding": ["@oslojs/encoding@1.1.0", "", {}, "sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ=="],
 
