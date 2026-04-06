@@ -14,6 +14,7 @@
     "packages/memory/*",
     "packages/scheduler",
     "packages/skills",
+    "packages/tool-loader",
     "packages/tools/*",
     "packages/stt/*",
     "apps/*"

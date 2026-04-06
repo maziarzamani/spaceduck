@@ -25,6 +25,13 @@ export type {
 } from "./tool";
 
 export type {
+  ToolPlugin,
+  ToolPluginContext,
+  ToolPluginServices,
+  ToolContribution,
+} from "./tool-plugin";
+
+export type {
   Channel,
   ChannelMessage,
   ChannelResponse,

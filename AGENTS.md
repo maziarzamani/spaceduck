@@ -67,6 +67,7 @@ These interfaces are the public API. Implementations plug in via the gateway:
 - **No framework magic at the core.** `packages/core` has zero runtime dependencies. Keep it that way.
 - **File size.** Keep files under ~400 lines. If a file grows beyond that, split it.
 - **Tests colocated.** Test files live next to the code they test in `src/__tests__/`.
+- **Test-driven development.** Write tests before implementation. Follow the red-green-refactor cycle: write a failing test, make it pass, then refactor.
 - **Conventional commits.** All commit messages must follow `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `perf:` prefixes. This powers automated releases.
 
 ## Adding a new provider
