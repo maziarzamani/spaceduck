@@ -17,10 +17,10 @@ async function makeLoadedConfigStore() {
 }
 
 describe("config_set tool — JSON schema (llama.cpp compatibility)", () => {
-  it("registers config_set with a typed 'value' property", () => {
+  it("registers config_set with a typed 'value' property", async () => {
     const logger = new ConsoleLogger("error");
     const configStore = makeConfigStore();
-    const registry = buildToolRegistry(logger, undefined, configStore);
+    const registry = (await buildToolRegistry(logger, undefined, configStore)).registry;
 
     const defs = registry.getDefinitions();
     const configSet = defs.find((d) => d.name === "config_set");
@@ -33,10 +33,10 @@ describe("config_set tool — JSON schema (llama.cpp compatibility)", () => {
     expect(valueSchema.type).toBeDefined();
   });
 
-  it("config_set value type includes all JSON primitive types", () => {
+  it("config_set value type includes all JSON primitive types", async () => {
     const logger = new ConsoleLogger("error");
     const configStore = makeConfigStore();
-    const registry = buildToolRegistry(logger, undefined, configStore);
+    const registry = (await buildToolRegistry(logger, undefined, configStore)).registry;
 
     const defs = registry.getDefinitions();
     const configSet = defs.find((d) => d.name === "config_set");
@@ -49,10 +49,10 @@ describe("config_set tool — JSON schema (llama.cpp compatibility)", () => {
     expect(types).toContain("null");
   });
 
-  it("no tool property schema is missing a type (llama.cpp guard)", () => {
+  it("no tool property schema is missing a type (llama.cpp guard)", async () => {
     const logger = new ConsoleLogger("error");
     const configStore = makeConfigStore();
-    const registry = buildToolRegistry(logger, undefined, configStore);
+    const registry = (await buildToolRegistry(logger, undefined, configStore)).registry;
 
     const defs = registry.getDefinitions();
     const violations: string[] = [];
@@ -73,7 +73,7 @@ describe("config_set tool — JSON schema (llama.cpp compatibility)", () => {
   it("config_set rejects secret paths", async () => {
     const logger = new ConsoleLogger("error");
     const configStore = makeConfigStore();
-    const registry = buildToolRegistry(logger, undefined, configStore);
+    const registry = (await buildToolRegistry(logger, undefined, configStore)).registry;
 
     const result = await registry.execute({
       id: "test-1",
@@ -86,9 +86,9 @@ describe("config_set tool — JSON schema (llama.cpp compatibility)", () => {
 });
 
 describe("tool handler execution", () => {
-  it("registers core tools without configStore or attachmentStore", () => {
+  it("registers core tools without configStore or attachmentStore", async () => {
     const logger = new ConsoleLogger("error");
-    const registry = buildToolRegistry(logger);
+    const registry = (await buildToolRegistry(logger)).registry;
 
     const defs = registry.getDefinitions();
     const names = defs.map((d) => d.name);
@@ -103,18 +103,18 @@ describe("tool handler execution", () => {
     expect(names).toContain("browser_evaluate");
   });
 
-  it("does not register config_get/config_set without configStore", () => {
+  it("does not register config_get/config_set without configStore", async () => {
     const logger = new ConsoleLogger("error");
-    const registry = buildToolRegistry(logger);
+    const registry = (await buildToolRegistry(logger)).registry;
 
     expect(registry.has("config_get")).toBe(false);
     expect(registry.has("config_set")).toBe(false);
   });
 
-  it("registers config_get and config_set when configStore is provided", () => {
+  it("registers config_get and config_set when configStore is provided", async () => {
     const logger = new ConsoleLogger("error");
     const configStore = makeConfigStore();
-    const registry = buildToolRegistry(logger, undefined, configStore);
+    const registry = (await buildToolRegistry(logger, undefined, configStore)).registry;
 
     expect(registry.has("config_get")).toBe(true);
     expect(registry.has("config_set")).toBe(true);
@@ -123,7 +123,7 @@ describe("tool handler execution", () => {
   it("config_get returns full config when no path given", async () => {
     const logger = new ConsoleLogger("error");
     const configStore = await makeLoadedConfigStore();
-    const registry = buildToolRegistry(logger, undefined, configStore);
+    const registry = (await buildToolRegistry(logger, undefined, configStore)).registry;
 
     const result = await registry.execute({
       id: "test-get-full",
@@ -140,7 +140,7 @@ describe("tool handler execution", () => {
   it("config_get resolves a specific path", async () => {
     const logger = new ConsoleLogger("error");
     const configStore = await makeLoadedConfigStore();
-    const registry = buildToolRegistry(logger, undefined, configStore);
+    const registry = (await buildToolRegistry(logger, undefined, configStore)).registry;
 
     const result = await registry.execute({
       id: "test-get-path",
@@ -157,7 +157,7 @@ describe("tool handler execution", () => {
   it("config_get returns error for invalid path", async () => {
     const logger = new ConsoleLogger("error");
     const configStore = await makeLoadedConfigStore();
-    const registry = buildToolRegistry(logger, undefined, configStore);
+    const registry = (await buildToolRegistry(logger, undefined, configStore)).registry;
 
     const result = await registry.execute({
       id: "test-get-invalid",
@@ -171,7 +171,7 @@ describe("tool handler execution", () => {
   it("config_set updates a valid config path", async () => {
     const logger = new ConsoleLogger("error");
     const configStore = await makeLoadedConfigStore();
-    const registry = buildToolRegistry(logger, undefined, configStore);
+    const registry = (await buildToolRegistry(logger, undefined, configStore)).registry;
 
     const result = await registry.execute({
       id: "test-set",
@@ -188,7 +188,7 @@ describe("tool handler execution", () => {
 
   it("web_fetch returns error for unknown tool", async () => {
     const logger = new ConsoleLogger("error");
-    const registry = buildToolRegistry(logger);
+    const registry = (await buildToolRegistry(logger)).registry;
 
     const result = await registry.execute({
       id: "test-unknown",

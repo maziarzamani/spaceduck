@@ -451,20 +451,23 @@ export class Gateway implements Lifecycle {
     }
   }
 
-  private rebuildAndSwapTools(reason: string, changedPaths?: string[]): SwapResult {
+  lastLoadResult?: import("@spaceduck/tool-loader").LoadResult;
+
+  private async rebuildAndSwapTools(reason: string, changedPaths?: string[]): Promise<SwapResult> {
     const startMs = Date.now();
     const configStore = this.deps.configStore;
     const prevSize = this.deps.agent.toolRegistry?.size ?? 0;
     try {
-      const next = buildToolRegistry(
+      const loadResult = await buildToolRegistry(
         this.deps.logger, this.deps.attachmentStore, configStore,
         this.browserFrame.onFrame, this.browserPool,
         () => this.conversationIdRef.current,
       );
-      this.deps.agent.setToolRegistry(next);
+      this.lastLoadResult = loadResult;
+      this.deps.agent.setToolRegistry(loadResult.registry);
       this.deps.logger.info("Tool registry hot-swapped", {
         reason, changedPaths,
-        prevTools: prevSize, newTools: next.size,
+        prevTools: prevSize, newTools: loadResult.registry.size,
         elapsedMs: Date.now() - startMs,
       });
       return { ok: true };
@@ -479,6 +482,19 @@ export class Gateway implements Lifecycle {
         message: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  private shouldRebuildTools(changedPaths: Set<string>): boolean {
+    const paths = this.lastLoadResult?.rebuildConfigPaths ?? TOOL_REBUILD_PATHS;
+    for (const p of paths) {
+      if (changedPaths.has(p)) return true;
+    }
+    return false;
+  }
+
+  private shouldRebuildToolsForSecret(path: string): boolean {
+    const secretPaths = this.lastLoadResult?.rebuildSecretPaths ?? TOOL_SECRET_PATHS;
+    return secretPaths.has(path) || AI_SECRETS_AFFECTING_TOOLS.has(path);
   }
 
   private async rebuildAndSwapChannels(reason: string, changedPaths?: string[]): Promise<SwapResult> {
@@ -1106,8 +1122,8 @@ export class Gateway implements Lifecycle {
               }
 
               // Hot-swap tool registry if tool config changed
-              if (shouldRebuildTools(changedPaths)) {
-                const r = this.rebuildAndSwapTools("config_patch", [...changedPaths]);
+              if (this.shouldRebuildTools(changedPaths)) {
+                const r = await this.rebuildAndSwapTools("config_patch", [...changedPaths]);
                 if (!r.ok) warnings.push({ code: r.code, message: r.message });
               }
 
@@ -1252,8 +1268,8 @@ export class Gateway implements Lifecycle {
 
               // Hot-swap tool registry if a tool-affecting secret changed
               const secretWarnings: Array<{ code: string; message: string }> = [];
-              if (shouldRebuildToolsForSecret(body.path!)) {
-                const r = this.rebuildAndSwapTools("secret_update", [body.path!]);
+              if (this.shouldRebuildToolsForSecret(body.path!)) {
+                const r = await this.rebuildAndSwapTools("secret_update", [body.path!]);
                 if (!r.ok) secretWarnings.push({ code: r.code, message: r.message });
               }
 
@@ -1793,17 +1809,6 @@ const STT_REBUILD_PATHS = new Set([
   "/stt/awsTranscribe/profile",
 ]);
 
-function shouldRebuildTools(changedPaths: Set<string>): boolean {
-  for (const p of TOOL_REBUILD_PATHS) {
-    if (changedPaths.has(p)) return true;
-  }
-  return false;
-}
-
-function shouldRebuildToolsForSecret(path: string): boolean {
-  return TOOL_SECRET_PATHS.has(path) || AI_SECRETS_AFFECTING_TOOLS.has(path);
-}
-
 function shouldRebuildChannels(changedPaths: Set<string>): boolean {
   for (const p of CHANNEL_REBUILD_PATHS) {
     if (changedPaths.has(p)) return true;
@@ -2281,10 +2286,11 @@ export async function createGateway(overrides?: {
   }) : undefined;
 
   // Create tool registry with built-in tools
-  const toolRegistry = buildToolRegistry(
+  const toolLoadResult = await buildToolRegistry(
     logger, attachmentStore, configStore, undefined,
     browserPool, () => conversationIdRef.current,
   );
+  const toolRegistry = toolLoadResult.registry;
 
   // Wire memory extractor (v2) — classifies and stores typed memories from assistant responses
   const memoryExtractor = new MemoryExtractor(memoryStore, logger, provider);
@@ -2329,6 +2335,7 @@ export async function createGateway(overrides?: {
 
   await gateway.initStt();
 
+  gateway.lastLoadResult = toolLoadResult;
   gateway.toolStatusService = new ToolStatusService(() => agent.toolRegistry, configStore ?? undefined);
 
   return gateway;

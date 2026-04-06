@@ -18,6 +18,7 @@
     "@spaceduck/provider-bedrock": "workspace:*",
     "@spaceduck/web": "workspace:*",
     "@spaceduck/channel-whatsapp": "workspace:*",
+    "@spaceduck/tool-loader": "workspace:*",
     "@spaceduck/tool-browser": "workspace:*",
     "@spaceduck/tool-web-fetch": "workspace:*",
     "@spaceduck/tool-web-search": "workspace:*",

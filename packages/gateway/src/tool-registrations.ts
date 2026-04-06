@@ -1,403 +1,67 @@
-// Tool registrations: bridges tool classes to ToolRegistry
-// Each tool class is wrapped with a ToolDefinition + ToolHandler pair.
+// Tool registrations: loads tool plugins and registers gateway-internal tools
 
 import type { Logger } from "@spaceduck/core";
 import { ToolRegistry } from "@spaceduck/core";
-import { WebFetchTool } from "@spaceduck/tool-web-fetch";
-import { WebSearchTool, WebAnswerTool, type SearchProvider } from "@spaceduck/tool-web-search";
-import { MarkerTool } from "@spaceduck/tool-marker";
-import { BrowserTool } from "@spaceduck/tool-browser";
+import { discoverPlugins, loadPlugins, type LoadResult } from "@spaceduck/tool-loader";
+import { resolve } from "node:path";
 import type { AttachmentStore } from "./attachment-store";
 import type { ConfigStore } from "./config";
 import type { BrowserSessionPool } from "./browser-session-pool";
 import { isSecretPath, decodePointer } from "@spaceduck/config";
 
 /**
- * Build a ToolRegistry pre-loaded with all built-in tools.
- * Reads config store first, falls back to env vars for backwards compat.
- * Pure function: only depends on configStore.current, Bun.env, and injected deps.
+ * Build a ToolRegistry by discovering and loading tool plugins,
+ * then registering gateway-internal tools (config, render_chart).
  */
-export function buildToolRegistry(
+export async function buildToolRegistry(
   logger: Logger,
   attachmentStore?: AttachmentStore,
   configStore?: ConfigStore,
   _onBrowserFrame?: unknown,
   browserPool?: BrowserSessionPool,
   getConversationId?: () => string,
-): ToolRegistry {
-  const registry = new ToolRegistry();
+): Promise<LoadResult> {
   const log = logger.child({ component: "ToolRegistry" });
 
   let cfg: import("@spaceduck/config").SpaceduckProductConfig | undefined;
-  try { cfg = configStore?.current; } catch { /* not loaded yet, fall back to env */ }
+  try { cfg = configStore?.current; } catch { /* not loaded yet */ }
 
-  // ── web_fetch ──────────────────────────────────────────────────────
-  const webFetchEnabled = cfg?.tools?.webFetch?.enabled ?? true;
+  // ── Discover and load plugins ─────────────────────────────────────
+  const toolsDir = resolve(import.meta.dir, "../../tools");
+  const discResult = await discoverPlugins(toolsDir);
 
-  if (webFetchEnabled) {
-    const webFetch = new WebFetchTool();
+  let loadResult: LoadResult;
 
-    registry.register(
-      {
-        name: "web_fetch",
-        description:
-          "Fetch a URL and return readable text content (HTML, JSON, or plain text). Prefer this when the user gives a specific URL. Returns raw fetched content, not JavaScript-rendered DOM. If the page requires JavaScript, login, or heavy client-side rendering, use browser_navigate instead.",
-        parameters: {
-          type: "object",
-          properties: {
-            url: { type: "string", description: "The URL to fetch" },
-          },
-          required: ["url"],
-        },
+  if (discResult.ok) {
+    loadResult = await loadPlugins(discResult.value, {
+      logger,
+      config: (cfg ?? {}) as Record<string, unknown>,
+      env: Bun.env as Record<string, string | undefined>,
+      services: {
+        attachmentStore: attachmentStore
+          ? { resolve: (id: string) => attachmentStore.resolve(id) }
+          : undefined,
+        browserPool: browserPool
+          ? { acquire: (cid: string) => browserPool.acquire(cid) }
+          : undefined,
+        getConversationId,
       },
-      async (args) => {
-        const url = args.url as string;
-        log.debug("web_fetch", { url });
-        return webFetch.fetch(url);
-      },
-    );
-  } else {
-    log.debug("web_fetch not registered (disabled in config)");
-  }
-
-  // ── browser tools ─────────────────────────────────────────────────
-  const browserEnabled = cfg?.tools?.browser?.enabled ?? true;
-
-  if (browserEnabled) {
-    let singletonBrowser: BrowserTool | null = null;
-
-    async function ensureBrowser(): Promise<BrowserTool> {
-      if (browserPool && getConversationId) {
-        return browserPool.acquire(getConversationId());
-      }
-      if (!singletonBrowser) singletonBrowser = new BrowserTool();
-      return singletonBrowser;
-    }
-
-    registry.register(
-      {
-        name: "browser_navigate",
-        description:
-          "Navigate the headless browser to a URL and make it the current page. Use for pages that require JavaScript rendering. After navigation, usually call browser_snapshot to inspect interactive elements.",
-        parameters: {
-          type: "object",
-          properties: {
-            url: { type: "string", description: "The URL to navigate to" },
-          },
-          required: ["url"],
-        },
-      },
-      async (args) => {
-        const b = await ensureBrowser();
-        return b.navigate(args.url as string);
-      },
-    );
-
-    // ── browser_snapshot ───────────────────────────────────────────────
-    registry.register(
-      {
-        name: "browser_snapshot",
-        description:
-          "Take an accessibility snapshot of the current page. Returns numbered element refs that can be used with browser_click, browser_type, etc.",
-        parameters: {
-          type: "object",
-          properties: {},
-        },
-      },
-      async () => {
-        const b = await ensureBrowser();
-        return b.snapshot();
-      },
-    );
-
-    // ── browser_click ──────────────────────────────────────────────────
-    registry.register(
-      {
-        name: "browser_click",
-        description:
-          "Click an element by ref from the most recent browser_snapshot. If refs are stale after navigation or page updates, take a new snapshot first.",
-        parameters: {
-          type: "object",
-          properties: {
-            ref: { type: "number", description: "Element ref number from snapshot" },
-          },
-          required: ["ref"],
-        },
-      },
-      async (args) => {
-        const b = await ensureBrowser();
-        return b.click(args.ref as number);
-      },
-    );
-
-    // ── browser_type ───────────────────────────────────────────────────
-    registry.register(
-      {
-        name: "browser_type",
-        description:
-          "Type text into an input by ref from the most recent browser_snapshot. Use clear=true to replace existing content. If the page changed since the snapshot, take a new snapshot first.",
-        parameters: {
-          type: "object",
-          properties: {
-            ref: { type: "number", description: "Element ref number from snapshot" },
-            text: { type: "string", description: "Text to type" },
-            clear: { type: "boolean", description: "If true, clear the field before typing" },
-          },
-          required: ["ref", "text"],
-        },
-      },
-      async (args) => {
-        const b = await ensureBrowser();
-        return b.type(args.ref as number, args.text as string, {
-          clear: args.clear as boolean | undefined,
-        });
-      },
-    );
-
-    // ── browser_scroll ─────────────────────────────────────────────────
-    registry.register(
-      {
-        name: "browser_scroll",
-        description: "Scroll the page in a direction (up, down, left, right).",
-        parameters: {
-          type: "object",
-          properties: {
-            direction: {
-              type: "string",
-              enum: ["up", "down", "left", "right"],
-              description: "Scroll direction",
-            },
-            amount: { type: "number", description: "Pixels to scroll (default: 500)" },
-          },
-          required: ["direction"],
-        },
-      },
-      async (args) => {
-        const b = await ensureBrowser();
-        return b.scroll(
-          args.direction as "up" | "down" | "left" | "right",
-          args.amount as number | undefined,
-        );
-      },
-    );
-
-    // ── browser_wait ───────────────────────────────────────────────────
-    registry.register(
-      {
-        name: "browser_wait",
-        description:
-          "Wait for a condition on the current page. Use timeMs for a simple delay (best for SPAs/JS-heavy sites), " +
-          "selector for a CSS element to appear, or jsCondition for custom checks. " +
-          "Avoid state: 'networkidle' on SPAs — they never stop making requests and it will timeout.",
-        parameters: {
-          type: "object",
-          properties: {
-            timeMs: { type: "number", description: "Milliseconds to wait" },
-            selector: { type: "string", description: "CSS selector to wait for" },
-            url: { type: "string", description: "URL pattern to wait for" },
-            state: {
-              type: "string",
-              enum: ["load", "domcontentloaded", "networkidle"],
-              description: "Page load state to wait for",
-            },
-            jsCondition: { type: "string", description: "JavaScript expression that should evaluate to truthy" },
-          },
-        },
-      },
-      async (args) => {
-        const b = await ensureBrowser();
-        return b.wait(args as any);
-      },
-    );
-
-    // ── browser_evaluate ───────────────────────────────────────────────
-    registry.register(
-      {
-        name: "browser_evaluate",
-        description:
-          "Execute JavaScript in the browser page context and return the result as a string. " +
-          "Prefer this for extracting structured data from JS-heavy pages (e.g. product listings, search results, tables) — " +
-          "a single evaluate call with document.querySelectorAll is far faster than multiple snapshot/scroll cycles.",
-        parameters: {
-          type: "object",
-          properties: {
-            script: { type: "string", description: "JavaScript code to evaluate" },
-          },
-          required: ["script"],
-        },
-      },
-      async (args) => {
-        const b = await ensureBrowser();
-        return b.evaluate(args.script as string);
-      },
-    );
-
-    log.info("browser tools registered (7 tools, per-conversation sessions)");
-  } else if (browserEnabled) {
-    log.debug("browser tools not registered (browserPool or getConversationId not provided)");
-  } else {
-    log.debug("browser tools not registered (disabled in config)");
-  }
-
-  // ── web_search (Brave / SearXNG) ──────────────────────────────────
-  const braveApiKey = cfg?.tools?.webSearch?.secrets?.braveApiKey ?? Bun.env.BRAVE_API_KEY;
-  const searxngUrl = cfg?.tools?.webSearch?.searxngUrl ?? Bun.env.SEARXNG_URL;
-  const envSearchProvider = Bun.env.SEARCH_PROVIDER;
-  const searchProvider: SearchProvider | null =
-    cfg?.tools?.webSearch?.provider ??
-    (envSearchProvider === "brave" || envSearchProvider === "searxng" ? envSearchProvider : null);
-
-  if ((braveApiKey || searxngUrl) && searchProvider) {
-    const webSearch = new WebSearchTool({
-      provider: searchProvider,
-      braveApiKey,
-      searxngUrl,
-      searxngUserAgent: Bun.env.SEARXNG_USER_AGENT,
-    });
-
-    registry.register(
-      {
-        name: "web_search",
-        description:
-          "Search the web and return ranked results (title, URL, snippet, optional date). Use this to find sources, compare pages, or gather links. This tool does not synthesize a final answer. For a direct cited answer, use web_answer.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: "Search query." },
-            count: {
-              type: "integer",
-              minimum: 1,
-              maximum: 10,
-              description: "Number of results to return (1–10, default 5).",
-            },
-            freshness: {
-              type: "string",
-              enum: ["pd", "pw", "pm", "py"],
-              description: "Freshness filter: pd=past day, pw=past week, pm=past month, py=past year.",
-            },
-            country: {
-              type: "string",
-              description: 'Country code for region-specific results (e.g. "DK", "US").',
-            },
-            searchLang: {
-              type: "string",
-              description: 'Language code for results (e.g. "da", "en", "da-DK").',
-            },
-          },
-          required: ["query"],
-          additionalProperties: false,
-        },
-      },
-      async (args) => {
-        log.debug("web_search", { query: args.query, provider: searchProvider });
-        return webSearch.search(args.query as string, {
-          count: args.count as number | undefined,
-          freshness: args.freshness as "pd" | "pw" | "pm" | "py" | undefined,
-          country: args.country as string | undefined,
-          searchLang: args.searchLang as string | undefined,
-        });
-      },
-    );
-
-    log.info("web_search registered", { provider: webSearch["provider"] });
-  } else {
-    log.debug("web_search not registered", {
-      hasKey: !!braveApiKey, hasSearxng: !!searxngUrl, provider: searchProvider,
-    });
-  }
-
-  // ── web_answer (Perplexity Sonar) ───────────────────────────────────
-  const webAnswerEnabled = cfg?.tools?.webAnswer?.enabled ?? true;
-  const perplexityApiKey = cfg?.tools?.webAnswer?.secrets?.perplexityApiKey ?? Bun.env.PERPLEXITY_API_KEY;
-  const openrouterApiKey = cfg?.ai?.secrets?.openrouterApiKey ?? Bun.env.OPENROUTER_API_KEY;
-
-  if (webAnswerEnabled && (perplexityApiKey || openrouterApiKey)) {
-    const webAnswer = new WebAnswerTool({
-      perplexityApiKey,
-      openrouterApiKey,
-    });
-
-    registry.register(
-      {
-        name: "web_answer",
-        description:
-          "Answer a factual question using live web search and return a concise response with sources when available. Use this when the user wants a direct answer. Prefer web_search when you need to inspect or compare sources manually.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: "Question to answer." },
-            searchLang: {
-              type: "string",
-              description: 'Language code (e.g. "da", "en", "da-DK").',
-            },
-          },
-          required: ["query"],
-          additionalProperties: false,
-        },
-      },
-      async (args) => {
-        log.debug("web_answer", { query: args.query, provider: webAnswer["provider"] });
-        return webAnswer.answer(args.query as string, {
-          searchLang: args.searchLang as string | undefined,
-        });
-      },
-    );
-
-    log.info("web_answer registered", {
-      provider: perplexityApiKey ? "perplexity-direct" : "openrouter",
     });
   } else {
-    log.debug("web_answer not registered", {
-      enabled: webAnswerEnabled,
-      hasPerplexity: !!perplexityApiKey,
-      hasOpenrouter: !!openrouterApiKey,
-    });
+    log.error("Plugin discovery failed", { error: discResult.error.message });
+    loadResult = {
+      registry: new ToolRegistry(),
+      plugins: [],
+      rebuildConfigPaths: new Set(),
+      rebuildSecretPaths: new Set(),
+    };
   }
 
-  // ── marker_scan (conditional — only if enabled, marker_single on PATH, and attachmentStore) ────
-  const markerEnabled = cfg?.tools?.marker?.enabled ?? true;
+  const registry = loadResult.registry;
 
-  if (markerEnabled && attachmentStore) {
-    MarkerTool.isAvailable().then((available) => {
-      if (!available) {
-        log.debug("marker_scan not registered (marker_single not on PATH)");
-        return;
-      }
+  // ── Gateway-internal tools ────────────────────────────────────────
 
-      const marker = new MarkerTool();
-
-      registry.register(
-        {
-          name: "marker_scan",
-          description:
-            "Convert a PDF document to markdown. Use when the user uploads a PDF or asks to read/summarize a document. Requires an attachmentId from a file the user uploaded.",
-          parameters: {
-            type: "object",
-            properties: {
-              attachmentId: { type: "string", description: "The attachment ID from the uploaded file." },
-              pageRange: { type: "string", description: "Optional page range, e.g. '0-5' for first 6 pages." },
-              forceOcr: { type: "boolean", description: "Force OCR even for text-based PDFs." },
-            },
-            required: ["attachmentId"],
-          },
-        },
-        async (args) => {
-          const path = attachmentStore.resolve(args.attachmentId as string);
-          if (!path) return "Error: attachment not found or expired.";
-          log.debug("marker_scan", { attachmentId: args.attachmentId });
-          return marker.convert(path, {
-            pageRange: args.pageRange as string | undefined,
-            forceOcr: args.forceOcr as boolean | undefined,
-          });
-        },
-      );
-
-      log.info("marker_scan registered");
-    });
-  }
-
-  // ── config_get / config_set (conditional — only if configStore available) ─
-
+  // config_get / config_set
   if (configStore) {
     registry.register(
       {
@@ -500,10 +164,7 @@ export function buildToolRegistry(
     log.info("config_get + config_set registered");
   }
 
-  // ── render_chart ──────────────────────────────────────────────────
-  // Validates chart data and returns a formatted chart code block.
-  // The UI renders ```chart blocks as interactive Recharts visualizations.
-
+  // render_chart
   registry.register(
     {
       name: "render_chart",
@@ -599,10 +260,8 @@ export function buildToolRegistry(
     },
   );
 
-  log.info("render_chart registered");
-
   log.info("Tool registry initialized", { tools: registry.size });
-  return registry;
+  return loadResult;
 }
 
 /** @deprecated Use buildToolRegistry — kept for one release cycle */

@@ -322,14 +322,14 @@ describe("buildToolRegistry config-driven behavior", () => {
       store.rev(),
     );
 
-    const registry = buildToolRegistry(logger, undefined, store);
-    expect(registry.has("web_search")).toBe(true);
+    const result = await buildToolRegistry(logger, undefined, store);
+    expect(result.registry.has("web_search")).toBe(true);
   });
 
-  it("does not register web_search when provider is null and no env", () => {
-    const { buildToolRegistry } = require("../tool-registrations");
-    const registry = buildToolRegistry(logger);
-    expect(registry.has("web_search")).toBe(false);
+  it("does not register web_search when provider is null and no env", async () => {
+    const { buildToolRegistry } = await import("../tool-registrations");
+    const result = await buildToolRegistry(logger);
+    expect(result.registry.has("web_search")).toBe(false);
   });
 
   it("does not register web_answer when disabled in config", async () => {
@@ -346,8 +346,8 @@ describe("buildToolRegistry config-driven behavior", () => {
       store.rev(),
     );
 
-    const registry = buildToolRegistry(logger, undefined, store);
-    expect(registry.has("web_answer")).toBe(false);
+    const result = await buildToolRegistry(logger, undefined, store);
+    expect(result.registry.has("web_answer")).toBe(false);
   });
 
   it("does not register browser tools when disabled in config", async () => {
@@ -364,10 +364,10 @@ describe("buildToolRegistry config-driven behavior", () => {
       store.rev(),
     );
 
-    const registry = buildToolRegistry(logger, undefined, store);
-    expect(registry.has("browser_navigate")).toBe(false);
-    expect(registry.has("browser_snapshot")).toBe(false);
-    expect(registry.has("browser_click")).toBe(false);
+    const result = await buildToolRegistry(logger, undefined, store);
+    expect(result.registry.has("browser_navigate")).toBe(false);
+    expect(result.registry.has("browser_snapshot")).toBe(false);
+    expect(result.registry.has("browser_click")).toBe(false);
   });
 
   it("does not register web_fetch when disabled in config", async () => {
@@ -384,15 +384,15 @@ describe("buildToolRegistry config-driven behavior", () => {
       store.rev(),
     );
 
-    const registry = buildToolRegistry(logger, undefined, store);
-    expect(registry.has("web_fetch")).toBe(false);
+    const result = await buildToolRegistry(logger, undefined, store);
+    expect(result.registry.has("web_fetch")).toBe(false);
   });
 
-  it("registers browser tools and web_fetch by default", () => {
-    const { buildToolRegistry } = require("../tool-registrations");
-    const registry = buildToolRegistry(logger);
-    expect(registry.has("browser_navigate")).toBe(true);
-    expect(registry.has("browser_snapshot")).toBe(true);
-    expect(registry.has("web_fetch")).toBe(true);
+  it("registers browser tools and web_fetch by default", async () => {
+    const { buildToolRegistry } = await import("../tool-registrations");
+    const result = await buildToolRegistry(logger);
+    expect(result.registry.has("browser_navigate")).toBe(true);
+    expect(result.registry.has("browser_snapshot")).toBe(true);
+    expect(result.registry.has("web_fetch")).toBe(true);
   });
 });
