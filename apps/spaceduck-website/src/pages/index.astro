@@ -6,7 +6,10 @@ import { HeroButtons } from "../components/HeroButtons";
 import { InstallTerminal } from "../components/InstallTerminal";
 ---
 
-<Base>
+<Base
+  title="Spaceduck — Personal AI assistant with persistent memory, local or cloud"
+  description="Spaceduck is an open-source personal AI assistant: persistent memory, autonomous scheduled tasks, and per-task budget enforcement. Run locally with llama.cpp or connect to AWS Bedrock, Gemini, or OpenRouter."
+>
   <div class="mx-auto min-h-screen max-w-3xl overflow-hidden bg-surface text-slate-300">
 
     <!-- ═══ Hero ═══ -->
@@ -26,11 +29,10 @@ import { InstallTerminal } from "../components/InstallTerminal";
 
         <h1 class="mt-6 text-4xl font-bold tracking-tight text-white md:text-5xl">
           spaceduck
+          <span class="mx-auto mt-4 block max-w-md text-lg font-normal text-slate-300">
+            Your personal AI assistant that works while you don't.
+          </span>
         </h1>
-
-        <p class="mx-auto mt-4 max-w-md text-lg text-slate-300">
-          Your personal AI that works while you don't.
-        </p>
 
         <p class="mx-auto mt-2 max-w-sm text-sm text-slate-500">
           Autonomous tasks, persistent memory, budget enforcement. Local or cloud, user-owned.

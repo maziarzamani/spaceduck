@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@astrojs/react": "^4.4.2",
+    "@astrojs/sitemap": "^3.7.2",
     "@spaceduck/brand": "workspace:*",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

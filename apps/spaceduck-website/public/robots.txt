@@ -1,0 +1,5 @@
+# https://spaceduck.ai
+User-agent: *
+Allow: /
+
+Sitemap: https://spaceduck.ai/sitemap-index.xml
