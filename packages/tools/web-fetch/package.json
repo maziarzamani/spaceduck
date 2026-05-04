@@ -9,7 +9,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "html-to-text": "^9.0.5"
+    "html-to-text": "^10.0.0"
   },
   "devDependencies": {
     "@types/html-to-text": "^9",
