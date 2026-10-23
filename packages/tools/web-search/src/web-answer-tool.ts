@@ -122,6 +122,8 @@ export class WebAnswerTool {
     if (this.provider === "openrouter") {
       headers["HTTP-Referer"] = "https://github.com/maziarzamani/spaceduck";
       headers["X-Title"] = "Spaceduck";
+    } else {
+      headers["X-Pplx-Integration"] = "spaceduck";
     }
 
     const response = await globalThis.fetch(`${this.baseUrl}/chat/completions`, {
