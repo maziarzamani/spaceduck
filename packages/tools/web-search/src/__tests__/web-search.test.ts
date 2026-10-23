@@ -622,6 +622,7 @@ describe("WebAnswerTool — Perplexity Direct", () => {
     expect(capturedUrl).toContain("api.perplexity.ai/chat/completions");
     expect(capturedHeaders["Authorization"]).toBe("Bearer pplx-test-key");
     expect(capturedHeaders["HTTP-Referer"]).toBeUndefined();
+    expect(capturedHeaders["X-Pplx-Integration"]).toBe("spaceduck");
   });
 
   it("should use default model sonar-pro", async () => {
@@ -759,6 +760,7 @@ describe("WebAnswerTool — OpenRouter fallback", () => {
     expect(capturedHeaders["Authorization"]).toBe("Bearer sk-or-test-key");
     expect(capturedHeaders["HTTP-Referer"]).toContain("spaceduck");
     expect(capturedHeaders["X-Title"]).toBe("Spaceduck");
+    expect(capturedHeaders["X-Pplx-Integration"]).toBeUndefined();
   });
 
   it("should show OpenRouter-specific warning when citations missing", async () => {
